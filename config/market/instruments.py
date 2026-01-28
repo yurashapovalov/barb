@@ -127,7 +127,7 @@ def get_trading_day_options(symbol: str, date_str: str = "") -> list[str]:
         date_str: Date in YYYY-MM-DD format (for holiday check)
     """
     from datetime import datetime
-    from agent.config.market.holidays import get_day_type, get_close_time
+    from config.market.holidays import get_day_type, get_close_time
 
     # Check if it's a weekend
     if date_str:

@@ -12,7 +12,7 @@ Used by:
 - Scanner: detects patterns in data
 """
 
-from agent.config.patterns.candle import (
+from config.patterns.candle import (
     CANDLE_PATTERNS,
     get_candle_pattern,
     list_candle_patterns,
@@ -20,7 +20,7 @@ from agent.config.patterns.candle import (
     get_candle_patterns_by_category,
 )
 
-from agent.config.patterns.price import (
+from config.patterns.price import (
     PRICE_PATTERNS,
     get_price_pattern,
     list_price_patterns,

@@ -5,7 +5,7 @@ Calculates actual dates from holiday rules (e.g., "3rd Monday of January").
 Determines if a date is a regular trading day, early close, or full closure.
 
 Usage:
-    from agent.config.market import get_day_type, get_close_time
+    from config.market import get_day_type, get_close_time
 
     day_type = get_day_type("NQ", "2024-12-25")  # "closed"
     day_type = get_day_type("NQ", "2024-12-24")  # "early_close"
@@ -16,7 +16,7 @@ Usage:
 from datetime import date, timedelta
 from typing import Literal
 
-from agent.config.market.instruments import get_instrument
+from config.market.instruments import get_instrument
 
 
 # =============================================================================

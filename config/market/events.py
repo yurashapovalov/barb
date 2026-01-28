@@ -2,7 +2,7 @@
 Regular market events.
 
 Usage:
-    from agent.config.market import get_event_types_for_instrument, is_high_impact_day
+    from config.market import get_event_types_for_instrument, is_high_impact_day
 """
 
 from datetime import date, timedelta
@@ -99,7 +99,7 @@ EVENT_GROUPS = {
 # =============================================================================
 
 # Import shared date utility from holidays
-from agent.config.market.holidays import _nth_weekday_of_month as _nth_weekday
+from config.market.holidays import _nth_weekday_of_month as _nth_weekday
 
 
 def get_opex_date(year: int, month: int) -> date:
@@ -179,7 +179,7 @@ def get_event_dates(
 
 def get_event_types_for_instrument(symbol: str) -> list[MarketEvent]:
     """Get event types affecting instrument (reads from instruments.py)."""
-    from agent.config.market.instruments import get_instrument
+    from config.market.instruments import get_instrument
 
     instrument = get_instrument(symbol)
     groups = instrument.get("events", ["macro"]) if instrument else ["macro"]
@@ -245,7 +245,7 @@ def check_dates_for_events(
     Similar to check_dates_for_holidays().
     """
     from datetime import datetime
-    from agent.config.market.instruments import get_instrument
+    from config.market.instruments import get_instrument
 
     if not dates:
         return None
