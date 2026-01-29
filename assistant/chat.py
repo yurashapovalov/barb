@@ -26,15 +26,18 @@ class Assistant:
         self.system_prompt = build_system_prompt(instrument)
         self.model_config = get_model()
 
-    def chat(self, message: str, history: list[dict] | None = None) -> dict:
+    def chat(self, message: str, history: list[dict] | None = None,
+             trace: bool = False) -> dict:
         """Process a chat message and return response.
 
         Args:
             message: User message text
             history: Previous messages [{"role": "user"|"model", "text": "..."}]
+            trace: If True, include intermediate steps in the result
 
         Returns:
             {"answer": str, "cost": dict}
+            With trace=True, also includes "steps", "model" keys.
         """
         contents = _build_contents(history or [], message)
 
@@ -46,8 +49,9 @@ class Assistant:
 
         total_input_tokens = 0
         total_output_tokens = 0
+        steps = []
 
-        for _ in range(MAX_TOOL_ROUNDS):
+        for round_num in range(MAX_TOOL_ROUNDS):
             response = self.client.models.generate_content(
                 model=self.model_config.id,
                 contents=contents,
@@ -70,6 +74,13 @@ class Assistant:
             for call in tool_calls:
                 log.info(f"Tool call: {call.name}({call.args})")
                 result = run_tool(call.name, dict(call.args), self.df, self.sessions)
+                if trace:
+                    steps.append({
+                        "round": round_num + 1,
+                        "tool": call.name,
+                        "args": dict(call.args),
+                        "result": result,
+                    })
                 tool_response_parts.append(
                     types.Part.from_function_response(name=call.name, response={"result": result})
                 )
@@ -86,7 +97,11 @@ class Assistant:
             model=DEFAULT_MODEL,
         )
 
-        return {"answer": answer, "cost": cost}
+        out = {"answer": answer, "cost": cost}
+        if trace:
+            out["steps"] = steps
+            out["model"] = self.model_config.id
+        return out
 
 
 def _build_contents(history: list[dict], message: str) -> list[types.Content]:
