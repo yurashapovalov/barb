@@ -2,6 +2,23 @@
 Instrument configurations.
 
 All times in ET (data timezone). CME native times are CT (+1h to get ET).
+
+Session hierarchy (NQ/ES/CME futures):
+
+    ETH (full trading day)     18:00 — 17:00
+    ├── OVERNIGHT              18:00 — 09:30
+    │   ├── ASIAN              18:00 — 03:00
+    │   └── EUROPEAN           03:00 — 09:30
+    └── RTH                    09:30 — 17:00
+        ├── RTH_OPEN           09:30 — 10:30
+        ├── MORNING            09:30 — 12:30
+        ├── AFTERNOON          12:30 — 17:00
+        └── RTH_CLOSE          16:00 — 17:00
+
+    Maintenance break: 17:00 — 18:00 (no trading)
+
+ETH = full trading day. All other sessions are subsets of ETH.
+Each instrument defines its own sessions — the hierarchy above is for CME futures.
 """
 
 INSTRUMENTS = {
@@ -19,21 +36,20 @@ INSTRUMENTS = {
 
         "default_session": "RTH",
 
-        # Trading day boundaries (instrument-specific)
-        # DAY atom uses this to generate SQL
-        "trading_day": {
-            "start": "18:00",  # 18:00 prev day
-            "end": "17:00",    # 17:00 current day
-        },
-        "sessions": {  # All times in ET
-            "RTH": ("09:30", "17:00"),
+        "sessions": {
+            # Full trading day
             "ETH": ("18:00", "17:00"),
+
+            # Overnight (pre-RTH)
             "OVERNIGHT": ("18:00", "09:30"),
-            "ASIAN": ("18:00", "03:00"),
-            "EUROPEAN": ("03:00", "09:30"),
-            "MORNING": ("09:30", "12:30"),
+            "ASIAN":     ("18:00", "03:00"),
+            "EUROPEAN":  ("03:00", "09:30"),
+
+            # Regular trading hours
+            "RTH":       ("09:30", "17:00"),
+            "RTH_OPEN":  ("09:30", "10:30"),
+            "MORNING":   ("09:30", "12:30"),
             "AFTERNOON": ("12:30", "17:00"),
-            "RTH_OPEN": ("09:30", "10:30"),
             "RTH_CLOSE": ("16:00", "17:00"),
         },
 
@@ -72,14 +88,8 @@ def get_session_times(symbol: str, session: str) -> tuple[str, str] | None:
 
 
 def get_trading_day_boundaries(symbol: str) -> tuple[str, str] | None:
-    """Get trading day (start, end) times."""
-    instrument = get_instrument(symbol)
-    if not instrument:
-        return None
-    trading_day = instrument.get("trading_day", {})
-    start = trading_day.get("start")
-    end = trading_day.get("end")
-    return (start, end) if start and end else None
+    """Get trading day (start, end) times. Trading day = ETH session."""
+    return get_session_times(symbol, "ETH")
 
 
 def is_calendar_day(symbol: str) -> bool:

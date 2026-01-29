@@ -1,33 +1,72 @@
 # Barb Development Guidelines
 
-## Главный принцип
+## Code Philosophy
 
-**Объясни, потом код** — Перед написанием кода объясни что и зачем делаем.
+Write boring code. The goal is not to impress — it's to be understood.
 
-## Архитектура
+**Obviousness** — Read the code, immediately understand what it does. No mental stack of 5 abstraction layers.
 
-```
-config/           # Конфигурация
-├── models.py     # LLM модели и pricing
-└── market/       # Доменная конфигурация
-    ├── instruments.py  # Инструменты, сессии
-    ├── holidays.py     # Праздники
-    └── events.py       # События
+**Deletability** — Any piece can be ripped out and replaced without breaking the rest. Minimal coupling between parts.
 
-api/agent/        # Агент Barb
-```
+**No speculative code** — Don't write what "might be needed". YAGNI. When it's needed — we'll write it then.
 
-## Правило №1: Динамический контекст
+**Explicit over implicit** — No magic. If something happens, it's visible in the code, not hidden in a base class.
 
-Агент должен получать доменную информацию из config/, не хардкод в промптах.
+**Small modules** — Each file does one thing. Open — understand — close.
+
+## What We Don't Do
+
+- AbstractExpressionVisitorFactory
+- Plugin registries
+- Middleware pipelines
+- Dependency injection
+- Premature abstractions: three similar lines are better than a premature helper
+- Feature flags or backwards-compatibility shims
+- Docstrings on obvious functions
+- Comments that repeat what the code says
+
+## What We Do
+
+- Functions with clear names that say what they do
+- Plain dicts and dataclasses, not class hierarchies
+- Tests as documentation — a test shows what the function does better than any comment
+- Comments only when WHY is not obvious from the code
+- Type hints on public interfaces
+- Early returns over nested ifs
+
+## Comments
 
 ```python
-# Плохо — хардкод
-PROMPT = """Сессии: RTH (09:30-16:00), ETH..."""
+# Bad — repeats the code
+x = price * quantity  # multiply price by quantity
 
-# Хорошо — из конфига
+# Bad — obvious function doesn't need a docstring
+def get_session(name: str) -> tuple:
+    """Get session by name."""  # we can see that
+    return sessions[name]
+
+# Good — explains WHY
+# Wrap-around sessions (18:00-09:30) span midnight.
+# Filter: time >= start OR time < end (not AND).
+if start > end:
+    mask = (df.index.time >= start) | (df.index.time < end)
+
+# Good — domain knowledge that's not obvious from code
+# Wilder's smoothing is equivalent to EMA with period 2n-1
+ema_period = 2 * n - 1
+```
+
+## Rule: Dynamic Context
+
+The agent gets domain information from config/, not hardcoded in prompts.
+
+```python
+# Bad — hardcoded
+PROMPT = """Sessions: RTH (09:30-16:00), ETH..."""
+
+# Good — from config
 def build_prompt(instrument: str) -> str:
     config = get_instrument(instrument)
     sessions = config["sessions"]
-    return f"""Сессии: {sessions}..."""
+    return f"""Sessions: {sessions}..."""
 ```
