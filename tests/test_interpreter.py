@@ -6,8 +6,7 @@ Tests the full pipeline: query → execute → result.
 
 import pytest
 
-from barb.interpreter import execute, QueryError
-
+from barb.interpreter import QueryError, execute
 
 # --- Validation ---
 

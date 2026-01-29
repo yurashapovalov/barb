@@ -1,10 +1,9 @@
 """Tests for the expression parser and evaluator."""
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from barb.expressions import evaluate, ExpressionError
+from barb.expressions import ExpressionError, evaluate
 from barb.functions import FUNCTIONS
 
 

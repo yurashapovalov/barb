@@ -1,13 +1,33 @@
-name: Deploy to Hetzner
+name: Test and Deploy
 
 on:
   push:
     branches: [main]
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install .[dev]
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest --tb=short -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -20,4 +40,3 @@ jobs:
             git pull origin main
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
             docker system prune -f
-# Auto-deploy enabled

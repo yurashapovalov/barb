@@ -2,7 +2,7 @@
 
 import json
 
-from assistant.tools import run_tool, TOOL_DECLARATIONS
+from assistant.tools import TOOL_DECLARATIONS, run_tool
 
 
 class TestToolDeclarations:
@@ -94,7 +94,7 @@ class TestUnderstandQuestion:
         result = run_tool("understand_question", {"question": "test"}, nq_minute_slice, sessions)
         data = json.loads(result)
         assert "limitations" in data
-        assert any("Cross-timeframe" in l for l in data["limitations"])
+        assert any("Cross-timeframe" in lim for lim in data["limitations"])
 
     def test_returns_instructions(self, nq_minute_slice, sessions):
         result = run_tool("understand_question", {"question": "test"}, nq_minute_slice, sessions)

@@ -1,16 +1,16 @@
 """Barb Script interpreter.
 
 Executes a flat JSON query against a pandas DataFrame.
-10-step pipeline, fixed execution order regardless of JSON key order.
+9-step pipeline, fixed execution order regardless of JSON key order:
+  session → period → from → map → where → group_by → select → sort → limit
 """
 
 import re
 
 import pandas as pd
 
-from barb.expressions import evaluate, ExpressionError
+from barb.expressions import ExpressionError, evaluate
 from barb.functions import FUNCTIONS
-
 
 # Valid values for the "from" field
 TIMEFRAMES = {
@@ -45,7 +45,10 @@ _VALID_FIELDS = {
 class QueryError(Exception):
     """Raised when a query is invalid or execution fails."""
 
-    def __init__(self, message: str, error_type: str = "QueryError", step: str = "", expression: str = ""):
+    def __init__(
+        self, message: str, error_type: str = "QueryError",
+        step: str = "", expression: str = "",
+    ):
         super().__init__(message)
         self.error_type = error_type
         self.step = step
@@ -91,13 +94,13 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     if query.get("map"):
         df = _compute_map(df, query["map"])
 
-    # 6. WHERE — filter rows
+    # 5. WHERE — filter rows
     if query.get("where"):
         df = _filter_where(df, query["where"])
 
     rows_after_filter = len(df)
 
-    # 7-8. GROUP BY + SELECT
+    # 6-7. GROUP BY + SELECT
     group_by = query.get("group_by")
     select = _normalize_select(query.get("select", "count()"))
 
@@ -106,11 +109,11 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     else:
         result_df = _aggregate(df, select)
 
-    # 9. SORT
+    # 8. SORT
     if query.get("sort") and isinstance(result_df, pd.DataFrame):
         result_df = _sort(result_df, query["sort"])
 
-    # 10. LIMIT
+    # 9. LIMIT
     if query.get("limit") and isinstance(result_df, pd.DataFrame):
         result_df = result_df.head(query["limit"])
 
@@ -159,7 +162,9 @@ def _validate(query: dict):
 
 # --- Pipeline steps ---
 
-def _filter_session(df: pd.DataFrame, session: str, sessions: dict) -> tuple[pd.DataFrame, str | None]:
+def _filter_session(
+    df: pd.DataFrame, session: str, sessions: dict,
+) -> tuple[pd.DataFrame, str | None]:
     """Step 1: Filter by session time range."""
     key = session.upper()
     if key not in sessions:
@@ -235,7 +240,7 @@ def _resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
 
 
 def _compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
-    """Step 5: Compute derived columns in declaration order."""
+    """Step 4: Compute derived columns in declaration order."""
     df = df.copy()
     for name, expr in map_config.items():
         if not isinstance(expr, str):
@@ -246,16 +251,21 @@ def _compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
         try:
             df[name] = evaluate(expr, df, FUNCTIONS)
         except ExpressionError as e:
-            raise QueryError(str(e), error_type="ExpressionError", step="map", expression=expr) from e
+            raise QueryError(
+                str(e), error_type="ExpressionError", step="map", expression=expr,
+            ) from e
     return df
 
 
 def _filter_where(df: pd.DataFrame, where_expr: str) -> pd.DataFrame:
-    """Step 6: Filter rows by boolean expression."""
+    """Step 5: Filter rows by boolean expression."""
     try:
         mask = evaluate(where_expr, df, FUNCTIONS)
     except ExpressionError as e:
-        raise QueryError(str(e), error_type="ExpressionError", step="where", expression=where_expr) from e
+        raise QueryError(
+            str(e), error_type="ExpressionError",
+            step="where", expression=where_expr,
+        ) from e
 
     if not isinstance(mask, pd.Series):
         raise QueryError(
@@ -266,7 +276,7 @@ def _filter_where(df: pd.DataFrame, where_expr: str) -> pd.DataFrame:
 
 
 def _group_aggregate(df: pd.DataFrame, group_by, select) -> pd.DataFrame:
-    """Steps 7-8: Group and aggregate."""
+    """Steps 6-7: Group and aggregate."""
     if isinstance(group_by, str):
         group_by = [group_by]
     if isinstance(select, str):
@@ -292,12 +302,15 @@ def _group_aggregate(df: pd.DataFrame, group_by, select) -> pd.DataFrame:
 
 
 def _aggregate(df: pd.DataFrame, select) -> float | int | dict:
-    """Step 8 without grouping: aggregate to scalar(s)."""
+    """Step 7 without grouping: aggregate to scalar(s)."""
     if isinstance(select, str):
         try:
             result = evaluate(select, df, FUNCTIONS)
         except ExpressionError as e:
-            raise QueryError(str(e), error_type="ExpressionError", step="select", expression=select) from e
+            raise QueryError(
+                str(e), error_type="ExpressionError",
+                step="select", expression=select,
+            ) from e
         return result
 
     # Multiple selects → dict of results
@@ -307,7 +320,10 @@ def _aggregate(df: pd.DataFrame, select) -> float | int | dict:
             try:
                 val = evaluate(s, df, FUNCTIONS)
             except ExpressionError as e:
-                raise QueryError(str(e), error_type="ExpressionError", step="select", expression=s) from e
+                raise QueryError(
+                    str(e), error_type="ExpressionError",
+                    step="select", expression=s,
+                ) from e
             col_name = _aggregate_col_name(s)
             results[col_name] = val
         return results
@@ -364,7 +380,7 @@ def _aggregate_col_name(expr: str) -> str:
 
 
 def _sort(df: pd.DataFrame, sort: str) -> pd.DataFrame:
-    """Step 9: Sort result."""
+    """Step 8: Sort result."""
     parts = sort.split()
     col = parts[0]
     ascending = len(parts) < 2 or parts[1].lower() != "desc"

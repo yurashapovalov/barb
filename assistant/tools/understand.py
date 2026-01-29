@@ -2,7 +2,6 @@
 
 import json
 
-
 DECLARATION = {
     "name": "understand_question",
     "description": (

@@ -18,7 +18,6 @@ from typing import Literal
 
 from config.market.instruments import get_instrument
 
-
 # =============================================================================
 # Holiday Date Calculations
 # =============================================================================
@@ -70,10 +69,10 @@ def _easter_sunday(year: int) -> date:
     h = (19 * a + b - d - g + 15) % 30
     i = c // 4
     k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
+    el = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * el) // 451
+    month = (h + el - 7 * m + 114) // 31
+    day = ((h + el - 7 * m + 114) % 31) + 1
     return date(year, month, day)
 
 

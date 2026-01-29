@@ -10,7 +10,7 @@ import json
 
 import pandas as pd
 
-from assistant.tools import understand, reference, execute
+from assistant.tools import execute, reference, understand
 
 __all__ = ["TOOL_DECLARATIONS", "run_tool"]
 

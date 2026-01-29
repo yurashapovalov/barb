@@ -9,7 +9,7 @@ from google.genai import types
 
 from assistant.prompt import build_system_prompt
 from assistant.tools import TOOL_DECLARATIONS, run_tool
-from config.models import get_model, calculate_cost, DEFAULT_MODEL, ModelConfig
+from config.models import DEFAULT_MODEL, calculate_cost, get_model
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class Assistant:
 
             tool_response_parts = []
             for call in tool_calls:
-                log.info(f"Tool call: {call.name}({call.args})")
+                log.info("Tool call: %s(%s)", call.name, call.args)
                 tool_result = run_tool(call.name, dict(call.args), self.df, self.sessions)
 
                 # Collect query results for direct user display

@@ -118,10 +118,16 @@ def _eval_node(node: ast.AST, df: pd.DataFrame, functions: dict):
         for op, comparator_node in zip(node.ops, node.comparators):
             if isinstance(op, ast.In):
                 right = _eval_node(comparator_node, df, functions)
-                comparison = current.isin(right) if isinstance(current, pd.Series) else current in right
+                if isinstance(current, pd.Series):
+                    comparison = current.isin(right)
+                else:
+                    comparison = current in right
             elif isinstance(op, ast.NotIn):
                 right = _eval_node(comparator_node, df, functions)
-                comparison = ~current.isin(right) if isinstance(current, pd.Series) else current not in right
+                if isinstance(current, pd.Series):
+                    comparison = ~current.isin(right)
+                else:
+                    comparison = current not in right
             else:
                 right = _eval_node(comparator_node, df, functions)
                 op_func = _COMPARE_OPS.get(type(op))

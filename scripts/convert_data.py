@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Convert raw market data from TXT to Parquet format with enriched columns."""
 
-import polars as pl
 from pathlib import Path
+
+import polars as pl
 
 
 def convert_txt_to_parquet(input_path: Path, output_path: Path, instrument: str) -> None:

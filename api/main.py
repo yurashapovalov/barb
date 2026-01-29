@@ -3,12 +3,11 @@
 import logging
 import os
 import time
+from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-
-from functools import lru_cache
 
 from api.config import get_settings
 from assistant.chat import Assistant
@@ -40,7 +39,14 @@ else:
 log = logging.getLogger(__name__)
 
 app = FastAPI(title="Barb", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+_cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # --- Request/Response models ---
@@ -51,10 +57,29 @@ class ChatRequest(BaseModel):
     instrument: str = "NQ"
 
 
+class CostBlock(BaseModel):
+    input_tokens: int = 0
+    output_tokens: int = 0
+    thinking_tokens: int = 0
+    cached_tokens: int = 0
+    input_cost: float = 0.0
+    output_cost: float = 0.0
+    thinking_cost: float = 0.0
+    total_cost: float = 0.0
+
+
+class DataBlock(BaseModel):
+    query: dict
+    result: object = None
+    rows: int | None = None
+    session: str | None = None
+    timeframe: str | None = None
+
+
 class ChatResponse(BaseModel):
     answer: str
-    data: list
-    cost: dict
+    data: list[DataBlock]
+    cost: CostBlock
 
 
 # --- Assistant cache ---

@@ -5,7 +5,7 @@ import logging
 
 import pandas as pd
 
-from barb.interpreter import execute, QueryError
+from barb.interpreter import QueryError, execute
 
 log = logging.getLogger(__name__)
 

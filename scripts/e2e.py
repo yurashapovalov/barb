@@ -31,7 +31,6 @@ from assistant.chat import Assistant
 from barb.data import load_data
 from config.market.instruments import get_instrument
 
-
 # --- ANSI colors ---
 
 class C:

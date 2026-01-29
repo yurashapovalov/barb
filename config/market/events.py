@@ -5,9 +5,9 @@ Usage:
     from config.market import get_event_types_for_instrument, is_high_impact_day
 """
 
+from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
-from dataclasses import dataclass
 
 
 class EventCategory(Enum):
@@ -245,6 +245,7 @@ def check_dates_for_events(
     Similar to check_dates_for_holidays().
     """
     from datetime import datetime
+
     from config.market.instruments import get_instrument
 
     if not dates:

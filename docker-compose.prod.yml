@@ -2,6 +2,7 @@ services:
   api:
     environment:
       - ENV=production
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://barb.app}
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 2
     volumes:
       - ./data:/app/data
