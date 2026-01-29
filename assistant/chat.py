@@ -9,7 +9,7 @@ from google.genai import types
 
 from assistant.prompt import build_system_prompt
 from assistant.tools import TOOL_DECLARATIONS, run_tool
-from config.models import get_model, calculate_cost, DEFAULT_MODEL
+from config.models import get_model, calculate_cost, DEFAULT_MODEL, ModelConfig
 
 log = logging.getLogger(__name__)
 
@@ -19,13 +19,15 @@ MAX_TOOL_ROUNDS = 5
 class Assistant:
     """Stateless chat assistant. Client sends full history each request."""
 
-    def __init__(self, api_key: str, instrument: str, df: pd.DataFrame, sessions: dict):
+    def __init__(self, api_key: str, instrument: str, df: pd.DataFrame, sessions: dict,
+                 model: str = DEFAULT_MODEL):
         self.client = genai.Client(api_key=api_key)
         self.instrument = instrument
         self.df = df
         self.sessions = sessions
         self.system_prompt = build_system_prompt(instrument)
-        self.model_config = get_model()
+        self.model_name = model
+        self.model_config = get_model(model)
 
     def chat(self, message: str, history: list[dict] | None = None,
              trace: bool = False) -> dict:
@@ -97,14 +99,18 @@ class Assistant:
 
             contents.append(types.Content(role="user", parts=tool_response_parts))
 
-        answer = response.text or ""
+        try:
+            answer = response.text or ""
+        except (ValueError, AttributeError):
+            answer = ""
+
         if not answer:
             log.warning("No text response after %d tool rounds", MAX_TOOL_ROUNDS)
 
         cost = calculate_cost(
             input_tokens=total_input_tokens,
             output_tokens=total_output_tokens,
-            model=DEFAULT_MODEL,
+            model=self.model_name,
         )
 
         out = {"answer": answer, "data": data, "cost": cost}

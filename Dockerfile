@@ -7,14 +7,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy source and install
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
-# Copy application code
+COPY barb/ ./barb/
+COPY assistant/ ./assistant/
 COPY config/ ./config/
 COPY api/ ./api/
 COPY scripts/ ./scripts/
+RUN pip install --no-cache-dir .
 
 # Create data directory
 RUN mkdir -p /app/data

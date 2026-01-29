@@ -258,6 +258,24 @@ class TestPeriod:
         # March has ~21 weekdays + some Sundays (NQ trades Sunday evening)
         assert 15 < result["result"] < 30
 
+    def test_invalid_period_string(self, nq_minute_slice, sessions):
+        """Invalid period like 'all' gives clear error, not internal crash."""
+        with pytest.raises(QueryError, match="Invalid period 'all'") as exc_info:
+            execute({"period": "all", "from": "daily"}, nq_minute_slice, sessions)
+        assert exc_info.value.step == "period"
+
+    def test_invalid_period_range(self, nq_minute_slice, sessions):
+        with pytest.raises(QueryError, match="Invalid period range"):
+            execute({"period": "start:end", "from": "daily"}, nq_minute_slice, sessions)
+
+    def test_relative_period_last_month(self, nq_minute_slice, sessions):
+        result = execute({
+            "period": "last_month",
+            "from": "daily",
+            "select": "count()",
+        }, nq_minute_slice, sessions)
+        assert result["result"] > 0
+
 
 # --- Response Format ---
 

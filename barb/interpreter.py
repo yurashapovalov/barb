@@ -182,27 +182,41 @@ def _filter_session(df: pd.DataFrame, session: str, sessions: dict) -> tuple[pd.
     return df[mask], None
 
 
+_RELATIVE_PERIODS = {"last_year", "last_month", "last_week"}
+# Year "2024", month "2024-03", date "2024-03-15", range "2024-01-01:2024-06-30"
+_PERIOD_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
+
+
 def _filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
     """Step 2: Filter by date range."""
     if ":" in period:
         # Explicit range: "2024-01-01:2024-12-31"
-        start, end = period.split(":", 1)
-        return df.loc[start:end]
+        parts = period.split(":", 1)
+        if not (_PERIOD_RE.match(parts[0]) and _PERIOD_RE.match(parts[1])):
+            raise QueryError(
+                f"Invalid period range '{period}'. "
+                f"Use 'YYYY-MM-DD:YYYY-MM-DD', e.g. '2024-01-01:2024-06-30'",
+                error_type="ValidationError", step="period", expression=period,
+            )
+        return df.loc[parts[0]:parts[1]]
 
-    if period == "last_year":
-        cutoff = df.index[-1] - pd.DateOffset(years=1)
-        return df[df.index >= cutoff]
-
-    if period == "last_month":
-        cutoff = df.index[-1] - pd.DateOffset(months=1)
-        return df[df.index >= cutoff]
-
-    if period == "last_week":
-        cutoff = df.index[-1] - pd.DateOffset(weeks=1)
+    if period in _RELATIVE_PERIODS:
+        offsets = {
+            "last_year": pd.DateOffset(years=1),
+            "last_month": pd.DateOffset(months=1),
+            "last_week": pd.DateOffset(weeks=1),
+        }
+        cutoff = df.index[-1] - offsets[period]
         return df[df.index >= cutoff]
 
     # Year: "2024" or month: "2024-01"
-    # Must use .loc for DatetimeIndex partial string indexing
+    if not _PERIOD_RE.match(period):
+        raise QueryError(
+            f"Invalid period '{period}'. "
+            f"Valid: 'YYYY', 'YYYY-MM', 'YYYY-MM-DD', 'YYYY-MM-DD:YYYY-MM-DD', "
+            f"'last_year', 'last_month', 'last_week'",
+            error_type="ValidationError", step="period", expression=period,
+        )
     return df.loc[period]
 
 
@@ -344,7 +358,6 @@ def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd
 
 def _aggregate_col_name(expr: str) -> str:
     """Generate column name from aggregate expression: mean(range) → mean_range."""
-    import re
     expr = expr.strip()
     if expr == "count()":
         return "count"
