@@ -18,7 +18,7 @@ def nq_minute_slice(nq_minute):
     return nq_minute["2024-01-01":"2024-06-30"]
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def sessions():
     """NQ session config — from instrument config, not hardcoded."""
     return get_instrument("NQ")["sessions"]

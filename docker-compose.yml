@@ -5,7 +5,9 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      - ./api:/app/api      # Hot reload for development
+      - ./barb:/app/barb
+      - ./assistant:/app/assistant
+      - ./api:/app/api
       - ./config:/app/config
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}

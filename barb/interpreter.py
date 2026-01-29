@@ -190,6 +190,9 @@ _PERIOD_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 def _filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
     """Step 2: Filter by date range."""
+    if df.empty:
+        return df
+
     if ":" in period:
         # Explicit range: "2024-01-01:2024-12-31"
         parts = period.split(":", 1)
@@ -314,21 +317,18 @@ def _aggregate(df: pd.DataFrame, select) -> float | int | dict:
         return result
 
     # Multiple selects → dict of results
-    if isinstance(select, list):
-        results = {}
-        for s in select:
-            try:
-                val = evaluate(s, df, FUNCTIONS)
-            except ExpressionError as e:
-                raise QueryError(
-                    str(e), error_type="ExpressionError",
-                    step="select", expression=s,
-                ) from e
-            col_name = _aggregate_col_name(s)
-            results[col_name] = val
-        return results
-
-    return len(df)
+    results = {}
+    for s in select:
+        try:
+            val = evaluate(s, df, FUNCTIONS)
+        except ExpressionError as e:
+            raise QueryError(
+                str(e), error_type="ExpressionError",
+                step="select", expression=s,
+            ) from e
+        col_name = _aggregate_col_name(s)
+        results[col_name] = val
+    return results
 
 
 def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd.Series]:

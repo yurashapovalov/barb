@@ -71,12 +71,12 @@ DECLARATION = {
 def run(args: dict, df: pd.DataFrame, sessions: dict) -> str:
     """Execute a Barb Script query and return result as JSON string."""
     query = _normalize_query(args.get("query", {}))
-    log.info(f"Executing query: {json.dumps(query)}")
+    log.info("Executing query: %s", json.dumps(query))
 
     try:
         result = execute(query, df, sessions)
     except QueryError as e:
-        log.warning(f"Query error: {e}")
+        log.warning("Query error: %s", e)
         return json.dumps({
             "error": str(e),
             "error_type": e.error_type,

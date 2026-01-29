@@ -4,7 +4,10 @@ LLM Models configuration — models and pricing.
 Prices in USD per 1M tokens.
 """
 
+import logging
 from dataclasses import dataclass
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -60,6 +63,8 @@ DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
 def get_model(name: str = DEFAULT_MODEL) -> ModelConfig:
     """Get model config."""
+    if name not in MODELS:
+        log.warning("Unknown model '%s', using default '%s'", name, DEFAULT_MODEL)
     return MODELS.get(name, MODELS[DEFAULT_MODEL])
 
 

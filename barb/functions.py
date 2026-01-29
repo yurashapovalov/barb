@@ -4,6 +4,8 @@ Plain dict mapping names to callables. Every function receives (df, *args)
 where df is the current DataFrame — needed for time functions and count().
 """
 
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
 
@@ -44,7 +46,7 @@ def _bars_since(df, cond):
 # Every function signature: (df, *args) -> Series | scalar
 # df is always the first arg (passed by the expression evaluator)
 
-FUNCTIONS: dict[str, callable] = {
+FUNCTIONS: dict[str, Callable] = {
     # Scalar
     "abs": lambda df, x: x.abs() if isinstance(x, pd.Series) else abs(x),
     "log": lambda df, x: np.log(x),
