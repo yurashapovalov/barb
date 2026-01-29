@@ -37,7 +37,7 @@ _RESAMPLE_RULES = {
 
 # Fields allowed in a query
 _VALID_FIELDS = {
-    "session", "from", "period", "join", "map",
+    "session", "from", "period", "map",
     "where", "group_by", "select", "sort", "limit",
 }
 
@@ -87,11 +87,7 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     if timeframe != "1m":
         df = _resample(df, timeframe)
 
-    # 4. JOIN — attach external data (stub)
-    if query.get("join"):
-        pass  # TODO: implement join
-
-    # 5. MAP — compute derived columns
+    # 4. MAP — compute derived columns
     if query.get("map"):
         df = _compute_map(df, query["map"])
 
@@ -372,9 +368,19 @@ def _sort(df: pd.DataFrame, sort: str) -> pd.DataFrame:
     parts = sort.split()
     col = parts[0]
     ascending = len(parts) < 2 or parts[1].lower() != "desc"
+
+    # After group_by, the group column becomes the index
+    index_names = [n for n in df.index.names if n is not None]
+    if col in index_names:
+        return df.sort_index(ascending=ascending)
     if col in df.columns:
         return df.sort_values(col, ascending=ascending)
-    return df
+
+    available = ", ".join(sorted(list(df.columns) + index_names))
+    raise QueryError(
+        f"Sort column '{col}' not found. Available: {available}",
+        error_type="ValidationError", step="sort", expression=sort,
+    )
 
 
 def _build_response(result, query, rows, session, timeframe, warnings) -> dict:

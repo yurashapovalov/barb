@@ -8,6 +8,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from functools import lru_cache
+
 from api.config import get_settings
 from assistant.chat import Assistant
 from barb.data import load_data
@@ -55,6 +57,27 @@ class ChatResponse(BaseModel):
     cost: dict
 
 
+# --- Assistant cache ---
+
+@lru_cache
+def _get_assistant(instrument: str) -> Assistant:
+    """One Assistant (and genai.Client) per instrument, reused across requests."""
+    settings = get_settings()
+    if not settings.gemini_api_key:
+        raise RuntimeError("GEMINI_API_KEY not configured")
+
+    instrument_config = get_instrument(instrument)
+    if not instrument_config:
+        raise ValueError(f"Unknown instrument: {instrument}")
+
+    return Assistant(
+        api_key=settings.gemini_api_key,
+        instrument=instrument,
+        df=load_data(instrument),
+        sessions=instrument_config["sessions"],
+    )
+
+
 # --- Endpoints ---
 
 @app.get("/health")
@@ -64,23 +87,12 @@ def health():
 
 @app.post("/api/chat")
 def chat(request: ChatRequest) -> ChatResponse:
-    settings = get_settings()
-    if not settings.gemini_api_key:
+    try:
+        assistant = _get_assistant(request.instrument)
+    except RuntimeError:
         raise HTTPException(500, "GEMINI_API_KEY not configured")
-
-    instrument_config = get_instrument(request.instrument)
-    if not instrument_config:
+    except ValueError:
         raise HTTPException(400, f"Unknown instrument: {request.instrument}")
-
-    df = load_data(request.instrument)
-    sessions = instrument_config["sessions"]
-
-    assistant = Assistant(
-        api_key=settings.gemini_api_key,
-        instrument=request.instrument,
-        df=df,
-        sessions=sessions,
-    )
 
     start = time.time()
     try:
@@ -90,6 +102,6 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(503, "Service temporarily unavailable")
 
     latency = time.time() - start
-    log.info(f"Chat completed: {latency:.2f}s, ${result['cost']['total_cost']:.6f}")
+    log.info("Chat completed: %.2fs, $%.6f", latency, result["cost"]["total_cost"])
 
     return ChatResponse(answer=result["answer"], data=result["data"], cost=result["cost"])

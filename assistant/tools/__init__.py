@@ -12,6 +12,8 @@ import pandas as pd
 
 from assistant.tools import understand, reference, execute
 
+__all__ = ["TOOL_DECLARATIONS", "run_tool"]
+
 TOOL_DECLARATIONS = [
     understand.DECLARATION,
     reference.DECLARATION,

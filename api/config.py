@@ -6,7 +6,6 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     gemini_api_key: str = ""
-    data_dir: str = "/app/data"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

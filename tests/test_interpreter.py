@@ -237,6 +237,24 @@ class TestSortLimit:
         }, nq_minute_slice, sessions)
         assert len(result["table"]) == 3
 
+    def test_sort_unknown_column(self, nq_minute_slice, sessions):
+        """Sort on non-existent column gives clear error."""
+        with pytest.raises(QueryError, match="Sort column 'bogus' not found") as exc_info:
+            execute({
+                "session": "RTH",
+                "from": "daily",
+                "map": {"weekday": "dayofweek()"},
+                "group_by": "weekday",
+                "select": "count()",
+                "sort": "bogus desc",
+            }, nq_minute_slice, sessions)
+        assert exc_info.value.step == "sort"
+
+    def test_join_field_rejected(self, nq_minute_slice, sessions):
+        """'join' is not a valid field (unimplemented)."""
+        with pytest.raises(QueryError, match="Unknown fields"):
+            execute({"join": "events", "from": "daily"}, nq_minute_slice, sessions)
+
 
 # --- Period ---
 

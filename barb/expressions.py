@@ -19,6 +19,7 @@ class ExpressionError(Exception):
 
 # Python keywords used as Barb function names → safe aliases for ast.parse
 _KEYWORD_ALIASES = {"if": "_barb_if_"}
+_REVERSE_ALIASES = {v: k for k, v in _KEYWORD_ALIASES.items()}
 
 
 def _preprocess_keywords(expr: str) -> str:
@@ -152,9 +153,8 @@ def _eval_node(node: ast.AST, df: pd.DataFrame, functions: dict):
             raise ExpressionError("Only simple function calls allowed (no methods)")
         func_name = node.func.id
         # Reverse keyword alias: _barb_if_ → if
-        reverse_aliases = {v: k for k, v in _KEYWORD_ALIASES.items()}
-        if func_name in reverse_aliases:
-            func_name = reverse_aliases[func_name]
+        if func_name in _REVERSE_ALIASES:
+            func_name = _REVERSE_ALIASES[func_name]
         if func_name not in functions:
             raise ExpressionError(
                 f"Unknown function '{func_name}'. Available: {', '.join(sorted(functions))}"
