@@ -56,6 +56,22 @@ if start > end:
 ema_period = 2 * n - 1
 ```
 
+## Code Quality Checklist
+
+Every commit must pass these checks. No exceptions, no "fix later".
+
+**Validation** — Validate all inputs at system boundaries. Guard edge cases (empty DataFrame, missing keys, unknown enum values). Don't trust external data — LLM responses, user input, API payloads.
+
+**Logging** — Always lazy formatting: `log.info("msg: %s", val)`, never `log.info(f"msg: {val}")`. F-strings evaluate even when the log level is disabled.
+
+**Error handling** — Wrap external calls (LLM API, file I/O) in try/except. Return meaningful errors with context (what failed, which step, what expression). Never swallow exceptions silently.
+
+**Infrastructure** — Dockerfile must copy all source packages. Dependencies in pyproject.toml must match actual imports. CI must run lint + tests before deploy. Verify the build works before pushing.
+
+**Types** — Use correct type hints (`Callable` from collections.abc, not `callable`). Type API response models with Pydantic. Scope test fixtures appropriately (session-scoped for static data).
+
+**No dead code** — No unreachable branches, no unused imports, no stale fields. If it's not executed, delete it.
+
 ## Rule: Dynamic Context
 
 The agent gets domain information from config/, not hardcoded in prompts.
