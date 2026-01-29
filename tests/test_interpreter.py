@@ -130,6 +130,32 @@ class TestWhere:
         assert result["result"] >= 0
 
 
+# --- Normalization ---
+
+class TestNormalization:
+    def test_comma_separated_select(self, nq_minute_slice, sessions):
+        """'mean(high), mean(low)' as one string is split and both computed."""
+        result = execute({
+            "session": "RTH",
+            "from": "daily",
+            "map": {"weekday": "dayofweek()"},
+            "group_by": "weekday",
+            "select": "mean(high), mean(low)",
+        }, nq_minute_slice, sessions)
+        assert len(result["table"]) == 5
+        assert "mean_high" in result["table"][0]
+        assert "mean_low" in result["table"][0]
+
+    def test_single_select_unchanged(self, nq_minute_slice, sessions):
+        """Single select without comma works as before."""
+        result = execute({
+            "session": "RTH",
+            "from": "daily",
+            "select": "count()",
+        }, nq_minute_slice, sessions)
+        assert isinstance(result["result"], (int, float))
+
+
 # --- Group By ---
 
 class TestGroupBy:
@@ -155,6 +181,18 @@ class TestGroupBy:
                 "select": "count()",
             }, nq_minute_slice, sessions)
         assert exc_info.value.step == "group_by"
+
+    def test_select_missing_column(self, nq_minute_slice, sessions):
+        """select aggregate on non-existent column gives clear error."""
+        with pytest.raises(QueryError, match="Column 'bogus' not found") as exc_info:
+            execute({
+                "session": "RTH",
+                "from": "daily",
+                "map": {"weekday": "dayofweek()"},
+                "group_by": "weekday",
+                "select": "mean(bogus)",
+            }, nq_minute_slice, sessions)
+        assert exc_info.value.step == "select"
 
     def test_group_with_count(self, nq_minute_slice, sessions):
         result = execute({

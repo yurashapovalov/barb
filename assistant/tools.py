@@ -179,7 +179,7 @@ Window: rolling_mean(col, n), rolling_sum(col, n), rolling_max(col, n), rolling_
 Cumulative: cummax(col), cummin(col), cumsum(col)
 Pattern: streak(cond), bars_since(cond), rank(col)
 Aggregate: mean(col), sum(col), max(col), min(col), std(col), median(col), count(), percentile(col, p), correlation(col1, col2), last(col)
-Time: dayofweek(), hour(), month(), year(), day(), quarter(), date()
+Time: dayofweek(), dayname(), hour(), month(), monthname(), year(), day(), quarter(), date()
 
 ## Examples
 

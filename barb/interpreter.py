@@ -103,7 +103,7 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
 
     # 7-8. GROUP BY + SELECT
     group_by = query.get("group_by")
-    select = query.get("select", "count()")
+    select = _normalize_select(query.get("select", "count()"))
 
     if group_by:
         result_df = _group_aggregate(df, group_by, select)
@@ -119,6 +119,15 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
         result_df = result_df.head(query["limit"])
 
     return _build_response(result_df, query, rows_after_filter, session_name, timeframe, warnings)
+
+
+# --- Normalization ---
+
+def _normalize_select(select) -> str | list[str]:
+    """Split comma-separated select into list: 'sum(x), sum(y)' → ['sum(x)', 'sum(y)']."""
+    if isinstance(select, str) and "," in select:
+        return [s.strip() for s in select.split(",") if s.strip()]
+    return select
 
 
 # --- Validation ---
@@ -321,6 +330,13 @@ def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd
         raise QueryError(
             f"Unknown aggregate function '{func_name}' in group context",
             error_type="UnknownFunction", step="select", expression=select_expr,
+        )
+
+    if col not in df.columns:
+        available = ", ".join(sorted(df.columns))
+        raise QueryError(
+            f"Column '{col}' not found. Available: {available}",
+            error_type="ValidationError", step="select", expression=select_expr,
         )
 
     return col_name, groups[col].agg(agg_map[func_name])

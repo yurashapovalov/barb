@@ -231,6 +231,16 @@ class TestTime:
         result = FUNCTIONS["day"](df)
         assert result.iloc[0] == 2  # Jan 2
 
+    def test_dayname(self, df):
+        result = FUNCTIONS["dayname"](df)
+        # Jan 2, 2024 is Tuesday
+        assert result.iloc[0] == "Tuesday"
+        assert result.iloc[1] == "Wednesday"
+
+    def test_monthname(self, df):
+        result = FUNCTIONS["monthname"](df)
+        assert result.iloc[0] == "January"
+
     def test_quarter(self, df):
         result = FUNCTIONS["quarter"](df)
         assert result.iloc[0] == 1  # Q1
