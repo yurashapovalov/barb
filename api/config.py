@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     gemini_api_key: str = ""
+    supabase_jwt_secret: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

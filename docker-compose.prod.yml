@@ -2,7 +2,8 @@ services:
   api:
     environment:
       - ENV=production
-      - CORS_ORIGINS=${CORS_ORIGINS:-https://barb.app}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://getbarb.trade}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 2
     volumes:
       - ./data:/app/data

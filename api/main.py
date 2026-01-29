@@ -5,10 +5,11 @@ import os
 import time
 from functools import lru_cache
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from api.auth import get_current_user
 from api.config import get_settings
 from assistant.chat import Assistant
 from barb.data import load_data
@@ -111,7 +112,7 @@ def health():
 
 
 @app.post("/api/chat")
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(request: ChatRequest, user: dict = Depends(get_current_user)) -> ChatResponse:
     try:
         assistant = _get_assistant(request.instrument)
     except RuntimeError:
@@ -127,6 +128,6 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(503, "Service temporarily unavailable")
 
     latency = time.time() - start
-    log.info("Chat completed: %.2fs, $%.6f", latency, result["cost"]["total_cost"])
+    log.info("Chat user=%s: %.2fs, $%.6f", user["sub"], latency, result["cost"]["total_cost"])
 
     return ChatResponse(answer=result["answer"], data=result["data"], cost=result["cost"])
