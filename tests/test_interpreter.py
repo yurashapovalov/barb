@@ -145,6 +145,17 @@ class TestGroupBy:
         # 5 weekdays (0-4, no weekends in RTH data)
         assert len(result["table"]) == 5
 
+    def test_group_by_missing_column(self, nq_minute_slice, sessions):
+        """group_by on non-existent column gives clear error."""
+        with pytest.raises(QueryError, match="Column 'bogus' not found") as exc_info:
+            execute({
+                "session": "RTH",
+                "from": "daily",
+                "group_by": "bogus",
+                "select": "count()",
+            }, nq_minute_slice, sessions)
+        assert exc_info.value.step == "group_by"
+
     def test_group_with_count(self, nq_minute_slice, sessions):
         result = execute({
             "session": "RTH",

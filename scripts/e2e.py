@@ -98,6 +98,14 @@ SCENARIOS = [
         "expect_tools": ["execute_query"],
         "expect_data": True,
     },
+    {
+        "name": "Russian — weekday high/low distribution",
+        "messages": [
+            "Распредели дни недели по частоте хай лоу приходящимся на этот день в течение недели",
+        ],
+        "expect_tools": ["execute_query"],
+        "expect_data": True,
+    },
 ]
 
 

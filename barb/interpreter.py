@@ -253,6 +253,14 @@ def _group_aggregate(df: pd.DataFrame, group_by, select) -> pd.DataFrame:
     if isinstance(select, str):
         select = [select]
 
+    for col in group_by:
+        if col not in df.columns:
+            available = ", ".join(sorted(df.columns))
+            raise QueryError(
+                f"Column '{col}' not found. Available: {available}",
+                error_type="ValidationError", step="group_by", expression=col,
+            )
+
     groups = df.groupby(group_by)
     result_parts = {}
 
