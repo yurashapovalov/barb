@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 # Add project root to path
@@ -172,7 +173,7 @@ def run_checks(result, scenario):
 
 
 def run_scenario(assistant, scenario, quiet=False):
-    """Run one scenario. Returns result dict."""
+    """Run one scenario. Returns result dict with full log for saving."""
     name = scenario["name"]
     messages = scenario["messages"]
 
@@ -183,6 +184,7 @@ def run_scenario(assistant, scenario, quiet=False):
     history = []
     last_result = None
     all_warnings = []
+    turns = []
 
     for i, msg in enumerate(messages):
         print(f"\n{C.BLUE}>>> {msg}{C.END}")
@@ -192,7 +194,11 @@ def run_scenario(assistant, scenario, quiet=False):
             result = assistant.chat(msg, history=history or None, trace=True)
         except Exception as e:
             print(f"{C.RED}    CRASH: {e}{C.END}")
-            return {"name": name, "passed": False, "cost": None}
+            turns.append({"user": msg, "error": str(e)})
+            return {
+                "name": name, "passed": False, "cost": None,
+                "turns": turns, "warnings": ["CRASH: " + str(e)],
+            }
 
         elapsed = time.time() - start
         last_result = result
@@ -216,6 +222,16 @@ def run_scenario(assistant, scenario, quiet=False):
         if i == len(messages) - 1:
             all_warnings = run_checks(result, scenario)
 
+        # Save turn for log
+        turns.append({
+            "user": msg,
+            "answer": result["answer"],
+            "steps": result.get("steps", []),
+            "cost": result["cost"],
+            "model": result.get("model"),
+            "elapsed_s": round(elapsed, 2),
+        })
+
         # Accumulate history
         history.append({"role": "user", "text": msg})
         history.append({"role": "model", "text": result["answer"]})
@@ -232,6 +248,8 @@ def run_scenario(assistant, scenario, quiet=False):
         "name": name,
         "passed": len(all_warnings) == 0,
         "cost": last_result["cost"] if last_result else None,
+        "turns": turns,
+        "warnings": all_warnings,
     }
 
 
@@ -277,6 +295,32 @@ def main():
         print(f"  {status}  {r['name']}  {C.DIM}${cost:.6f}{C.END}")
 
     print(f"\n  {passed}/{len(results)} passed | Total: ${total_cost:.6f}")
+
+    # Save results
+    results_dir = ROOT / "results" / "e2e"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    report = {
+        "timestamp": datetime.now().isoformat(),
+        "passed": passed,
+        "total": len(results),
+        "total_cost": total_cost,
+        "scenarios": [
+            {
+                "name": r["name"],
+                "passed": r["passed"],
+                "warnings": r.get("warnings", []),
+                "cost": r["cost"],
+                "turns": r.get("turns", []),
+            }
+            for r in results
+        ],
+    }
+
+    path = results_dir / f"{timestamp}.json"
+    path.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+    print(f"\n  Saved: {path.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

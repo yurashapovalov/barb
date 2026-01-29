@@ -43,3 +43,6 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# E2E results
+results/
