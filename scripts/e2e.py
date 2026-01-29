@@ -90,6 +90,14 @@ SCENARIOS = [
         "expect_tools": ["execute_query"],
         "expect_data": True,
     },
+    {
+        "name": "Russian — gap analysis",
+        "messages": [
+            "Какой средний размер гэпа на открытии NQ за последний год?",
+        ],
+        "expect_tools": ["execute_query"],
+        "expect_data": True,
+    },
 ]
 
 

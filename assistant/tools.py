@@ -101,8 +101,19 @@ def run_tool(name: str, args: dict, df: pd.DataFrame, sessions: dict) -> str:
     return json.dumps({"error": f"Unknown tool: {name}"})
 
 
+def _normalize_query(query: dict) -> dict:
+    """Fix common LLM formatting issues in query JSON."""
+    # Gemini sometimes sends map values as {"expression": "..."} instead of "..."
+    if "map" in query and isinstance(query["map"], dict):
+        query["map"] = {
+            k: v["expression"] if isinstance(v, dict) and "expression" in v else v
+            for k, v in query["map"].items()
+        }
+    return query
+
+
 def _run_execute_query(args: dict, df: pd.DataFrame, sessions: dict) -> str:
-    query = args.get("query", {})
+    query = _normalize_query(args.get("query", {}))
     log.info(f"Executing query: {json.dumps(query)}")
 
     try:
