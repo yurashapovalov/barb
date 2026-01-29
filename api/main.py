@@ -51,6 +51,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    data: list
     cost: dict
 
 
@@ -91,4 +92,4 @@ def chat(request: ChatRequest) -> ChatResponse:
     latency = time.time() - start
     log.info(f"Chat completed: {latency:.2f}s, ${result['cost']['total_cost']:.6f}")
 
-    return ChatResponse(answer=result["answer"], cost=result["cost"])
+    return ChatResponse(answer=result["answer"], data=result["data"], cost=result["cost"])

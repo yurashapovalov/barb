@@ -1,5 +1,6 @@
 """Gemini chat with tool calling."""
 
+import json
 import logging
 
 import pandas as pd
@@ -49,6 +50,7 @@ class Assistant:
 
         total_input_tokens = 0
         total_output_tokens = 0
+        data = []
         steps = []
 
         for round_num in range(MAX_TOOL_ROUNDS):
@@ -73,16 +75,24 @@ class Assistant:
             tool_response_parts = []
             for call in tool_calls:
                 log.info(f"Tool call: {call.name}({call.args})")
-                result = run_tool(call.name, dict(call.args), self.df, self.sessions)
+                tool_result = run_tool(call.name, dict(call.args), self.df, self.sessions)
+
+                # Collect query results for direct user display
+                if call.name == "execute_query":
+                    _collect_query_data(data, dict(call.args), tool_result)
+
                 if trace:
                     steps.append({
                         "round": round_num + 1,
                         "tool": call.name,
                         "args": dict(call.args),
-                        "result": result,
+                        "result": tool_result,
                     })
+
                 tool_response_parts.append(
-                    types.Part.from_function_response(name=call.name, response={"result": result})
+                    types.Part.from_function_response(
+                        name=call.name, response={"result": tool_result},
+                    )
                 )
 
             contents.append(types.Content(role="user", parts=tool_response_parts))
@@ -97,7 +107,7 @@ class Assistant:
             model=DEFAULT_MODEL,
         )
 
-        out = {"answer": answer, "cost": cost}
+        out = {"answer": answer, "data": data, "cost": cost}
         if trace:
             out["steps"] = steps
             out["model"] = self.model_config.id
@@ -113,6 +123,25 @@ def _build_contents(history: list[dict], message: str) -> list[types.Content]:
         contents.append(types.Content(role=role, parts=[types.Part(text=text)]))
     contents.append(types.Content(role="user", parts=[types.Part(text=message)]))
     return contents
+
+
+def _collect_query_data(data: list, args: dict, tool_result: str):
+    """Parse execute_query result and collect for direct user display."""
+    try:
+        parsed = json.loads(tool_result)
+    except (json.JSONDecodeError, TypeError):
+        return
+
+    if "error" in parsed:
+        return
+
+    data.append({
+        "query": args.get("query", {}),
+        "result": parsed.get("result"),
+        "rows": parsed.get("metadata", {}).get("rows"),
+        "session": parsed.get("metadata", {}).get("session"),
+        "timeframe": parsed.get("metadata", {}).get("from"),
+    })
 
 
 def _extract_tool_calls(response) -> list:

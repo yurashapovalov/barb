@@ -55,7 +55,7 @@ SCENARIOS = [
             "What is the average daily range for NQ?",
         ],
         "expect_tools": ["get_query_reference", "execute_query"],
-        "expect_in_answer": ["range"],
+        "expect_data": True,
     },
     {
         "name": "Filtered — inside days in 2024",
@@ -63,7 +63,7 @@ SCENARIOS = [
             "How many inside days were there in 2024?",
         ],
         "expect_tools": ["execute_query"],
-        "expect_in_answer": ["inside"],
+        "expect_data": True,
     },
     {
         "name": "Knowledge — no query needed",
@@ -71,7 +71,7 @@ SCENARIOS = [
             "What is NR7?",
         ],
         "expect_tools": [],
-        "expect_in_answer": ["range"],
+        "expect_data": False,
     },
     {
         "name": "Multi-turn — follow-up question",
@@ -80,7 +80,7 @@ SCENARIOS = [
             "Now break it down by weekday",
         ],
         "expect_tools": ["execute_query"],
-        "expect_in_answer": [],
+        "expect_data": True,
     },
     {
         "name": "Group-by — volume by month 2024",
@@ -88,7 +88,7 @@ SCENARIOS = [
             "Show me average daily volume by month for 2024",
         ],
         "expect_tools": ["execute_query"],
-        "expect_in_answer": ["volume"],
+        "expect_data": True,
     },
 ]
 
@@ -148,9 +148,8 @@ def print_trace(result, show_prompt=False):
 def run_checks(result, scenario):
     """Run soft checks on a scenario result. Returns list of warnings."""
     warnings = []
-    answer = result["answer"]
 
-    if not answer.strip():
+    if not result["answer"].strip():
         warnings.append("Empty answer")
 
     tools_called = [s["tool"] for s in result.get("steps", [])]
@@ -164,10 +163,16 @@ def run_checks(result, scenario):
         if tools_called:
             warnings.append(f"Expected no tools, got: {tools_called}")
 
-    answer_lower = answer.lower()
-    for expected_str in scenario["expect_in_answer"]:
-        if expected_str.lower() not in answer_lower:
-            warnings.append(f"Expected '{expected_str}' in answer")
+    data = result.get("data", [])
+    if scenario.get("expect_data"):
+        if not data:
+            warnings.append("Expected data block but got none")
+        for d in data:
+            if d.get("result") is None:
+                warnings.append("Data block has no result")
+    else:
+        if data:
+            warnings.append(f"Expected no data, got {len(data)} blocks")
 
     return warnings
 
@@ -206,7 +211,17 @@ def run_scenario(assistant, scenario, quiet=False):
         if not quiet:
             print_trace(result, show_prompt=(i == 0))
 
-        # Print answer
+        # Print data blocks (direct from interpreter, not from model)
+        for d in result.get("data", []):
+            query_str = json.dumps(d["query"])
+            print(f"\n{C.BOLD}    DATA:{C.END} {d['result']}")
+            print(f"{C.DIM}    Query: {query_str}{C.END}")
+            if d.get("rows"):
+                print(f"{C.DIM}    Rows: {d['rows']}, "
+                      f"Session: {d.get('session', '-')}, "
+                      f"Timeframe: {d.get('timeframe', '-')}{C.END}")
+
+        # Print model commentary
         answer = result["answer"]
         if len(answer) > 500:
             answer = answer[:500] + "..."
