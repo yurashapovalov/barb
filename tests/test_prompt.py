@@ -38,7 +38,7 @@ class TestBuildSystemPrompt:
 
     def test_data_shown_separately(self):
         prompt = build_system_prompt("NQ")
-        assert "shown to the user directly" in prompt.lower()
+        assert "do not repeat numbers" in prompt.lower()
 
     def test_has_structured_sections(self):
         prompt = build_system_prompt("NQ")
