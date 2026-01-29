@@ -7,6 +7,7 @@ No arbitrary code execution — only approved node types and functions.
 
 import ast
 import operator
+import re
 
 import pandas as pd
 
@@ -14,6 +15,17 @@ import pandas as pd
 class ExpressionError(Exception):
     """Raised when an expression cannot be parsed or evaluated."""
     pass
+
+
+# Python keywords used as Barb function names → safe aliases for ast.parse
+_KEYWORD_ALIASES = {"if": "_barb_if_"}
+
+
+def _preprocess_keywords(expr: str) -> str:
+    """Replace keyword function names with safe aliases before ast.parse."""
+    for kw, alias in _KEYWORD_ALIASES.items():
+        expr = re.sub(rf'\b{kw}\s*\(', f'{alias}(', expr)
+    return expr
 
 
 # Operators mapped to pandas-compatible callables
@@ -48,8 +60,11 @@ def evaluate(expr: str, df: pd.DataFrame, functions: dict) -> pd.Series | float 
     Raises:
         ExpressionError: On parse failure, unknown column, or disallowed operation
     """
+    # Replace Python keywords used as Barb functions before parsing
+    parsed_expr = _preprocess_keywords(expr)
+
     try:
-        tree = ast.parse(expr, mode="eval")
+        tree = ast.parse(parsed_expr, mode="eval")
     except SyntaxError as e:
         raise ExpressionError(f"Parse error in '{expr}': {e.msg}") from e
 
@@ -136,6 +151,10 @@ def _eval_node(node: ast.AST, df: pd.DataFrame, functions: dict):
         if not isinstance(node.func, ast.Name):
             raise ExpressionError("Only simple function calls allowed (no methods)")
         func_name = node.func.id
+        # Reverse keyword alias: _barb_if_ → if
+        reverse_aliases = {v: k for k, v in _KEYWORD_ALIASES.items()}
+        if func_name in reverse_aliases:
+            func_name = reverse_aliases[func_name]
         if func_name not in functions:
             raise ExpressionError(
                 f"Unknown function '{func_name}'. Available: {', '.join(sorted(functions))}"

@@ -1,9 +1,11 @@
 """Tests for the expression parser and evaluator."""
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from barb.expressions import evaluate, ExpressionError
+from barb.functions import FUNCTIONS
 
 
 @pytest.fixture
@@ -24,6 +26,7 @@ def functions():
     return {
         "abs": lambda df, x: x.abs() if isinstance(x, pd.Series) else abs(x),
         "prev": lambda df, col, n=1: col.shift(int(n)),
+        "if": FUNCTIONS["if"],
     }
 
 
@@ -133,6 +136,18 @@ class TestFunctionCalls:
     def test_nested_expression_in_function(self, df, functions):
         result = evaluate("abs(open - close)", df, functions)
         assert list(result) == [3.0, 1.0, 2.0, 1.0, 1.0]
+
+    def test_if_function(self, df, functions):
+        """if() is a Python keyword but works as a Barb function."""
+        result = evaluate("if(close > open, 1, 0)", df, functions)
+        # close > open: [T, F, T, T, T]
+        assert list(result) == [1, 0, 1, 1, 1]
+
+    def test_if_nested_in_expression(self, df, functions):
+        """if() inside arithmetic expression."""
+        result = evaluate("if(close > open, 1, 0) + if(volume > 1000, 1, 0)", df, functions)
+        # close>open: [T,F,T,T,T], vol>1000: [F,T,T,T,F]
+        assert list(result) == [1, 1, 2, 2, 1]
 
 
 # --- Error Handling ---
