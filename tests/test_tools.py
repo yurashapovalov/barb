@@ -13,8 +13,7 @@ class TestToolDeclarations:
             assert "parameters" in decl
 
     def test_execute_query_declaration(self):
-        decl = TOOL_DECLARATIONS[0]
-        assert decl["name"] == "execute_query"
+        decl = next(d for d in TOOL_DECLARATIONS if d["name"] == "execute_query")
         props = decl["parameters"]["properties"]["query"]["properties"]
         assert "session" in props
         assert "from" in props
@@ -77,6 +76,31 @@ class TestGetQueryReference:
         assert "Window:" in result
         assert "Aggregate:" in result
         assert "Time:" in result
+
+
+class TestUnderstandQuestion:
+    def test_declaration_exists(self):
+        names = [d["name"] for d in TOOL_DECLARATIONS]
+        assert "understand_question" in names
+
+    def test_returns_capabilities(self, nq_minute_slice, sessions):
+        result = run_tool("understand_question", {"question": "test"}, nq_minute_slice, sessions)
+        data = json.loads(result)
+        assert "capabilities" in data
+        assert "single_timeframe" in data["capabilities"]
+        assert "aggregation" in data["capabilities"]
+
+    def test_returns_limitations(self, nq_minute_slice, sessions):
+        result = run_tool("understand_question", {"question": "test"}, nq_minute_slice, sessions)
+        data = json.loads(result)
+        assert "limitations" in data
+        assert any("Cross-timeframe" in l for l in data["limitations"])
+
+    def test_returns_instructions(self, nq_minute_slice, sessions):
+        result = run_tool("understand_question", {"question": "test"}, nq_minute_slice, sessions)
+        data = json.loads(result)
+        assert "instructions" in data
+        assert "honestly" in data["instructions"]
 
 
 class TestUnknownTool:

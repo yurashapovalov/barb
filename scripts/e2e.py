@@ -54,7 +54,7 @@ SCENARIOS = [
         "messages": [
             "What is the average daily range for NQ?",
         ],
-        "expect_tools": ["get_query_reference", "execute_query"],
+        "expect_tools": ["understand_question", "execute_query"],
         "expect_data": True,
     },
     {
@@ -62,7 +62,7 @@ SCENARIOS = [
         "messages": [
             "How many inside days were there in 2024?",
         ],
-        "expect_tools": ["execute_query"],
+        "expect_tools": ["understand_question", "execute_query"],
         "expect_data": True,
     },
     {
@@ -87,7 +87,7 @@ SCENARIOS = [
         "messages": [
             "Show me average daily volume by month for 2024",
         ],
-        "expect_tools": ["execute_query"],
+        "expect_tools": ["understand_question", "execute_query"],
         "expect_data": True,
     },
     {
@@ -95,7 +95,7 @@ SCENARIOS = [
         "messages": [
             "Какой средний размер гэпа на открытии NQ за последний год?",
         ],
-        "expect_tools": ["execute_query"],
+        "expect_tools": ["understand_question", "execute_query"],
         "expect_data": True,
     },
     {
@@ -103,8 +103,16 @@ SCENARIOS = [
         "messages": [
             "Распредели дни недели по частоте хай лоу приходящимся на этот день в течение недели",
         ],
-        "expect_tools": ["execute_query"],
-        "expect_data": True,
+        "expect_tools": ["understand_question"],
+        "expect_data": False,
+    },
+    {
+        "name": "Russian — ATH by weekday",
+        "messages": [
+            "На какие дни недели чаще всего приходился ATH показать списком по убыванию частоты",
+        ],
+        "expect_tools": ["understand_question"],
+        "expect_data": False,
     },
 ]
 
