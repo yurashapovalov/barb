@@ -23,6 +23,9 @@ dev = [
     "ruff>=0.8.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["api*", "assistant*", "barb*", "config*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
