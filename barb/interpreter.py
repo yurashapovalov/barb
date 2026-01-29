@@ -219,6 +219,11 @@ def _compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
     """Step 5: Compute derived columns in declaration order."""
     df = df.copy()
     for name, expr in map_config.items():
+        if not isinstance(expr, str):
+            raise QueryError(
+                f"map value for '{name}' must be a string expression, got {type(expr).__name__}",
+                error_type="TypeError", step="map", expression=str(expr),
+            )
         try:
             df[name] = evaluate(expr, df, FUNCTIONS)
         except ExpressionError as e:

@@ -45,7 +45,7 @@ EXECUTE_QUERY_DECLARATION = {
                     },
                     "map": {
                         "type": "object",
-                        "description": "Derived columns: {name: expression}. Example: {\"range\": \"high - low\"}",
+                        "description": "Derived columns. Each key is a column name, each value MUST be a plain string expression like \"high - low\". Never use nested objects.",
                     },
                     "where": {
                         "type": "string",
@@ -154,7 +154,7 @@ JSON object with these fields (all optional):
 - session: Trading session filter (RTH, ETH, OVERNIGHT, ASIAN, EUROPEAN, MORNING, AFTERNOON, RTH_OPEN, RTH_CLOSE)
 - from: Timeframe (1m, 5m, 15m, 30m, 1h, 2h, 4h, daily, weekly, monthly, quarterly, yearly). Default: 1m
 - period: Date range ("2024", "2024-03", "2024-01-01:2024-06-30", "last_year", "last_month", "last_week")
-- map: Derived columns {name: expression}
+- map: Derived columns {name: "expression_string"}. Values MUST be strings.
 - where: Row filter expression (boolean)
 - group_by: Column to group by
 - select: Aggregate expression. Default: count()
