@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 
 import pandas as pd
 from google import genai
@@ -29,18 +30,15 @@ class Assistant:
         self.model_name = model
         self.model_config = get_model(model)
 
-    def chat(self, message: str, history: list[dict] | None = None,
-             trace: bool = False) -> dict:
+    def chat(self, message: str, history: list[dict] | None = None) -> dict:
         """Process a chat message and return response.
 
         Args:
             message: User message text
             history: Previous messages [{"role": "user"|"model", "text": "..."}]
-            trace: If True, include intermediate steps in the result
 
         Returns:
-            {"answer": str, "cost": dict}
-            With trace=True, also includes "steps", "model" keys.
+            {"answer": str, "data": [...], "usage": {...}, "tool_calls": [...]}
         """
         contents = _build_contents(history or [], message)
 
@@ -53,7 +51,7 @@ class Assistant:
         total_input_tokens = 0
         total_output_tokens = 0
         data = []
-        steps = []
+        tool_call_log = []
 
         for round_num in range(MAX_TOOL_ROUNDS):
             response = self.client.models.generate_content(
@@ -77,19 +75,29 @@ class Assistant:
             tool_response_parts = []
             for call in tool_calls:
                 log.info("Tool call: %s(%s)", call.name, call.args)
-                tool_result = run_tool(call.name, dict(call.args), self.df, self.sessions)
+                call_args = dict(call.args)
+                call_start = time.time()
+                call_error = None
 
-                # Collect query results for direct user display
-                if call.name == "execute_query":
-                    _collect_query_data(data, dict(call.args), tool_result)
+                try:
+                    tool_result = run_tool(call.name, call_args, self.df, self.sessions)
+                except Exception as exc:
+                    call_error = str(exc)
+                    tool_result = json.dumps({"error": call_error})
+                    log.exception("Tool call failed: %s", call.name)
 
-                if trace:
-                    steps.append({
-                        "round": round_num + 1,
-                        "tool": call.name,
-                        "args": dict(call.args),
-                        "result": tool_result,
-                    })
+                duration_ms = int((time.time() - call_start) * 1000)
+
+                tool_call_log.append({
+                    "tool_name": call.name,
+                    "input": call_args,
+                    "output": tool_result,
+                    "error": call_error,
+                    "duration_ms": duration_ms,
+                })
+
+                if call.name == "execute_query" and not call_error:
+                    _collect_query_data(data, call_args, tool_result)
 
                 tool_response_parts.append(
                     types.Part.from_function_response(
@@ -107,17 +115,18 @@ class Assistant:
         if not answer:
             log.warning("No text response after %d tool rounds", MAX_TOOL_ROUNDS)
 
-        cost = calculate_cost(
+        usage = calculate_cost(
             input_tokens=total_input_tokens,
             output_tokens=total_output_tokens,
             model=self.model_name,
         )
 
-        out = {"answer": answer, "data": data, "cost": cost}
-        if trace:
-            out["steps"] = steps
-            out["model"] = self.model_config.id
-        return out
+        return {
+            "answer": answer,
+            "data": data,
+            "usage": usage,
+            "tool_calls": tool_call_log,
+        }
 
 
 def _build_contents(history: list[dict], message: str) -> list[types.Content]:

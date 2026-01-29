@@ -58,7 +58,7 @@ class ChatRequest(BaseModel):
     instrument: str = "NQ"
 
 
-class CostBlock(BaseModel):
+class UsageBlock(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     thinking_tokens: int = 0
@@ -77,10 +77,19 @@ class DataBlock(BaseModel):
     timeframe: str | None = None
 
 
+class ToolCallBlock(BaseModel):
+    tool_name: str
+    input: dict | None = None
+    output: object = None
+    error: str | None = None
+    duration_ms: int | None = None
+
+
 class ChatResponse(BaseModel):
     answer: str
     data: list[DataBlock]
-    cost: CostBlock
+    usage: UsageBlock
+    tool_calls: list[ToolCallBlock] = Field(default_factory=list)
 
 
 # --- Assistant cache ---
@@ -128,6 +137,11 @@ def chat(request: ChatRequest, user: dict = Depends(get_current_user)) -> ChatRe
         raise HTTPException(503, "Service temporarily unavailable")
 
     latency = time.time() - start
-    log.info("Chat user=%s: %.2fs, $%.6f", user["sub"], latency, result["cost"]["total_cost"])
+    log.info("Chat user=%s: %.2fs, $%.6f", user["sub"], latency, result["usage"]["total_cost"])
 
-    return ChatResponse(answer=result["answer"], data=result["data"], cost=result["cost"])
+    return ChatResponse(
+        answer=result["answer"],
+        data=result["data"],
+        usage=result["usage"],
+        tool_calls=result["tool_calls"],
+    )

@@ -4,7 +4,7 @@ export interface Message {
   role: "user" | "model";
   content: string;
   data: DataBlock[] | null;
-  cost: CostBlock | null;
+  usage: UsageBlock | null;
   created_at: string;
 }
 
@@ -24,7 +24,7 @@ export interface DataBlock {
   timeframe: string | null;
 }
 
-export interface CostBlock {
+export interface UsageBlock {
   input_tokens: number;
   output_tokens: number;
   thinking_tokens: number;
@@ -35,8 +35,17 @@ export interface CostBlock {
   total_cost: number;
 }
 
+export interface ToolCall {
+  tool_name: string;
+  input: Record<string, unknown> | null;
+  output: unknown;
+  error: string | null;
+  duration_ms: number | null;
+}
+
 export interface ChatResponse {
   answer: string;
   data: DataBlock[];
-  cost: CostBlock;
+  usage: UsageBlock;
+  tool_calls: ToolCall[];
 }
