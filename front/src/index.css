@@ -113,11 +113,17 @@
   --sidebar-ring: oklch(0.439 0 0);
 }
 
+/* Layout tokens */
+:root {
+  --panel-gap: 0.25rem;
+  --data-panel-min: 480px;
+}
+
 @layer base {
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground overflow-hidden h-screen;
   }
 }
