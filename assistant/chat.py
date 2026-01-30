@@ -49,26 +49,48 @@ class Assistant:
         total_output_tokens = 0
         data = []
         tool_call_log = []
+        answer = ""
 
         for round_num in range(MAX_TOOL_ROUNDS):
-            response = self.client.models.generate_content(
+            stream = self.client.models.generate_content_stream(
                 model=self.model_config.id,
                 contents=contents,
                 config=config,
             )
 
-            if response.usage_metadata:
-                total_input_tokens += response.usage_metadata.prompt_token_count or 0
-                total_output_tokens += response.usage_metadata.candidates_token_count or 0
+            # Consume stream: yield text deltas in real-time, collect tool call parts
+            all_parts = []
+            has_fn_calls = False
+            last_usage = None
 
-            tool_calls = _extract_tool_calls(response)
-            if not tool_calls:
+            for chunk in stream:
+                if chunk.usage_metadata:
+                    last_usage = chunk.usage_metadata
+
+                if not chunk.candidates:
+                    continue
+
+                for part in chunk.candidates[0].content.parts:
+                    all_parts.append(part)
+                    if part.function_call:
+                        has_fn_calls = True
+                    elif part.text:
+                        answer += part.text
+                        yield {"event": "text_delta", "data": {"delta": part.text}}
+
+            if last_usage:
+                total_input_tokens += last_usage.prompt_token_count or 0
+                total_output_tokens += last_usage.candidates_token_count or 0
+
+            if not has_fn_calls:
                 break
 
-            contents.append(response.candidates[0].content)
+            contents.append(types.Content(role="model", parts=all_parts))
+
+            fn_calls = [p.function_call for p in all_parts if p.function_call]
 
             tool_response_parts = []
-            for call in tool_calls:
+            for call in fn_calls:
                 call_args = dict(call.args)
                 log.info("Tool call: %s(%s)", call.name, call.args)
 
@@ -116,14 +138,7 @@ class Assistant:
 
             contents.append(types.Content(role="user", parts=tool_response_parts))
 
-        try:
-            answer = response.text or ""
-        except (ValueError, AttributeError):
-            answer = ""
-
-        if answer:
-            yield {"event": "text_delta", "data": {"delta": answer}}
-        else:
+        if not answer:
             log.warning("No text response after %d tool rounds", round_num + 1)
 
         usage = calculate_cost(
@@ -168,11 +183,3 @@ def _collect_query_data_block(args: dict, tool_result: str) -> dict | None:
         "session": parsed.get("metadata", {}).get("session"),
         "timeframe": parsed.get("metadata", {}).get("from"),
     }
-
-
-def _extract_tool_calls(response) -> list:
-    """Extract function calls from response, if any."""
-    if not response.candidates:
-        return []
-    parts = response.candidates[0].content.parts
-    return [p.function_call for p in parts if p.function_call]
