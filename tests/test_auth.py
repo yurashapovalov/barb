@@ -1,15 +1,19 @@
 """Tests for api/auth.py — JWT validation."""
 
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import HTTPException
 
+import api.auth
 from api.auth import get_current_user
 
-TEST_SECRET = "test-jwt-secret-for-unit-tests"
+# Generate a test ES256 key pair
+_private_key = ec.generate_private_key(ec.SECP256R1())
+_public_key = _private_key.public_key()
 
 
 def _make_request(token: str | None = None):
@@ -29,19 +33,24 @@ def _make_request(token: str | None = None):
     return MockRequest(headers)
 
 
-def _make_token(payload: dict, secret: str = TEST_SECRET) -> str:
-    return jwt.encode(payload, secret, algorithm="HS256")
+def _make_token(payload: dict, key=_private_key) -> str:
+    return jwt.encode(payload, key, algorithm="ES256")
 
 
 @pytest.fixture(autouse=True)
-def _mock_settings():
-    """Mock get_settings to return test secret."""
+def _mock_jwks():
+    """Mock JWKS client to return our test public key."""
+    # Reset cached client between tests
+    api.auth._jwks_client = None
 
-    class FakeSettings:
-        supabase_jwt_secret = TEST_SECRET
+    mock_signing_key = MagicMock()
+    mock_signing_key.key = _public_key
 
-    with patch("api.auth.get_settings", return_value=FakeSettings()):
-        yield
+    mock_client = MagicMock()
+    mock_client.get_signing_key_from_jwt.return_value = mock_signing_key
+
+    with patch("api.auth._get_jwks_client", return_value=mock_client):
+        yield mock_client
 
 
 class TestGetCurrentUser:
@@ -74,16 +83,19 @@ class TestGetCurrentUser:
         assert exc_info.value.status_code == 401
         assert "expired" in exc_info.value.detail.lower()
 
-    def test_invalid_token(self):
+    def test_invalid_token(self, _mock_jwks):
+        # JWKS client raises when token is garbage
+        _mock_jwks.get_signing_key_from_jwt.side_effect = jwt.InvalidTokenError
         with pytest.raises(HTTPException) as exc_info:
             get_current_user(_make_request("not-a-valid-jwt"))
         assert exc_info.value.status_code == 401
         assert "Invalid" in exc_info.value.detail
 
-    def test_wrong_secret(self):
+    def test_wrong_key(self):
+        wrong_key = ec.generate_private_key(ec.SECP256R1())
         token = _make_token(
             {"sub": "user-123", "aud": "authenticated"},
-            secret="wrong-secret",
+            key=wrong_key,
         )
         with pytest.raises(HTTPException) as exc_info:
             get_current_user(_make_request(token))
