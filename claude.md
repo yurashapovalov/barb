@@ -1,5 +1,9 @@
 # Barb Development Guidelines
 
+## Architecture
+
+Документация по архитектуре проекта: [docs/architecture/](docs/architecture/)
+
 ## Code Philosophy
 
 Write boring code. The goal is not to impress — it's to be understood.
