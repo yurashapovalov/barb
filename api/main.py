@@ -17,6 +17,12 @@ from api.db import get_db
 from api.errors import register_error_handlers
 from api.request_id import RequestIdFilter, RequestIdMiddleware
 from assistant.chat import Assistant
+from assistant.context import (
+    WINDOW_SIZE,
+    build_history_with_context,
+    should_summarize,
+    summarize,
+)
 from barb.data import DATA_DIR, load_data
 from config.market.instruments import get_instrument
 
@@ -311,7 +317,8 @@ def chat(request: ChatRequest, user: dict = Depends(get_current_user)) -> ChatRe
         log.exception("Failed to load messages")
         raise HTTPException(503, "Service temporarily unavailable")
 
-    history = [{"role": m["role"], "text": m["content"]} for m in msg_result.data]
+    raw_history = [{"role": m["role"], "text": m["content"]} for m in msg_result.data]
+    history = build_history_with_context(conversation.get("context"), raw_history)
 
     # Call Gemini
     start = time.time()
@@ -394,6 +401,32 @@ def chat(request: ChatRequest, user: dict = Depends(get_current_user)) -> ChatRe
     except Exception:
         log.exception("Failed to persist chat: conv=%s", request.conversation_id)
         persisted = False
+
+    # Summarize context if threshold reached (best effort)
+    if persisted and should_summarize(
+        accumulated["message_count"], conversation.get("context"),
+    ):
+        try:
+            old_context = conversation.get("context") or {}
+            old_summary = old_context.get("summary")
+            summary_up_to = old_context.get("summary_up_to", 0)
+            cutoff = accumulated["message_count"] - WINDOW_SIZE
+            msgs_to_summarize = raw_history[summary_up_to * 2 : cutoff * 2]
+
+            summary_text = summarize(
+                assistant.client, assistant.model_config.id,
+                old_summary, msgs_to_summarize,
+            )
+            db.table("conversations").update({
+                "context": {"summary": summary_text, "summary_up_to": cutoff},
+            }).eq("id", request.conversation_id).execute()
+
+            log.info(
+                "Summarized conv=%s: %d exchanges → summary_up_to=%d",
+                request.conversation_id, accumulated["message_count"], cutoff,
+            )
+        except Exception:
+            log.exception("Failed to summarize: conv=%s", request.conversation_id)
 
     return ChatResponse(
         message_id=message_id,
