@@ -70,7 +70,8 @@ DECLARATION = {
 
 def run(args: dict, df: pd.DataFrame, sessions: dict) -> str:
     """Execute a Barb Script query and return result as JSON string."""
-    query = _normalize_query(args.get("query", {}))
+    # Gemini may send query nested under "query" key or flat at top level
+    query = _normalize_query(args["query"] if "query" in args else args)
     log.info("Executing query: %s", json.dumps(query))
 
     try:

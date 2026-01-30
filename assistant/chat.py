@@ -151,7 +151,7 @@ def _collect_query_data(data: list, args: dict, tool_result: str):
         return
 
     data.append({
-        "query": args.get("query", {}),
+        "query": args["query"] if "query" in args else args,
         "result": parsed.get("result"),
         "rows": parsed.get("metadata", {}).get("rows"),
         "session": parsed.get("metadata", {}).get("session"),
