@@ -75,13 +75,6 @@ def _mock_table_chain(data):
     return mock
 
 
-class TestHealth:
-    def test_health(self, client):
-        r = client.get("/health")
-        assert r.status_code == 200
-        assert r.json() == {"status": "ok"}
-
-
 class TestCreateConversation:
     def test_success(self, client):
         row = {

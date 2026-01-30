@@ -9,12 +9,15 @@ from functools import lru_cache
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from starlette.responses import JSONResponse
 
 from api.auth import get_current_user
 from api.config import get_settings
 from api.db import get_db
+from api.errors import register_error_handlers
+from api.request_id import RequestIdFilter, RequestIdMiddleware
 from assistant.chat import Assistant
-from barb.data import load_data
+from barb.data import DATA_DIR, load_data
 from config.market.instruments import get_instrument
 
 if os.getenv("ENV") == "production":
@@ -25,6 +28,7 @@ if os.getenv("ENV") == "production":
                 "level": record.levelname,
                 "logger": record.name,
                 "msg": record.getMessage(),
+                "request_id": getattr(record, "request_id", ""),
             })
 
     handler = logging.StreamHandler()
@@ -34,8 +38,10 @@ if os.getenv("ENV") == "production":
 else:
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        format="%(asctime)s %(levelname)s %(name)s [%(request_id)s] %(message)s",
     )
+
+logging.root.addFilter(RequestIdFilter())
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +53,11 @@ app.add_middleware(
     allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-Id"],
 )
+app.add_middleware(RequestIdMiddleware)
+
+register_error_handlers(app)
 
 
 # --- Request/Response models ---
@@ -144,7 +154,28 @@ def _parse_tool_output(output):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    checks = {}
+
+    # Supabase
+    try:
+        get_db().table("conversations").select("id").limit(1).execute()
+        checks["supabase"] = "ok"
+    except Exception:
+        checks["supabase"] = "fail"
+
+    # Gemini API key
+    checks["gemini"] = "ok" if get_settings().gemini_api_key else "fail"
+
+    # Data file
+    checks["data"] = "ok" if (DATA_DIR / "NQ.parquet").exists() else "fail"
+
+    failed = any(v == "fail" for v in checks.values())
+    status = "fail" if failed else "ok"
+
+    return JSONResponse(
+        status_code=503 if failed else 200,
+        content={"status": status, "checks": checks},
+    )
 
 
 @app.post("/api/conversations")
