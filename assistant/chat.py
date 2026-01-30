@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+from collections.abc import Generator
 
 import pandas as pd
 from google import genai
@@ -30,15 +31,11 @@ class Assistant:
         self.model_name = model
         self.model_config = get_model(model)
 
-    def chat(self, message: str, history: list[dict] | None = None) -> dict:
-        """Process a chat message and return response.
+    def chat_stream(self, message: str, history: list[dict] | None = None) -> Generator[dict]:
+        """Process chat message, yielding SSE events as dicts.
 
-        Args:
-            message: User message text
-            history: Previous messages [{"role": "user"|"model", "text": "..."}]
-
-        Returns:
-            {"answer": str, "data": [...], "usage": {...}, "tool_calls": [...]}
+        Yields dicts with "event" and "data" keys:
+            tool_start, tool_end, data_block, text_delta, done.
         """
         contents = _build_contents(history or [], message)
 
@@ -64,18 +61,21 @@ class Assistant:
                 total_input_tokens += response.usage_metadata.prompt_token_count or 0
                 total_output_tokens += response.usage_metadata.candidates_token_count or 0
 
-            # Check if model wants to call tools
             tool_calls = _extract_tool_calls(response)
             if not tool_calls:
                 break
 
-            # Execute tools and feed results back
             contents.append(response.candidates[0].content)
 
             tool_response_parts = []
             for call in tool_calls:
-                log.info("Tool call: %s(%s)", call.name, call.args)
                 call_args = dict(call.args)
+                log.info("Tool call: %s(%s)", call.name, call.args)
+
+                yield {"event": "tool_start", "data": {
+                    "tool_name": call.name, "input": call_args,
+                }}
+
                 call_start = time.time()
                 call_error = None
 
@@ -88,6 +88,12 @@ class Assistant:
 
                 duration_ms = int((time.time() - call_start) * 1000)
 
+                yield {"event": "tool_end", "data": {
+                    "tool_name": call.name,
+                    "duration_ms": duration_ms,
+                    "error": call_error,
+                }}
+
                 tool_call_log.append({
                     "tool_name": call.name,
                     "input": call_args,
@@ -97,7 +103,10 @@ class Assistant:
                 })
 
                 if call.name == "execute_query" and not call_error:
-                    _collect_query_data(data, call_args, tool_result)
+                    block = _collect_query_data_block(call_args, tool_result)
+                    if block:
+                        data.append(block)
+                        yield {"event": "data_block", "data": block}
 
                 tool_response_parts.append(
                     types.Part.from_function_response(
@@ -112,8 +121,10 @@ class Assistant:
         except (ValueError, AttributeError):
             answer = ""
 
-        if not answer:
-            log.warning("No text response after %d tool rounds", MAX_TOOL_ROUNDS)
+        if answer:
+            yield {"event": "text_delta", "data": {"delta": answer}}
+        else:
+            log.warning("No text response after %d tool rounds", round_num + 1)
 
         usage = calculate_cost(
             input_tokens=total_input_tokens,
@@ -121,12 +132,12 @@ class Assistant:
             model=self.model_name,
         )
 
-        return {
+        yield {"event": "done", "data": {
             "answer": answer,
-            "data": data,
             "usage": usage,
             "tool_calls": tool_call_log,
-        }
+            "data": data,
+        }}
 
 
 def _build_contents(history: list[dict], message: str) -> list[types.Content]:
@@ -140,23 +151,23 @@ def _build_contents(history: list[dict], message: str) -> list[types.Content]:
     return contents
 
 
-def _collect_query_data(data: list, args: dict, tool_result: str):
-    """Parse execute_query result and collect for direct user display."""
+def _collect_query_data_block(args: dict, tool_result: str) -> dict | None:
+    """Parse execute_query result into a data block, or None."""
     try:
         parsed = json.loads(tool_result)
     except (json.JSONDecodeError, TypeError):
-        return
+        return None
 
     if "error" in parsed:
-        return
+        return None
 
-    data.append({
+    return {
         "query": args["query"] if "query" in args else args,
         "result": parsed.get("result"),
         "rows": parsed.get("metadata", {}).get("rows"),
         "session": parsed.get("metadata", {}).get("session"),
         "timeframe": parsed.get("metadata", {}).get("from"),
-    })
+    }
 
 
 def _extract_tool_calls(response) -> list:

@@ -78,7 +78,7 @@ class TestStructuredErrors:
         assert "request_id" in data
 
     def test_422_format(self, client):
-        r = client.post("/api/chat", json={"conversation_id": "conv-1"})
+        r = client.post("/api/chat/stream", json={"conversation_id": "conv-1"})
         assert r.status_code == 422
         data = r.json()
         assert data["code"] == "VALIDATION_ERROR"
@@ -93,7 +93,7 @@ class TestStructuredErrors:
 
     def test_error_includes_client_request_id(self, client):
         r = client.post(
-            "/api/chat",
+            "/api/chat/stream",
             json={"conversation_id": "conv-1"},
             headers={"X-Request-Id": "trace-abc"},
         )

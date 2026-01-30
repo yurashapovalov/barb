@@ -2,7 +2,7 @@
 
 import json
 
-from assistant.chat import _build_contents, _collect_query_data
+from assistant.chat import _build_contents, _collect_query_data_block
 
 
 class TestBuildContents:
@@ -33,42 +33,37 @@ class TestBuildContents:
         assert contents[0].parts[0].text == ""
 
 
-class TestCollectQueryData:
+class TestCollectQueryDataBlock:
     def test_valid_result(self):
-        data = []
         args = {"query": {"select": "close", "session": "RTH"}}
         tool_result = json.dumps({
             "result": 18500.50,
             "metadata": {"rows": 1, "session": "RTH", "from": "daily"},
         })
-        _collect_query_data(data, args, tool_result)
+        block = _collect_query_data_block(args, tool_result)
 
-        assert len(data) == 1
-        assert data[0]["query"] == {"select": "close", "session": "RTH"}
-        assert data[0]["result"] == 18500.50
-        assert data[0]["rows"] == 1
-        assert data[0]["session"] == "RTH"
-        assert data[0]["timeframe"] == "daily"
+        assert block is not None
+        assert block["query"] == {"select": "close", "session": "RTH"}
+        assert block["result"] == 18500.50
+        assert block["rows"] == 1
+        assert block["session"] == "RTH"
+        assert block["timeframe"] == "daily"
 
-    def test_error_result_ignored(self):
-        data = []
-        _collect_query_data(data, {}, json.dumps({"error": "bad query"}))
-        assert data == []
+    def test_error_result_returns_none(self):
+        assert _collect_query_data_block({}, json.dumps({"error": "bad query"})) is None
 
-    def test_invalid_json_ignored(self):
-        data = []
-        _collect_query_data(data, {}, "not json")
-        assert data == []
+    def test_invalid_json_returns_none(self):
+        assert _collect_query_data_block({}, "not json") is None
 
-    def test_none_ignored(self):
-        data = []
-        _collect_query_data(data, {}, None)
-        assert data == []
+    def test_none_returns_none(self):
+        assert _collect_query_data_block({}, None) is None
 
-    def test_multiple_calls_accumulate(self):
-        data = []
-        for i in range(3):
-            args = {"query": {"select": f"col_{i}"}}
-            result = json.dumps({"result": i, "metadata": {"rows": 1}})
-            _collect_query_data(data, args, result)
-        assert len(data) == 3
+    def test_missing_metadata_fields(self):
+        args = {"query": {"select": "close"}}
+        tool_result = json.dumps({"result": 42, "metadata": {}})
+        block = _collect_query_data_block(args, tool_result)
+
+        assert block is not None
+        assert block["rows"] is None
+        assert block["session"] is None
+        assert block["timeframe"] is None

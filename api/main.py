@@ -9,7 +9,7 @@ from functools import lru_cache
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 
 from api.auth import get_current_user
 from api.config import get_settings
@@ -96,43 +96,6 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000)
 
 
-class UsageBlock(BaseModel):
-    input_tokens: int = 0
-    output_tokens: int = 0
-    thinking_tokens: int = 0
-    cached_tokens: int = 0
-    input_cost: float = 0.0
-    output_cost: float = 0.0
-    thinking_cost: float = 0.0
-    total_cost: float = 0.0
-
-
-class DataBlock(BaseModel):
-    query: dict
-    result: object = None
-    rows: int | None = None
-    session: str | None = None
-    timeframe: str | None = None
-
-
-class ToolCallBlock(BaseModel):
-    tool_name: str
-    input: dict | None = None
-    output: object = None
-    error: str | None = None
-    duration_ms: int | None = None
-
-
-class ChatResponse(BaseModel):
-    message_id: str
-    conversation_id: str
-    answer: str
-    data: list[DataBlock]
-    usage: UsageBlock
-    tool_calls: list[ToolCallBlock] = Field(default_factory=list)
-    persisted: bool = True
-
-
 # --- Assistant cache ---
 
 @lru_cache
@@ -164,6 +127,106 @@ def _parse_tool_output(output):
         return json.loads(output)
     except (json.JSONDecodeError, TypeError):
         return {"raw": str(output)}
+
+
+def _persist_chat(db, conversation: dict, user_message: str, result: dict) -> tuple[str, bool]:
+    """Persist user message, model response, tool calls, and update usage.
+
+    Returns (message_id, persisted).
+    """
+    conv_id = conversation["id"]
+    message_id = ""
+    try:
+        db.table("messages").insert({
+            "conversation_id": conv_id,
+            "role": "user",
+            "content": user_message,
+        }).execute()
+
+        model_msg = db.table("messages").insert({
+            "conversation_id": conv_id,
+            "role": "model",
+            "content": result["answer"],
+            "data": result["data"] or None,
+            "usage": result["usage"],
+        }).execute()
+        message_id = model_msg.data[0]["id"]
+
+        if result["tool_calls"]:
+            tool_rows = [
+                {
+                    "message_id": message_id,
+                    "tool_name": tc["tool_name"],
+                    "input": tc["input"],
+                    "output": _parse_tool_output(tc["output"]),
+                    "error": tc["error"],
+                    "duration_ms": tc["duration_ms"],
+                }
+                for tc in result["tool_calls"]
+            ]
+            db.table("tool_calls").insert(tool_rows).execute()
+
+        old_usage = conversation["usage"]
+        new_usage = result["usage"]
+        accumulated = {
+            "input_tokens": old_usage["input_tokens"] + new_usage["input_tokens"],
+            "output_tokens": old_usage["output_tokens"] + new_usage["output_tokens"],
+            "thinking_tokens": old_usage["thinking_tokens"] + new_usage["thinking_tokens"],
+            "cached_tokens": old_usage["cached_tokens"] + new_usage["cached_tokens"],
+            "input_cost": old_usage["input_cost"] + new_usage["input_cost"],
+            "output_cost": old_usage["output_cost"] + new_usage["output_cost"],
+            "thinking_cost": old_usage["thinking_cost"] + new_usage["thinking_cost"],
+            "total_cost": old_usage["total_cost"] + new_usage["total_cost"],
+            "message_count": old_usage["message_count"] + 1,
+        }
+
+        update_fields: dict = {"usage": accumulated}
+
+        if conversation["title"] == "New conversation":
+            title = user_message[:80]
+            if len(user_message) > 80:
+                title += "..."
+            update_fields["title"] = title
+
+        db.table("conversations").update(update_fields).eq(
+            "id", conv_id
+        ).execute()
+
+    except Exception:
+        log.exception("Failed to persist chat: conv=%s", conv_id)
+        return message_id, False
+
+    return message_id, True
+
+
+def _maybe_summarize(
+    db, assistant, conversation: dict, raw_history: list[dict], msg_count: int,
+):
+    """Summarize context if threshold reached. Best effort, never raises."""
+    if not should_summarize(msg_count, conversation.get("context")):
+        return
+
+    try:
+        old_context = conversation.get("context") or {}
+        old_summary = old_context.get("summary")
+        summary_up_to = old_context.get("summary_up_to", 0)
+        cutoff = msg_count - WINDOW_SIZE
+        msgs_to_summarize = raw_history[summary_up_to * 2 : cutoff * 2]
+
+        summary_text = summarize(
+            assistant.client, assistant.model_config.id,
+            old_summary, msgs_to_summarize,
+        )
+        db.table("conversations").update({
+            "context": {"summary": summary_text, "summary_up_to": cutoff},
+        }).eq("id", conversation["id"]).execute()
+
+        log.info(
+            "Summarized conv=%s: %d exchanges -> summary_up_to=%d",
+            conversation["id"], msg_count, cutoff,
+        )
+    except Exception:
+        log.exception("Failed to summarize: conv=%s", conversation["id"])
 
 
 # --- Endpoints ---
@@ -332,8 +395,8 @@ def delete_conversation(
     return {"ok": True}
 
 
-@app.post("/api/chat")
-def chat(request: ChatRequest, user: dict = Depends(get_current_user)) -> ChatResponse:
+@app.post("/api/chat/stream")
+def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
     db = get_db()
 
     # Load conversation, verify ownership
@@ -355,7 +418,6 @@ def chat(request: ChatRequest, user: dict = Depends(get_current_user)) -> ChatRe
     conversation = conv_result.data[0]
     instrument = conversation["instrument"]
 
-    # Get assistant
     try:
         assistant = _get_assistant(instrument)
     except RuntimeError:
@@ -379,120 +441,53 @@ def chat(request: ChatRequest, user: dict = Depends(get_current_user)) -> ChatRe
     raw_history = [{"role": m["role"], "text": m["content"]} for m in msg_result.data]
     history = build_history_with_context(conversation.get("context"), raw_history)
 
-    # Call Gemini
-    start = time.time()
-    try:
-        result = assistant.chat(request.message, history)
-    except Exception:
-        log.exception("Chat error")
-        raise HTTPException(503, "Service temporarily unavailable")
+    def _sse(event: str, data) -> str:
+        return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 
-    latency = time.time() - start
-    log.info(
-        "Chat user=%s conv=%s: %.2fs, $%.6f",
-        user["sub"], request.conversation_id, latency, result["usage"]["total_cost"],
-    )
+    def generate():
+        start = time.time()
+        done_data = None
 
-    # Persist to database
-    persisted = True
-    message_id = ""
-    try:
-        # Write user message
-        db.table("messages").insert({
-            "conversation_id": request.conversation_id,
-            "role": "user",
-            "content": request.message,
-        }).execute()
-
-        # Write model message
-        model_msg = db.table("messages").insert({
-            "conversation_id": request.conversation_id,
-            "role": "model",
-            "content": result["answer"],
-            "data": result["data"] or None,
-            "usage": result["usage"],
-        }).execute()
-        message_id = model_msg.data[0]["id"]
-
-        # Write tool calls
-        if result["tool_calls"]:
-            tool_rows = [
-                {
-                    "message_id": message_id,
-                    "tool_name": tc["tool_name"],
-                    "input": tc["input"],
-                    "output": _parse_tool_output(tc["output"]),
-                    "error": tc["error"],
-                    "duration_ms": tc["duration_ms"],
-                }
-                for tc in result["tool_calls"]
-            ]
-            db.table("tool_calls").insert(tool_rows).execute()
-
-        # Accumulate usage on conversation
-        old_usage = conversation["usage"]
-        new_usage = result["usage"]
-        accumulated = {
-            "input_tokens": old_usage["input_tokens"] + new_usage["input_tokens"],
-            "output_tokens": old_usage["output_tokens"] + new_usage["output_tokens"],
-            "thinking_tokens": old_usage["thinking_tokens"] + new_usage["thinking_tokens"],
-            "cached_tokens": old_usage["cached_tokens"] + new_usage["cached_tokens"],
-            "input_cost": old_usage["input_cost"] + new_usage["input_cost"],
-            "output_cost": old_usage["output_cost"] + new_usage["output_cost"],
-            "thinking_cost": old_usage["thinking_cost"] + new_usage["thinking_cost"],
-            "total_cost": old_usage["total_cost"] + new_usage["total_cost"],
-            "message_count": old_usage["message_count"] + 1,
-        }
-
-        update_fields: dict = {"usage": accumulated}
-
-        # Set title from first user message
-        if conversation["title"] == "New conversation":
-            title = request.message[:80]
-            if len(request.message) > 80:
-                title += "..."
-            update_fields["title"] = title
-
-        db.table("conversations").update(update_fields).eq(
-            "id", request.conversation_id
-        ).execute()
-
-    except Exception:
-        log.exception("Failed to persist chat: conv=%s", request.conversation_id)
-        persisted = False
-
-    # Summarize context if threshold reached (best effort)
-    if persisted and should_summarize(
-        accumulated["message_count"], conversation.get("context"),
-    ):
         try:
-            old_context = conversation.get("context") or {}
-            old_summary = old_context.get("summary")
-            summary_up_to = old_context.get("summary_up_to", 0)
-            cutoff = accumulated["message_count"] - WINDOW_SIZE
-            msgs_to_summarize = raw_history[summary_up_to * 2 : cutoff * 2]
+            for event in assistant.chat_stream(request.message, history):
+                yield _sse(event["event"], event["data"])
 
-            summary_text = summarize(
-                assistant.client, assistant.model_config.id,
-                old_summary, msgs_to_summarize,
-            )
-            db.table("conversations").update({
-                "context": {"summary": summary_text, "summary_up_to": cutoff},
-            }).eq("id", request.conversation_id).execute()
-
-            log.info(
-                "Summarized conv=%s: %d exchanges → summary_up_to=%d",
-                request.conversation_id, accumulated["message_count"], cutoff,
-            )
+                if event["event"] == "done":
+                    done_data = event["data"]
         except Exception:
-            log.exception("Failed to summarize: conv=%s", request.conversation_id)
+            log.exception("Stream error: conv=%s", request.conversation_id)
+            yield _sse("error", {"error": "Service temporarily unavailable"})
+            return
 
-    return ChatResponse(
-        message_id=message_id,
-        conversation_id=request.conversation_id,
-        answer=result["answer"],
-        data=result["data"],
-        usage=result["usage"],
-        tool_calls=result["tool_calls"],
-        persisted=persisted,
+        latency = time.time() - start
+
+        if not done_data:
+            return
+
+        log.info(
+            "Chat stream user=%s conv=%s: %.2fs, $%.6f",
+            user["sub"], request.conversation_id, latency,
+            done_data["usage"]["total_cost"],
+        )
+
+        message_id, persisted = _persist_chat(
+            db, conversation, request.message, done_data,
+        )
+
+        yield _sse("persist", {"message_id": message_id, "persisted": persisted})
+
+        # Summarize context (best effort)
+        if persisted:
+            msg_count = conversation["usage"]["message_count"] + 1
+            _maybe_summarize(
+                db, assistant, conversation, raw_history, msg_count,
+            )
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

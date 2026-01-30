@@ -4,7 +4,7 @@ import {
   listConversations,
   deleteConversation,
   getMessages,
-  sendMessage,
+  sendMessageStream,
 } from "./api";
 
 const mockFetch = vi.fn();
@@ -19,6 +19,17 @@ function jsonResponse(data: unknown, status = 200) {
 
 function errorResponse(status: number, body: string) {
   return new Response(body, { status });
+}
+
+/** Build a ReadableStream that emits SSE events. */
+function sseResponse(events: Array<{ event: string; data: unknown }>) {
+  const body = events
+    .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`)
+    .join("");
+  return new Response(body, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
 }
 
 beforeEach(() => {
@@ -98,36 +109,58 @@ describe("getMessages", () => {
   });
 });
 
-describe("sendMessage", () => {
-  it("sends POST with conversation_id and message", async () => {
-    const resp = {
-      message_id: "m-1",
-      conversation_id: "conv-1",
-      answer: "The range is 150.",
-      data: [],
-      usage: { input_tokens: 100 },
-      tool_calls: [],
-      persisted: true,
-    };
-    mockFetch.mockResolvedValue(jsonResponse(resp));
-
-    const result = await sendMessage("conv-1", "What is the range?", "tok-123");
-
-    expect(result).toEqual(resp);
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/chat"),
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          conversation_id: "conv-1",
-          message: "What is the range?",
-        }),
-      }),
+describe("sendMessageStream", () => {
+  it("dispatches SSE events to callbacks", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse([
+        { event: "tool_start", data: { tool_name: "execute_query", input: {} } },
+        { event: "tool_end", data: { tool_name: "execute_query", duration_ms: 10, error: null } },
+        { event: "text_delta", data: { delta: "Result is 42." } },
+        { event: "done", data: { answer: "Result is 42.", usage: {}, tool_calls: [], data: [] } },
+        { event: "persist", data: { message_id: "m-1", persisted: true } },
+      ]),
     );
+
+    const onToolStart = vi.fn();
+    const onToolEnd = vi.fn();
+    const onTextDelta = vi.fn();
+    const onDone = vi.fn();
+    const onPersist = vi.fn();
+
+    await sendMessageStream("conv-1", "query", "tok-123", {
+      onToolStart,
+      onToolEnd,
+      onTextDelta,
+      onDone,
+      onPersist,
+    });
+
+    expect(onToolStart).toHaveBeenCalledWith({ tool_name: "execute_query", input: {} });
+    expect(onToolEnd).toHaveBeenCalledWith({ tool_name: "execute_query", duration_ms: 10, error: null });
+    expect(onTextDelta).toHaveBeenCalledWith({ delta: "Result is 42." });
+    expect(onDone).toHaveBeenCalledWith(
+      expect.objectContaining({ answer: "Result is 42." }),
+    );
+    expect(onPersist).toHaveBeenCalledWith({ message_id: "m-1", persisted: true });
   });
 
-  it("throws on server error", async () => {
+  it("throws on HTTP error before stream starts", async () => {
     mockFetch.mockResolvedValue(errorResponse(503, "Service unavailable"));
-    await expect(sendMessage("c", "msg", "tok")).rejects.toThrow("API error 503");
+    await expect(
+      sendMessageStream("c", "msg", "tok", {}),
+    ).rejects.toThrow("API error 503");
+  });
+
+  it("dispatches error events from stream", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse([
+        { event: "error", data: { error: "Service temporarily unavailable" } },
+      ]),
+    );
+
+    const onError = vi.fn();
+    await sendMessageStream("conv-1", "query", "tok", { onError });
+
+    expect(onError).toHaveBeenCalledWith({ error: "Service temporarily unavailable" });
   });
 });

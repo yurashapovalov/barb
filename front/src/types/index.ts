@@ -44,12 +44,37 @@ export interface ToolCall {
   duration_ms: number | null;
 }
 
-export interface ChatResponse {
-  message_id: string;
-  conversation_id: string;
+// SSE streaming events from /api/chat/stream
+
+export interface SSEToolStartEvent {
+  tool_name: string;
+  input: Record<string, unknown>;
+}
+
+export interface SSEToolEndEvent {
+  tool_name: string;
+  duration_ms: number;
+  error: string | null;
+}
+
+export type SSEDataBlockEvent = DataBlock;
+
+export interface SSETextDeltaEvent {
+  delta: string;
+}
+
+export interface SSEDoneEvent {
   answer: string;
-  data: DataBlock[];
   usage: UsageBlock;
   tool_calls: ToolCall[];
+  data: DataBlock[];
+}
+
+export interface SSEPersistEvent {
+  message_id: string;
   persisted: boolean;
+}
+
+export interface SSEErrorEvent {
+  error: string;
 }

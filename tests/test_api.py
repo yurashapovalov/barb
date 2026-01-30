@@ -247,7 +247,7 @@ class TestGetMessages:
         assert r.json() == []
 
 
-class TestChat:
+class TestChatStream:
     def _make_conversation(self):
         return {
             "id": "conv-1",
@@ -263,27 +263,57 @@ class TestChat:
             "updated_at": "2024-01-01T00:00:00Z",
         }
 
-    def _make_assistant_result(self):
-        return {
-            "answer": "The average range is 150 points.",
-            "data": [{"query": {"select": "range"}, "result": 150, "rows": 1,
-                       "session": "RTH", "timeframe": None}],
-            "usage": {
-                "input_tokens": 500, "output_tokens": 200, "thinking_tokens": 0,
-                "cached_tokens": 100, "input_cost": 0.0001, "output_cost": 0.0002,
-                "thinking_cost": 0.0, "total_cost": 0.0003,
-            },
-            "tool_calls": [
-                {"tool_name": "execute_query", "input": {"query": {"select": "range"}},
-                 "output": json.dumps({"result": 150}), "error": None, "duration_ms": 45},
-            ],
-        }
+    def _make_stream_events(self):
+        """Events that chat_stream() yields."""
+        return [
+            {"event": "tool_start", "data": {
+                "tool_name": "execute_query", "input": {"query": {"select": "range"}},
+            }},
+            {"event": "tool_end", "data": {
+                "tool_name": "execute_query", "duration_ms": 45, "error": None,
+            }},
+            {"event": "data_block", "data": {
+                "query": {"select": "range"}, "result": 150,
+                "rows": 1, "session": "RTH", "timeframe": None,
+            }},
+            {"event": "text_delta", "data": {"delta": "The average range is 150 points."}},
+            {"event": "done", "data": {
+                "answer": "The average range is 150 points.",
+                "data": [{"query": {"select": "range"}, "result": 150,
+                          "rows": 1, "session": "RTH", "timeframe": None}],
+                "usage": {
+                    "input_tokens": 500, "output_tokens": 200, "thinking_tokens": 0,
+                    "cached_tokens": 100, "input_cost": 0.0001, "output_cost": 0.0002,
+                    "thinking_cost": 0.0, "total_cost": 0.0003,
+                },
+                "tool_calls": [
+                    {"tool_name": "execute_query", "input": {"query": {"select": "range"}},
+                     "output": json.dumps({"result": 150}), "error": None, "duration_ms": 45},
+                ],
+            }},
+        ]
+
+    def _parse_sse(self, body: str) -> list[dict]:
+        """Parse SSE response body into list of {event, data} dicts."""
+        events = []
+        for block in body.split("\n\n"):
+            if not block.strip():
+                continue
+            event_type = ""
+            data_str = ""
+            for line in block.split("\n"):
+                if line.startswith("event: "):
+                    event_type = line[7:]
+                elif line.startswith("data: "):
+                    data_str = line[6:]
+            if event_type and data_str:
+                events.append({"event": event_type, "data": json.loads(data_str)})
+        return events
 
     def test_success(self, client):
         conversation = self._make_conversation()
-        assistant_result = self._make_assistant_result()
+        stream_events = self._make_stream_events()
 
-        # Mock DB: returns conversation, then messages, then handles writes
         mock_db = MagicMock()
         call_count = 0
 
@@ -291,52 +321,57 @@ class TestChat:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                # Load conversation
                 return _mock_table_chain([conversation])
             elif call_count == 2:
-                # Load messages (empty history)
                 return _mock_table_chain([])
             elif call_count == 3:
-                # Write user message
                 return _mock_table_chain([{"id": "msg-user-1"}])
             elif call_count == 4:
-                # Write model message
                 return _mock_table_chain([{"id": "msg-model-1"}])
             elif call_count == 5:
-                # Write tool calls
                 return _mock_table_chain([])
             else:
-                # Update conversation
                 return _mock_table_chain([])
 
         mock_db.table.side_effect = table_side_effect
 
         mock_assistant = MagicMock()
-        mock_assistant.chat.return_value = assistant_result
+        mock_assistant.chat_stream.return_value = iter(stream_events)
 
         with (
             patch("api.main.get_db", return_value=mock_db),
             patch("api.main._get_assistant", return_value=mock_assistant),
         ):
-            r = client.post("/api/chat", json={
+            r = client.post("/api/chat/stream", json={
                 "conversation_id": "conv-1",
                 "message": "What is the average daily range?",
             })
 
         assert r.status_code == 200
-        data = r.json()
-        assert data["answer"] == "The average range is 150 points."
-        assert data["message_id"] == "msg-model-1"
-        assert data["conversation_id"] == "conv-1"
-        assert data["persisted"] is True
-        assert len(data["tool_calls"]) == 1
+        assert r.headers["content-type"].startswith("text/event-stream")
+
+        events = self._parse_sse(r.text)
+        event_types = [e["event"] for e in events]
+
+        assert "tool_start" in event_types
+        assert "tool_end" in event_types
+        assert "text_delta" in event_types
+        assert "done" in event_types
+        assert "persist" in event_types
+
+        done_event = next(e for e in events if e["event"] == "done")
+        assert done_event["data"]["answer"] == "The average range is 150 points."
+
+        persist_event = next(e for e in events if e["event"] == "persist")
+        assert persist_event["data"]["message_id"] == "msg-model-1"
+        assert persist_event["data"]["persisted"] is True
 
     def test_conversation_not_found(self, client):
         mock_db = MagicMock()
         mock_db.table.return_value = _mock_table_chain([])
 
         with patch("api.main.get_db", return_value=mock_db):
-            r = client.post("/api/chat", json={
+            r = client.post("/api/chat/stream", json={
                 "conversation_id": "nonexistent",
                 "message": "hello",
             })
@@ -344,9 +379,9 @@ class TestChat:
         assert r.status_code == 404
 
     def test_missing_message(self, client):
-        r = client.post("/api/chat", json={"conversation_id": "conv-1"})
-        assert r.status_code == 422  # validation error
+        r = client.post("/api/chat/stream", json={"conversation_id": "conv-1"})
+        assert r.status_code == 422
 
     def test_missing_conversation_id(self, client):
-        r = client.post("/api/chat", json={"message": "hello"})
+        r = client.post("/api/chat/stream", json={"message": "hello"})
         assert r.status_code == 422

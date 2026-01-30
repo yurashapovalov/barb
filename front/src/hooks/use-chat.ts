@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createConversation, getMessages, sendMessage } from "@/lib/api";
-import type { Message } from "@/types";
+import { createConversation, getMessages, sendMessageStream } from "@/lib/api";
+import type { DataBlock, Message } from "@/types";
 
 interface UseChatParams {
   conversationId: string | undefined;
@@ -23,6 +23,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
   // Load history when opening an existing conversation.
   // Skip if we just created it (messages already in state from send()).
   const skipLoadRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -81,25 +82,76 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
-    try {
-      const response = await sendMessage(activeConvId, text, token);
+    // Placeholder assistant message — appears immediately, content fills in via stream
+    const assistantId = crypto.randomUUID();
+    const assistantMsg: Message = {
+      id: assistantId,
+      conversation_id: activeConvId,
+      role: "model",
+      content: "",
+      data: null,
+      usage: null,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, assistantMsg]);
 
-      const assistantMsg: Message = {
-        id: response.message_id,
-        conversation_id: response.conversation_id,
-        role: "model",
-        content: response.answer,
-        data: response.data.length > 0 ? response.data : null,
-        usage: response.usage,
-        created_at: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+    let fullText = "";
+    const dataBlocks: DataBlock[] = [];
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    try {
+      await sendMessageStream(activeConvId, text, token, {
+        onTextDelta(event) {
+          fullText += event.delta;
+          const content = fullText;
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content } : m)),
+          );
+        },
+        onDataBlock(event) {
+          dataBlocks.push(event);
+          const data = [...dataBlocks];
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, data } : m)),
+          );
+        },
+        onDone(event) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: event.answer,
+                    usage: event.usage,
+                    data: event.data.length > 0 ? event.data : null,
+                  }
+                : m,
+            ),
+          );
+        },
+        onPersist(event) {
+          if (event.message_id) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, id: event.message_id } : m,
+              ),
+            );
+          }
+        },
+        onError(event) {
+          setError(event.error);
+        },
+      }, abort.signal);
     } catch (err) {
+      if (abort.signal.aborted) return;
       setError(err instanceof Error ? err.message : "Failed to send message");
-      // Remove optimistic message on error
-      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+      // Remove both optimistic messages on error
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId));
     } finally {
       setIsLoading(false);
+      abortRef.current = null;
     }
   }, [token, instrument, onConversationCreated]);
 

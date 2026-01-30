@@ -1,4 +1,14 @@
-import type { ChatResponse, Conversation, Message } from "@/types";
+import type {
+  Conversation,
+  Message,
+  SSEDataBlockEvent,
+  SSEDoneEvent,
+  SSEErrorEvent,
+  SSEPersistEvent,
+  SSETextDeltaEvent,
+  SSEToolEndEvent,
+  SSEToolStartEvent,
+} from "@/types";
 
 const API_URL = import.meta.env.VITE_API_URL as string;
 
@@ -63,15 +73,90 @@ export async function getMessages(
   return handleResponse<Message[]>(res);
 }
 
-export async function sendMessage(
+export interface StreamCallbacks {
+  onToolStart?: (event: SSEToolStartEvent) => void;
+  onToolEnd?: (event: SSEToolEndEvent) => void;
+  onDataBlock?: (event: SSEDataBlockEvent) => void;
+  onTextDelta?: (event: SSETextDeltaEvent) => void;
+  onDone?: (event: SSEDoneEvent) => void;
+  onPersist?: (event: SSEPersistEvent) => void;
+  onError?: (event: SSEErrorEvent) => void;
+}
+
+export async function sendMessageStream(
   conversationId: string,
   message: string,
   token: string,
-): Promise<ChatResponse> {
-  const res = await fetch(`${API_URL}/api/chat`, {
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/chat/stream`, {
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ conversation_id: conversationId, message }),
+    signal,
   });
-  return handleResponse<ChatResponse>(res);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE messages are separated by double newlines
+    const messages = buffer.split("\n\n");
+    buffer = messages.pop()!;
+
+    for (const msg of messages) {
+      if (!msg.trim()) continue;
+
+      let eventType = "";
+      let dataStr = "";
+
+      for (const line of msg.split("\n")) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7);
+        } else if (line.startsWith("data: ")) {
+          dataStr = line.slice(6);
+        }
+      }
+
+      if (!eventType || !dataStr) continue;
+
+      const data = JSON.parse(dataStr);
+
+      switch (eventType) {
+        case "tool_start":
+          callbacks.onToolStart?.(data);
+          break;
+        case "tool_end":
+          callbacks.onToolEnd?.(data);
+          break;
+        case "data_block":
+          callbacks.onDataBlock?.(data);
+          break;
+        case "text_delta":
+          callbacks.onTextDelta?.(data);
+          break;
+        case "done":
+          callbacks.onDone?.(data);
+          break;
+        case "persist":
+          callbacks.onPersist?.(data);
+          break;
+        case "error":
+          callbacks.onError?.(data);
+          break;
+      }
+    }
+  }
 }
