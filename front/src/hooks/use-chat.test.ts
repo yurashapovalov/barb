@@ -170,6 +170,30 @@ describe("useChat", () => {
     expect(result.current.error).toBe("Server down");
   });
 
+  it("sets error from SSE error event", async () => {
+    mockedApi.getMessages.mockResolvedValue([]);
+    mockedApi.sendMessageStream.mockImplementation(
+      async (_convId, _msg, _token, callbacks) => {
+        callbacks.onTextDelta?.({ delta: "partial" });
+        callbacks.onError?.({ error: "Service temporarily unavailable" });
+      },
+    );
+
+    const { result } = renderHook(() =>
+      useChat({ conversationId: "conv-1", token: TOKEN }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.send("hello");
+    });
+
+    expect(result.current.error).toBe("Service temporarily unavailable");
+  });
+
   it("sets error when conversation creation fails", async () => {
     mockedApi.createConversation.mockRejectedValue(new Error("Auth failed"));
 

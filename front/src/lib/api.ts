@@ -132,29 +132,34 @@ export async function sendMessageStream(
 
       if (!eventType || !dataStr) continue;
 
-      const data = JSON.parse(dataStr);
+      let data: unknown;
+      try {
+        data = JSON.parse(dataStr);
+      } catch {
+        continue;
+      }
 
       switch (eventType) {
         case "tool_start":
-          callbacks.onToolStart?.(data);
+          callbacks.onToolStart?.(data as SSEToolStartEvent);
           break;
         case "tool_end":
-          callbacks.onToolEnd?.(data);
+          callbacks.onToolEnd?.(data as SSEToolEndEvent);
           break;
         case "data_block":
-          callbacks.onDataBlock?.(data);
+          callbacks.onDataBlock?.(data as SSEDataBlockEvent);
           break;
         case "text_delta":
-          callbacks.onTextDelta?.(data);
+          callbacks.onTextDelta?.(data as SSETextDeltaEvent);
           break;
         case "done":
-          callbacks.onDone?.(data);
+          callbacks.onDone?.(data as SSEDoneEvent);
           break;
         case "persist":
-          callbacks.onPersist?.(data);
+          callbacks.onPersist?.(data as SSEPersistEvent);
           break;
         case "error":
-          callbacks.onError?.(data);
+          callbacks.onError?.(data as SSEErrorEvent);
           break;
       }
     }

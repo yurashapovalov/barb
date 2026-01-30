@@ -151,6 +151,41 @@ describe("sendMessageStream", () => {
     ).rejects.toThrow("API error 503");
   });
 
+  it("dispatches data_block events", async () => {
+    const block = { query: { select: "range" }, result: 150, rows: 1, session: "RTH", timeframe: null };
+    mockFetch.mockResolvedValue(
+      sseResponse([
+        { event: "data_block", data: block },
+        { event: "done", data: { answer: "", usage: {}, tool_calls: [], data: [block] } },
+      ]),
+    );
+
+    const onDataBlock = vi.fn();
+    const onDone = vi.fn();
+    await sendMessageStream("conv-1", "query", "tok-123", { onDataBlock, onDone });
+
+    expect(onDataBlock).toHaveBeenCalledWith(block);
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it("skips malformed JSON in SSE stream without crashing", async () => {
+    // Build a response with one malformed event followed by a valid one
+    const body =
+      `event: text_delta\ndata: {INVALID JSON}\n\n` +
+      `event: done\ndata: ${JSON.stringify({ answer: "ok", usage: {}, tool_calls: [], data: [] })}\n\n`;
+    mockFetch.mockResolvedValue(
+      new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
+    );
+
+    const onTextDelta = vi.fn();
+    const onDone = vi.fn();
+    await sendMessageStream("conv-1", "query", "tok-123", { onTextDelta, onDone });
+
+    // Malformed event skipped, valid event still dispatched
+    expect(onTextDelta).not.toHaveBeenCalled();
+    expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ answer: "ok" }));
+  });
+
   it("dispatches error events from stream", async () => {
     mockFetch.mockResolvedValue(
       sseResponse([
