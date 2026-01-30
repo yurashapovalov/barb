@@ -16,11 +16,11 @@ export function ChatPageContainer() {
     [navigate],
   );
 
-  const { messages, send } = useChat({
+  const { messages, error, send } = useChat({
     conversationId: id,
     token,
     onConversationCreated,
   });
 
-  return <ChatPage messages={messages} send={send} />;
+  return <ChatPage messages={messages} error={error} send={send} />;
 }

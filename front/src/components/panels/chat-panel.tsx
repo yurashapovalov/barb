@@ -20,10 +20,11 @@ type ChatState = ReturnType<typeof useChat>;
 
 interface ChatPanelProps {
   messages: ChatState["messages"];
+  error: ChatState["error"];
   send: ChatState["send"];
 }
 
-export function ChatPanel({ messages, send }: ChatPanelProps) {
+export function ChatPanel({ messages, error, send }: ChatPanelProps) {
   return (
     <div className="relative h-full rounded-none bg-background lg:rounded">
       <Conversation className="relative size-full p-4">
@@ -36,6 +37,11 @@ export function ChatPanel({ messages, send }: ChatPanelProps) {
             </Message>
           ))}
         </ConversationContent>
+        {error && (
+          <div className="mx-4 rounded bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
         <ConversationScrollButton />
       </Conversation>
       <div className="absolute inset-x-0 bottom-0 z-10 p-4">

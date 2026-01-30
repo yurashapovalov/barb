@@ -9,10 +9,11 @@ type ChatState = ReturnType<typeof useChat>;
 
 interface ChatPageProps {
   messages: ChatState["messages"];
+  error: ChatState["error"];
   send: ChatState["send"];
 }
 
-export function ChatPage({ messages, send }: ChatPageProps) {
+export function ChatPage({ messages, error, send }: ChatPageProps) {
   const { containerRef, sidebarWidth, dataPct, dataMinPx, onSidebarResize, onDataResize } = usePanelLayout();
 
   return (
@@ -22,7 +23,7 @@ export function ChatPage({ messages, send }: ChatPageProps) {
       </div>
       <ResizeHandle className="hidden lg:block" onResize={onSidebarResize} />
       <div className="min-w-0 flex-1">
-        <ChatPanel messages={messages} send={send} />
+        <ChatPanel messages={messages} error={error} send={send} />
       </div>
       <ResizeHandle className="hidden lg:block" onResize={onDataResize} />
       <div style={{ width: `${dataPct}%`, minWidth: dataMinPx }} className="hidden shrink-0 lg:block">
