@@ -81,6 +81,16 @@ class ConversationResponse(BaseModel):
     updated_at: str
 
 
+class MessageResponse(BaseModel):
+    id: str
+    conversation_id: str
+    role: str
+    content: str
+    data: list[dict] | None = None
+    usage: dict | None = None
+    created_at: str
+
+
 class ChatRequest(BaseModel):
     conversation_id: str = Field(..., min_length=1)
     message: str = Field(..., min_length=1, max_length=10000)
@@ -240,6 +250,55 @@ def list_conversations(
             updated_at=r["updated_at"],
         )
         for r in result.data
+    ]
+
+
+@app.get("/api/conversations/{conversation_id}/messages")
+def get_messages(
+    conversation_id: str,
+    user: dict = Depends(get_current_user),
+) -> list[MessageResponse]:
+    db = get_db()
+
+    # Verify ownership
+    try:
+        check = (
+            db.table("conversations")
+            .select("id")
+            .eq("id", conversation_id)
+            .eq("user_id", user["sub"])
+            .execute()
+        )
+    except Exception:
+        log.exception("Failed to check conversation ownership")
+        raise HTTPException(503, "Service temporarily unavailable")
+
+    if not check.data:
+        raise HTTPException(404, "Conversation not found")
+
+    try:
+        result = (
+            db.table("messages")
+            .select("*")
+            .eq("conversation_id", conversation_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+    except Exception:
+        log.exception("Failed to load messages: conv=%s", conversation_id)
+        raise HTTPException(503, "Service temporarily unavailable")
+
+    return [
+        MessageResponse(
+            id=m["id"],
+            conversation_id=m["conversation_id"],
+            role=m["role"],
+            content=m["content"],
+            data=m["data"],
+            usage=m["usage"],
+            created_at=m["created_at"],
+        )
+        for m in result.data
     ]
 
 

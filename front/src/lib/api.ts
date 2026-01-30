@@ -1,4 +1,4 @@
-import type { ChatResponse, Conversation } from "@/types";
+import type { ChatResponse, Conversation, Message } from "@/types";
 
 const API_URL = import.meta.env.VITE_API_URL as string;
 
@@ -51,6 +51,16 @@ export async function deleteConversation(
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
   }
+}
+
+export async function getMessages(
+  conversationId: string,
+  token: string,
+): Promise<Message[]> {
+  const res = await fetch(`${API_URL}/api/conversations/${conversationId}/messages`, {
+    headers: authHeaders(token),
+  });
+  return handleResponse<Message[]>(res);
 }
 
 export async function sendMessage(

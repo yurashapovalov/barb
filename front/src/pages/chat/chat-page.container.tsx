@@ -1,5 +1,26 @@
+import { useNavigate, useParams } from "react-router-dom";
+import { useCallback } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { useChat } from "@/hooks/use-chat";
 import { ChatPage } from "./chat-page";
 
 export function ChatPageContainer() {
-  return <ChatPage />;
+  const { id } = useParams<{ id: string }>();
+  const { session } = useAuth();
+  const navigate = useNavigate();
+
+  const token = session?.access_token ?? "";
+
+  const onConversationCreated = useCallback(
+    (convId: string) => navigate(`/c/${convId}`, { replace: true }),
+    [navigate],
+  );
+
+  const { messages, send } = useChat({
+    conversationId: id,
+    token,
+    onConversationCreated,
+  });
+
+  return <ChatPage messages={messages} send={send} />;
 }

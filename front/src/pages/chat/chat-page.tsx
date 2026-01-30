@@ -3,8 +3,16 @@ import { ChatPanel } from "@/components/panels/chat-panel";
 import { DataPanel } from "@/components/panels/data-panel";
 import { ResizeHandle } from "@/components/panels/resize-handle";
 import { usePanelLayout } from "@/hooks/use-panel-layout";
+import type { useChat } from "@/hooks/use-chat";
 
-export function ChatPage() {
+type ChatState = ReturnType<typeof useChat>;
+
+interface ChatPageProps {
+  messages: ChatState["messages"];
+  send: ChatState["send"];
+}
+
+export function ChatPage({ messages, send }: ChatPageProps) {
   const { containerRef, sidebarWidth, dataPct, dataMinPx, onSidebarResize, onDataResize } = usePanelLayout();
 
   return (
@@ -14,7 +22,7 @@ export function ChatPage() {
       </div>
       <ResizeHandle className="hidden lg:block" onResize={onSidebarResize} />
       <div className="min-w-0 flex-1">
-        <ChatPanel />
+        <ChatPanel messages={messages} send={send} />
       </div>
       <ResizeHandle className="hidden lg:block" onResize={onDataResize} />
       <div style={{ width: `${dataPct}%`, minWidth: dataMinPx }} className="hidden shrink-0 lg:block">

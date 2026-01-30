@@ -1,5 +1,5 @@
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai/conversation";
-import { Message, MessageContent } from "@/components/ai/message";
+import { Message, MessageContent, MessageResponse } from "@/components/ai/message";
 import {
   PromptInput,
   PromptInputBody,
@@ -14,33 +14,32 @@ import {
   PromptInputAttachment,
   PromptInputSubmit,
 } from "@/components/ai/prompt-input";
+import type { useChat } from "@/hooks/use-chat";
 
-const messages = [
-  { id: "1", from: "user" as const, text: "Hello, how are you?" },
-  { id: "2", from: "assistant" as const, text: "I'm good, thank you! How can I assist you today?" },
-  { id: "3", from: "user" as const, text: "I'm looking for information about your services." },
-  { id: "4", from: "assistant" as const, text: "Sure! We offer a variety of AI solutions. What are you interested in?" },
-];
+type ChatState = ReturnType<typeof useChat>;
 
-export function ChatPanel() {
-  const handleSubmit = () => {
-    // TODO: send message
-  };
+interface ChatPanelProps {
+  messages: ChatState["messages"];
+  send: ChatState["send"];
+}
 
+export function ChatPanel({ messages, send }: ChatPanelProps) {
   return (
     <div className="relative h-full rounded-none bg-background lg:rounded">
       <Conversation className="relative size-full p-4">
         <ConversationContent>
-          {messages.map(msg => (
-            <Message from={msg.from} key={msg.id}>
-              <MessageContent>{msg.text}</MessageContent>
+          {messages.map((msg) => (
+            <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
+              <MessageContent>
+                <MessageResponse>{msg.content}</MessageResponse>
+              </MessageContent>
             </Message>
           ))}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
       <div className="absolute inset-x-0 bottom-0 z-10 p-4">
-        <PromptInput multiple onSubmit={handleSubmit}>
+        <PromptInput multiple onSubmit={(message) => send(message.text)}>
           <PromptInputAttachments>
             {(attachment) => <PromptInputAttachment data={attachment} />}
           </PromptInputAttachments>
