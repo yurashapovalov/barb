@@ -9,6 +9,8 @@ interface UseChatParams {
   onConversationCreated?: (id: string) => void;
 }
 
+export type ChatState = ReturnType<typeof useChat>;
+
 export function useChat({ conversationId, token, instrument = "NQ", onConversationCreated }: UseChatParams) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -99,7 +101,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     } finally {
       setIsLoading(false);
     }
-  }, [token, onConversationCreated]);
+  }, [token, instrument, onConversationCreated]);
 
   return { messages, isLoading, error, send };
 }

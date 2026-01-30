@@ -3,9 +3,7 @@ import { ChatPanel } from "@/components/panels/chat-panel";
 import { DataPanel } from "@/components/panels/data-panel";
 import { ResizeHandle } from "@/components/panels/resize-handle";
 import { usePanelLayout } from "@/hooks/use-panel-layout";
-import type { useChat } from "@/hooks/use-chat";
-
-type ChatState = ReturnType<typeof useChat>;
+import type { ChatState } from "@/hooks/use-chat";
 
 interface ChatPageProps {
   messages: ChatState["messages"];

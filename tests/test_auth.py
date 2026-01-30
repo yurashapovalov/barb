@@ -91,6 +91,14 @@ class TestGetCurrentUser:
         assert exc_info.value.status_code == 401
         assert "Invalid" in exc_info.value.detail
 
+    def test_jwks_unavailable(self, _mock_jwks):
+        # JWKS endpoint unreachable → 401, not 500
+        _mock_jwks.get_signing_key_from_jwt.side_effect = jwt.PyJWKClientError
+        token = _make_token({"sub": "user-123", "aud": "authenticated"})
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user(_make_request(token))
+        assert exc_info.value.status_code == 401
+
     def test_wrong_key(self):
         wrong_key = ec.generate_private_key(ec.SECP256R1())
         token = _make_token(

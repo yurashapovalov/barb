@@ -26,6 +26,10 @@ def get_current_user(request: Request) -> dict:
     token = auth[7:]
     try:
         signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
+    except (jwt.PyJWKClientError, jwt.InvalidTokenError):
+        raise HTTPException(401, "Invalid token")
+
+    try:
         return jwt.decode(
             token,
             signing_key.key,

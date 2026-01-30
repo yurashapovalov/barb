@@ -173,6 +173,80 @@ class TestDeleteConversation:
         assert r.status_code == 404
 
 
+class TestGetMessages:
+    def test_success(self, client):
+        messages = [
+            {
+                "id": "msg-1",
+                "conversation_id": "conv-1",
+                "role": "user",
+                "content": "What is the range?",
+                "data": None,
+                "usage": None,
+                "created_at": "2024-01-01T00:00:00Z",
+            },
+            {
+                "id": "msg-2",
+                "conversation_id": "conv-1",
+                "role": "model",
+                "content": "The average range is 150.",
+                "data": [{"query": {"select": "range"}, "result": 150, "rows": 1,
+                          "session": "RTH", "timeframe": None}],
+                "usage": {"input_tokens": 100, "output_tokens": 50},
+                "created_at": "2024-01-01T00:01:00Z",
+            },
+        ]
+        mock_db = MagicMock()
+        call_count = 0
+
+        def table_side_effect(name):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _mock_table_chain([{"id": "conv-1"}])  # ownership check
+            return _mock_table_chain(messages)
+
+        mock_db.table.side_effect = table_side_effect
+
+        with patch("api.main.get_db", return_value=mock_db):
+            r = client.get("/api/conversations/conv-1/messages")
+
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2
+        assert data[0]["role"] == "user"
+        assert data[1]["role"] == "model"
+        assert data[1]["data"] is not None
+
+    def test_not_found(self, client):
+        mock_db = MagicMock()
+        mock_db.table.return_value = _mock_table_chain([])
+
+        with patch("api.main.get_db", return_value=mock_db):
+            r = client.get("/api/conversations/nonexistent/messages")
+
+        assert r.status_code == 404
+
+    def test_empty_conversation(self, client):
+        mock_db = MagicMock()
+        call_count = 0
+
+        def table_side_effect(name):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _mock_table_chain([{"id": "conv-1"}])
+            return _mock_table_chain([])
+
+        mock_db.table.side_effect = table_side_effect
+
+        with patch("api.main.get_db", return_value=mock_db):
+            r = client.get("/api/conversations/conv-1/messages")
+
+        assert r.status_code == 200
+        assert r.json() == []
+
+
 class TestChat:
     def _make_conversation(self):
         return {

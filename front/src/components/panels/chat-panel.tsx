@@ -14,9 +14,7 @@ import {
   PromptInputAttachment,
   PromptInputSubmit,
 } from "@/components/ai/prompt-input";
-import type { useChat } from "@/hooks/use-chat";
-
-type ChatState = ReturnType<typeof useChat>;
+import type { ChatState } from "@/hooks/use-chat";
 
 interface ChatPanelProps {
   messages: ChatState["messages"];
