@@ -2,8 +2,19 @@
 
 import jwt
 from fastapi import HTTPException, Request
+from jwt import PyJWKClient
 
 from api.config import get_settings
+
+_jwks_client: PyJWKClient | None = None
+
+
+def _get_jwks_client() -> PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        url = f"{get_settings().supabase_url}/auth/v1/.well-known/jwks.json"
+        _jwks_client = PyJWKClient(url, cache_keys=True)
+    return _jwks_client
 
 
 def get_current_user(request: Request) -> dict:
@@ -14,10 +25,11 @@ def get_current_user(request: Request) -> dict:
 
     token = auth[7:]
     try:
+        signing_key = _get_jwks_client().get_signing_key_from_jwt(token)
         return jwt.decode(
             token,
-            get_settings().supabase_jwt_secret,
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["ES256"],
             audience="authenticated",
         )
     except jwt.ExpiredSignatureError:
