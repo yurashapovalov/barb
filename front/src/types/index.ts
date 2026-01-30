@@ -12,6 +12,7 @@ export interface Conversation {
   id: string;
   title: string;
   instrument: string;
+  usage: UsageBlock & { message_count: number };
   created_at: string;
   updated_at: string;
 }
@@ -44,8 +45,11 @@ export interface ToolCall {
 }
 
 export interface ChatResponse {
+  message_id: string;
+  conversation_id: string;
   answer: string;
   data: DataBlock[];
   usage: UsageBlock;
   tool_calls: ToolCall[];
+  persisted: boolean;
 }
