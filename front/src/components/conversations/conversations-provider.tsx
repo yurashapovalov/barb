@@ -43,6 +43,7 @@ export function ConversationsProvider() {
   };
 
   const create = async (instrument: string) => {
+    if (!token) throw new Error("Not authenticated");
     const conv = await createConversation(instrument, token);
     setConversations((prev) => [conv, ...prev]);
     return conv;

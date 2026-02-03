@@ -5,7 +5,7 @@ import {
   deleteConversation,
   getMessages,
   sendMessageStream,
-} from "./api";
+} from "@/lib/api";
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -197,5 +197,61 @@ describe("sendMessageStream", () => {
     await sendMessageStream("conv-1", "query", "tok", { onError });
 
     expect(onError).toHaveBeenCalledWith({ error: "Service temporarily unavailable" });
+  });
+
+  it("skips text_delta without delta field", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse([
+        { event: "text_delta", data: { wrong_field: "oops" } },
+        { event: "text_delta", data: { delta: "valid" } },
+      ]),
+    );
+
+    const onTextDelta = vi.fn();
+    await sendMessageStream("conv-1", "q", "tok", { onTextDelta });
+
+    expect(onTextDelta).toHaveBeenCalledTimes(1);
+    expect(onTextDelta).toHaveBeenCalledWith({ delta: "valid" });
+  });
+
+  it("skips done without answer field", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse([
+        { event: "done", data: { no_answer: true } },
+      ]),
+    );
+
+    const onDone = vi.fn();
+    await sendMessageStream("conv-1", "q", "tok", { onDone });
+
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("skips tool_start without tool_name field", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse([
+        { event: "tool_start", data: { input: {} } },
+        { event: "tool_start", data: { tool_name: "query", input: {} } },
+      ]),
+    );
+
+    const onToolStart = vi.fn();
+    await sendMessageStream("conv-1", "q", "tok", { onToolStart });
+
+    expect(onToolStart).toHaveBeenCalledTimes(1);
+    expect(onToolStart).toHaveBeenCalledWith({ tool_name: "query", input: {} });
+  });
+
+  it("skips error event without error field", async () => {
+    mockFetch.mockResolvedValue(
+      sseResponse([
+        { event: "error", data: { message: "bad" } },
+      ]),
+    );
+
+    const onError = vi.fn();
+    await sendMessageStream("conv-1", "q", "tok", { onError });
+
+    expect(onError).not.toHaveBeenCalled();
   });
 });

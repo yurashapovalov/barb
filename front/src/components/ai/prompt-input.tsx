@@ -78,7 +78,9 @@ export const PromptInput = ({ className, onSubmit, children, ...props }: PromptI
     const result = onSubmit({ text })
 
     if (result instanceof Promise) {
-      result.then(() => controller?.textInput.clear()).catch(() => {})
+      result
+        .then(() => controller?.textInput.clear())
+        .catch((err) => console.error("Failed to send message:", err))
     } else {
       controller?.textInput.clear()
     }

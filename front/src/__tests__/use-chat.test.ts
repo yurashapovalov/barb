@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { useChat } from "./use-chat";
+import { useChat } from "@/hooks/use-chat";
 import * as api from "@/lib/api";
 import type { Message } from "@/types";
 

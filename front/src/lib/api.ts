@@ -11,7 +11,7 @@ import type {
   SSEToolStartEvent,
 } from "@/types";
 
-const API_URL = import.meta.env.VITE_API_URL as string;
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 function authHeaders(token: string) {
   return {
@@ -120,7 +120,7 @@ export async function sendMessageStream(
 
     // SSE messages are separated by double newlines
     const messages = buffer.split("\n\n");
-    buffer = messages.pop()!;
+    buffer = messages.pop() ?? "";
 
     for (const msg of messages) {
       if (!msg.trim()) continue;
@@ -145,30 +145,31 @@ export async function sendMessageStream(
         continue;
       }
 
+      const obj = data as Record<string, unknown>;
       switch (eventType) {
         case "tool_start":
-          callbacks.onToolStart?.(data as SSEToolStartEvent);
+          if (obj.tool_name) callbacks.onToolStart?.(obj as unknown as SSEToolStartEvent);
           break;
         case "tool_end":
-          callbacks.onToolEnd?.(data as SSEToolEndEvent);
+          if (obj.tool_name) callbacks.onToolEnd?.(obj as unknown as SSEToolEndEvent);
           break;
         case "data_block":
-          callbacks.onDataBlock?.(data as SSEDataBlockEvent);
+          callbacks.onDataBlock?.(obj as unknown as SSEDataBlockEvent);
           break;
         case "text_delta":
-          callbacks.onTextDelta?.(data as SSETextDeltaEvent);
+          if (typeof obj.delta === "string") callbacks.onTextDelta?.(obj as unknown as SSETextDeltaEvent);
           break;
         case "done":
-          callbacks.onDone?.(data as SSEDoneEvent);
+          if (typeof obj.answer === "string") callbacks.onDone?.(obj as unknown as SSEDoneEvent);
           break;
         case "persist":
-          callbacks.onPersist?.(data as SSEPersistEvent);
+          callbacks.onPersist?.(obj as unknown as SSEPersistEvent);
           break;
         case "title_update":
-          callbacks.onTitleUpdate?.(data as SSETitleUpdateEvent);
+          if (typeof obj.title === "string") callbacks.onTitleUpdate?.(obj as unknown as SSETitleUpdateEvent);
           break;
         case "error":
-          callbacks.onError?.(data as SSEErrorEvent);
+          if (typeof obj.error === "string") callbacks.onError?.(obj as unknown as SSEErrorEvent);
           break;
       }
     }

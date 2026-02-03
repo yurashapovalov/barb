@@ -12,46 +12,8 @@ import {
   usePromptInputController,
 } from "@/components/ai/prompt-input";
 import type { ChatState } from "@/hooks/use-chat";
-import type { DataBlock, Message as MessageType } from "@/types";
+import { parseContent } from "@/lib/parse-content";
 import { PanelHeader } from "./panel-header";
-
-type ContentSegment =
-  | { type: "text"; text: string }
-  | { type: "data"; block: DataBlock; index: number };
-
-const DATA_MARKER = /\{\{data:(\d+)\}\}/g;
-
-function parseContent(msg: MessageType): ContentSegment[] {
-  if (!msg.data?.length) {
-    return [{ type: "text", text: msg.content }];
-  }
-
-  const segments: ContentSegment[] = [];
-  let lastIndex = 0;
-
-  for (const match of msg.content.matchAll(DATA_MARKER)) {
-    const before = msg.content.slice(lastIndex, match.index);
-    if (before.trim()) segments.push({ type: "text", text: before });
-    const blockIndex = Number(match[1]);
-    if (msg.data[blockIndex]) {
-      segments.push({ type: "data", block: msg.data[blockIndex], index: blockIndex });
-    }
-    lastIndex = match.index + match[0].length;
-  }
-
-  const after = msg.content.slice(lastIndex);
-  if (after.trim()) segments.push({ type: "text", text: after });
-
-  // No markers found — cards at the end (historical messages from API)
-  const hasData = segments.some((s) => s.type === "data");
-  if (!hasData) {
-    for (let i = 0; i < msg.data.length; i++) {
-      segments.push({ type: "data" as const, block: msg.data[i], index: i });
-    }
-  }
-
-  return segments;
-}
 
 interface ChatPanelProps {
   messages: ChatState["messages"];
