@@ -66,23 +66,17 @@ export const PromptInput = ({ className, onSubmit, children, ...props }: PromptI
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!controller) return
 
-    const text = controller
-      ? controller.textInput.value
-      : new FormData(event.currentTarget).get("message") as string || ""
-
-    if (!controller) {
-      event.currentTarget.reset()
-    }
-
+    const text = controller.textInput.value
     const result = onSubmit({ text })
 
     if (result instanceof Promise) {
       result
-        .then(() => controller?.textInput.clear())
+        .then(() => controller.textInput.clear())
         .catch((err) => console.error("Failed to send message:", err))
     } else {
-      controller?.textInput.clear()
+      controller.textInput.clear()
     }
   }
 

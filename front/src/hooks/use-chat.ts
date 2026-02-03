@@ -26,6 +26,15 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
   const skipLoadRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const cacheRef = useRef(new Map<string, Message[]>());
+  const cacheSet = (key: string, value: Message[]) => {
+    const cache = cacheRef.current;
+    cache.delete(key); // move to end (most recent)
+    cache.set(key, value);
+    if (cache.size > 10) {
+      const oldest = cache.keys().next().value!;
+      cache.delete(oldest);
+    }
+  };
 
   useEffect(() => {
     if (!conversationId) return;
@@ -49,7 +58,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
       .then((data) => {
         if (!cancelled) {
           setMessages(data);
-          cacheRef.current.set(conversationId, data);
+          cacheSet(conversationId, data);
         }
       })
       .catch((err) => {
@@ -82,13 +91,13 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
-    let activeConvId = convIdRef.current;
+    let resolvedConvId = convIdRef.current;
 
     // Create conversation if needed
-    if (!activeConvId) {
+    if (!resolvedConvId) {
       try {
         const conv = await createConversation(instrument, token);
-        activeConvId = conv.id;
+        resolvedConvId = conv.id;
         convIdRef.current = conv.id;
         skipLoadRef.current = true;
         onConversationCreated?.(conv.id);
@@ -100,6 +109,9 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
       }
     }
 
+    // After the block above, resolvedConvId is always set (or we returned early)
+    const activeConvId = resolvedConvId;
+
     const assistantId = crypto.randomUUID();
     let assistantAdded = false;
 
@@ -108,7 +120,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
       assistantAdded = true;
       setMessages((prev) => [...prev, {
         id: assistantId,
-        conversation_id: activeConvId!,
+        conversation_id: activeConvId,
         role: "model" as const,
         content: "",
         data: null,
@@ -158,7 +170,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
                   }
                 : m,
             );
-            cacheRef.current.set(activeConvId!, updated);
+            cacheSet(activeConvId, updated);
             return updated;
           });
         },
@@ -172,7 +184,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
           }
         },
         onTitleUpdate(event) {
-          onTitleUpdate?.(activeConvId!, event.title);
+          onTitleUpdate?.(activeConvId, event.title);
         },
         onError(event) {
           setError(event.error);

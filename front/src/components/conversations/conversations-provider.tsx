@@ -23,10 +23,12 @@ export function ConversationsProvider() {
 
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
     listConversations(token)
-      .then(setConversations)
-      .catch((err) => console.error("Failed to load conversations:", err))
-      .finally(() => setLoading(false));
+      .then((data) => { if (!cancelled) setConversations(data); })
+      .catch((err) => { if (!cancelled) console.error("Failed to load conversations:", err); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [token]);
 
   const refresh = () => {
