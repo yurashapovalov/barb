@@ -26,7 +26,7 @@ export function ChatPanel({ messages, error, send }: ChatPanelProps) {
   return (
     <div className="flex h-full flex-col bg-background">
       <Conversation className="relative min-h-0 flex-1">
-        <ConversationContent className="mx-auto max-w-[700px] pb-12">
+        <ConversationContent className="mx-auto max-w-[700px] gap-12 pb-12">
           {messages.map((msg) => (
             <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
               <MessageContent>
