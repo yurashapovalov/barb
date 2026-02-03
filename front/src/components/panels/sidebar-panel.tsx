@@ -1,9 +1,11 @@
-import { ChevronsLeftIcon, MessageCircleIcon, PlusIcon } from "lucide-react";
-import { useCallback } from "react";
+import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MoonIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversations } from "@/hooks/use-conversations";
+import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { PanelHeader } from "./panel-header";
 
@@ -12,12 +14,15 @@ interface SidebarPanelProps {
 }
 
 export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   const { conversations, create } = useConversations();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
   const avatar = user?.user_metadata?.avatar_url as string | undefined;
+
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleNewChat = useCallback(async () => {
     try {
@@ -31,16 +36,34 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   return (
     <div className="flex h-full flex-col bg-sidebar">
       <PanelHeader>
-        <Button variant="ghost" size="sm">
-          {avatar && (
-            <img
-              src={avatar}
-              alt=""
-              className="size-5 rounded-full"
-            />
-          )}
-          {displayName}
-        </Button>
+        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm">
+              {avatar && (
+                <img
+                  src={avatar}
+                  alt=""
+                  className="size-5 rounded-full"
+                />
+              )}
+              {displayName}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-48 p-1">
+            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setMenuOpen(false)}>
+              <SettingsIcon />
+              Settings
+            </Button>
+            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { toggleTheme(); setMenuOpen(false); }}>
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </Button>
+            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { signOut(); setMenuOpen(false); }}>
+              <LogOutIcon />
+              Sign out
+            </Button>
+          </PopoverContent>
+        </Popover>
         <Button variant="ghost" size="icon-sm" onClick={onCollapse}>
           <ChevronsLeftIcon />
         </Button>
