@@ -209,6 +209,13 @@
   * {
     @apply border-border;
   }
+  button,
+  [role="button"],
+  a,
+  select,
+  summary {
+    cursor: pointer;
+  }
   html {
     font-family: "Inter Variable", sans-serif;
     font-size: 15px;

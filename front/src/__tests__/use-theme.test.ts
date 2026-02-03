@@ -1,6 +1,21 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
+// jsdom doesn't implement matchMedia — stub it
+Object.defineProperty(window, "matchMedia", {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+    addListener: () => {},
+    removeListener: () => {},
+  }),
+});
+
 // Reset DOM and localStorage before each test, then import fresh module
 beforeEach(() => {
   document.documentElement.classList.remove("dark");
@@ -14,14 +29,13 @@ async function importUseTheme() {
 }
 
 describe("useTheme", () => {
-  it("defaults to light when no stored preference", async () => {
+  it("defaults to system when no stored preference", async () => {
     const useTheme = await importUseTheme();
     const { result } = renderHook(() => useTheme());
-    expect(result.current.theme).toBe("light");
-    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(result.current.preference).toBe("system");
   });
 
-  it("toggles from light to dark", async () => {
+  it("toggle switches from system to explicit theme", async () => {
     const useTheme = await importUseTheme();
     const { result } = renderHook(() => useTheme());
 
@@ -29,7 +43,8 @@ describe("useTheme", () => {
       result.current.toggle();
     });
 
-    expect(result.current.theme).toBe("dark");
+    // In jsdom, matchMedia defaults to not matching (light), so toggle goes to dark
+    expect(result.current.preference).toBe("dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(localStorage.getItem("theme")).toBe("dark");
   });
@@ -38,22 +53,28 @@ describe("useTheme", () => {
     const useTheme = await importUseTheme();
     const { result } = renderHook(() => useTheme());
 
-    act(() => result.current.toggle());
+    act(() => result.current.set("dark"));
     act(() => result.current.toggle());
 
-    expect(result.current.theme).toBe("light");
+    expect(result.current.preference).toBe("light");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
     expect(localStorage.getItem("theme")).toBe("light");
   });
 
-  it("persists theme to localStorage", async () => {
+  it("set explicitly chooses a theme", async () => {
     const useTheme = await importUseTheme();
     const { result } = renderHook(() => useTheme());
 
-    act(() => result.current.toggle());
-    expect(localStorage.getItem("theme")).toBe("dark");
+    act(() => result.current.set("dark"));
+    expect(result.current.preference).toBe("dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
 
-    act(() => result.current.toggle());
-    expect(localStorage.getItem("theme")).toBe("light");
+    act(() => result.current.set("light"));
+    expect(result.current.preference).toBe("light");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+
+    act(() => result.current.set("system"));
+    expect(result.current.preference).toBe("system");
+    expect(localStorage.getItem("theme")).toBe("system");
   });
 });

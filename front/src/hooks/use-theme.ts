@@ -1,46 +1,58 @@
 import { useSyncExternalStore } from "react";
 
-type Theme = "light" | "dark";
+export type ThemePreference = "system" | "light" | "dark";
 
 const STORAGE_KEY = "theme";
 
-function getTheme(): Theme {
-  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+function getSystemTheme(): "light" | "dark" {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function setTheme(theme: Theme) {
-  if (theme === "dark") {
-    document.documentElement.classList.add("dark");
-  } else {
-    document.documentElement.classList.remove("dark");
-  }
-  localStorage.setItem(STORAGE_KEY, theme);
+function resolve(pref: ThemePreference): "light" | "dark" {
+  return pref === "system" ? getSystemTheme() : pref;
 }
 
-// Notify subscribers when theme changes
+function applyToDOM(theme: "light" | "dark") {
+  document.documentElement.classList.toggle("dark", theme === "dark");
+}
+
+function getPreference(): ThemePreference {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === "light" || stored === "dark" || stored === "system") return stored;
+  return "system";
+}
+
 const listeners = new Set<() => void>();
 function subscribe(cb: () => void) {
   listeners.add(cb);
   return () => listeners.delete(cb);
 }
 
-function applyTheme(theme: Theme) {
-  setTheme(theme);
+function setPreference(pref: ThemePreference) {
+  localStorage.setItem(STORAGE_KEY, pref);
+  applyToDOM(resolve(pref));
   listeners.forEach((cb) => cb());
 }
 
-// Initialize from localStorage on module load
-const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-if (stored === "dark" || stored === "light") {
-  setTheme(stored);
-}
+// Initialize on module load
+applyToDOM(resolve(getPreference()));
+
+// React to OS theme changes when in system mode
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (getPreference() === "system") {
+    applyToDOM(getSystemTheme());
+  }
+});
 
 export function useTheme() {
-  const theme = useSyncExternalStore(subscribe, getTheme);
+  const preference = useSyncExternalStore(subscribe, getPreference);
 
-  const toggle = () => {
-    applyTheme(theme === "dark" ? "light" : "dark");
+  return {
+    preference,
+    set: setPreference,
+    toggle: () => {
+      const current = resolve(preference);
+      setPreference(current === "dark" ? "light" : "dark");
+    },
   };
-
-  return { theme, toggle };
 }

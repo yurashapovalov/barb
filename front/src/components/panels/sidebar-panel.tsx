@@ -1,8 +1,17 @@
-import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MoonIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
-import { useState } from "react";
+import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversations } from "@/hooks/use-conversations";
 import { useTheme } from "@/hooks/use-theme";
@@ -15,14 +24,12 @@ interface SidebarPanelProps {
 
 export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   const { user, signOut } = useAuth();
-  const { theme, toggle: toggleTheme } = useTheme();
+  const { preference, set: setTheme } = useTheme();
   const { conversations, create } = useConversations();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
   const avatar = user?.user_metadata?.avatar_url as string | undefined;
-
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleNewChat = async () => {
     try {
@@ -36,8 +43,8 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   return (
     <div className="flex h-full flex-col bg-sidebar">
       <PanelHeader>
-        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverTrigger asChild>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm">
               {avatar && (
                 <img
@@ -48,22 +55,49 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
               )}
               {displayName}
             </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-48 p-1">
-            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setMenuOpen(false)}>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuItem>
               <SettingsIcon />
               Settings
-            </Button>
-            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { toggleTheme(); setMenuOpen(false); }}>
-              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-              {theme === "dark" ? "Light mode" : "Dark mode"}
-            </Button>
-            <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { signOut(); setMenuOpen(false); }}>
+            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <PaletteIcon />
+                Theme
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent sideOffset={8}>
+                <DropdownMenuGroup>
+                  <DropdownMenuCheckboxItem
+                    checked={preference === "system"}
+                    onCheckedChange={() => setTheme("system")}
+                  >
+                    <MonitorIcon />
+                    System
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={preference === "light"}
+                    onCheckedChange={() => setTheme("light")}
+                  >
+                    <SunIcon />
+                    Light
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={preference === "dark"}
+                    onCheckedChange={() => setTheme("dark")}
+                  >
+                    <MoonIcon />
+                    Dark
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuItem onClick={signOut}>
               <LogOutIcon />
               Sign out
-            </Button>
-          </PopoverContent>
-        </Popover>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label="Collapse sidebar">
           <ChevronsLeftIcon />
         </Button>
