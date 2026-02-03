@@ -33,7 +33,7 @@ export function usePanelLayout() {
 
   const onDataResize = (delta: number) => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || container.offsetWidth === 0) return;
     const pctDelta = (delta / container.offsetWidth) * 100;
     const minPct = (DATA_MIN_PX / container.offsetWidth) * 100;
     setDataPct((w) => {

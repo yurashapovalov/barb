@@ -64,7 +64,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
             </Button>
           </PopoverContent>
         </Popover>
-        <Button variant="ghost" size="icon-sm" onClick={onCollapse}>
+        <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label="Collapse sidebar">
           <ChevronsLeftIcon />
         </Button>
       </PanelHeader>
