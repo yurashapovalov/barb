@@ -129,10 +129,10 @@ def _parse_tool_output(output):
         return {"raw": str(output)}
 
 
-def _persist_chat(db, conversation: dict, user_message: str, result: dict) -> tuple[str, bool]:
+def _persist_chat(db, conversation: dict, user_message: str, result: dict) -> tuple[str, bool, str | None]:
     """Persist user message, model response, tool calls, and update usage.
 
-    Returns (message_id, persisted).
+    Returns (message_id, persisted, new_title or None).
     """
     conv_id = conversation["id"]
     message_id = ""
@@ -182,11 +182,12 @@ def _persist_chat(db, conversation: dict, user_message: str, result: dict) -> tu
 
         update_fields: dict = {"usage": accumulated}
 
+        new_title = None
         if conversation["title"] == "New conversation":
-            title = user_message[:80]
+            new_title = user_message[:80]
             if len(user_message) > 80:
-                title += "..."
-            update_fields["title"] = title
+                new_title += "..."
+            update_fields["title"] = new_title
 
         db.table("conversations").update(update_fields).eq(
             "id", conv_id
@@ -194,9 +195,9 @@ def _persist_chat(db, conversation: dict, user_message: str, result: dict) -> tu
 
     except Exception:
         log.exception("Failed to persist chat: conv=%s", conv_id)
-        return message_id, False
+        return message_id, False, None
 
-    return message_id, True
+    return message_id, True, new_title
 
 
 def _maybe_summarize(
@@ -470,11 +471,14 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
             done_data["usage"]["total_cost"],
         )
 
-        message_id, persisted = _persist_chat(
+        message_id, persisted, new_title = _persist_chat(
             db, conversation, request.message, done_data,
         )
 
         yield _sse("persist", {"message_id": message_id, "persisted": persisted})
+
+        if new_title:
+            yield _sse("title_update", {"title": new_title})
 
         # Summarize context (best effort)
         if persisted:

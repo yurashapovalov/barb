@@ -1,10 +1,9 @@
 import { ChevronsLeftIcon, MessageCircleIcon, PlusIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { listConversations } from "@/lib/api";
-import type { Conversation } from "@/types";
+import { useConversations } from "@/hooks/use-conversations";
 import { PanelHeader } from "./panel-header";
 
 interface SidebarPanelProps {
@@ -12,19 +11,19 @@ interface SidebarPanelProps {
 }
 
 export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
-  const { user, session } = useAuth();
+  const { user } = useAuth();
+  const { conversations, create } = useConversations();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const email = user?.email ?? "user@example.com";
   const avatar = user?.user_metadata?.avatar_url as string | undefined;
-  const token = session?.access_token ?? "";
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-
-  useEffect(() => {
-    if (!token) return;
-    listConversations(token).then(setConversations).catch(() => {});
-  }, [token]);
+  const handleNewChat = useCallback(async () => {
+    try {
+      const conv = await create("NQ");
+      navigate(`/c/${conv.id}`);
+    } catch {}
+  }, [create, navigate]);
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -50,7 +49,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
             variant="ghost"
             size="sm"
             className="justify-start"
-            onClick={() => navigate("/")}
+            onClick={handleNewChat}
           >
             <PlusIcon />
             New chat

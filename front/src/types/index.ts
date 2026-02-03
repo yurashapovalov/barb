@@ -75,6 +75,10 @@ export interface SSEPersistEvent {
   persisted: boolean;
 }
 
+export interface SSETitleUpdateEvent {
+  title: string;
+}
+
 export interface SSEErrorEvent {
   error: string;
 }

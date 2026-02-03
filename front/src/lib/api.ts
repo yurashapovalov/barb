@@ -6,6 +6,7 @@ import type {
   SSEErrorEvent,
   SSEPersistEvent,
   SSETextDeltaEvent,
+  SSETitleUpdateEvent,
   SSEToolEndEvent,
   SSEToolStartEvent,
 } from "@/types";
@@ -80,6 +81,7 @@ export interface StreamCallbacks {
   onTextDelta?: (event: SSETextDeltaEvent) => void;
   onDone?: (event: SSEDoneEvent) => void;
   onPersist?: (event: SSEPersistEvent) => void;
+  onTitleUpdate?: (event: SSETitleUpdateEvent) => void;
   onError?: (event: SSEErrorEvent) => void;
 }
 
@@ -157,6 +159,9 @@ export async function sendMessageStream(
           break;
         case "persist":
           callbacks.onPersist?.(data as SSEPersistEvent);
+          break;
+        case "title_update":
+          callbacks.onTitleUpdate?.(data as SSETitleUpdateEvent);
           break;
         case "error":
           callbacks.onError?.(data as SSEErrorEvent);

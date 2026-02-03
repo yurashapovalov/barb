@@ -7,11 +7,12 @@ interface UseChatParams {
   token: string;
   instrument?: string;
   onConversationCreated?: (id: string) => void;
+  onTitleUpdate?: (title: string) => void;
 }
 
 export type ChatState = ReturnType<typeof useChat>;
 
-export function useChat({ conversationId, token, instrument = "NQ", onConversationCreated }: UseChatParams) {
+export function useChat({ conversationId, token, instrument = "NQ", onConversationCreated, onTitleUpdate }: UseChatParams) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +34,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     }
 
     let cancelled = false;
+    setMessages([]);
     setIsLoading(true);
     setError(null);
 
@@ -149,6 +151,9 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
             );
           }
         },
+        onTitleUpdate(event) {
+          onTitleUpdate?.(event.title);
+        },
         onError(event) {
           setError(event.error);
         },
@@ -162,7 +167,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
       setIsLoading(false);
       abortRef.current = null;
     }
-  }, [token, instrument, onConversationCreated]);
+  }, [token, instrument, onConversationCreated, onTitleUpdate]);
 
   return { messages, isLoading, error, send };
 }
