@@ -1,4 +1,5 @@
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai/conversation";
+import { DataCard } from "@/components/ai/data-card";
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai/message";
 import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
 import {
@@ -11,7 +12,45 @@ import {
   usePromptInputController,
 } from "@/components/ai/prompt-input";
 import type { ChatState } from "@/hooks/use-chat";
+import type { DataBlock, Message as MessageType } from "@/types";
 import { PanelHeader } from "./panel-header";
+
+type ContentSegment =
+  | { type: "text"; text: string }
+  | { type: "data"; block: DataBlock; index: number };
+
+const DATA_MARKER = /\{\{data:(\d+)\}\}/g;
+
+function parseContent(msg: MessageType): ContentSegment[] {
+  if (!msg.data?.length) {
+    return [{ type: "text", text: msg.content }];
+  }
+
+  const segments: ContentSegment[] = [];
+  let lastIndex = 0;
+
+  for (const match of msg.content.matchAll(DATA_MARKER)) {
+    const before = msg.content.slice(lastIndex, match.index);
+    if (before.trim()) segments.push({ type: "text", text: before });
+    const blockIndex = Number(match[1]);
+    if (msg.data[blockIndex]) {
+      segments.push({ type: "data", block: msg.data[blockIndex], index: blockIndex });
+    }
+    lastIndex = match.index + match[0].length;
+  }
+
+  const after = msg.content.slice(lastIndex);
+  if (after.trim()) segments.push({ type: "text", text: after });
+
+  // No markers found — cards at the end (historical messages from API)
+  if (segments.every((s) => s.type === "text")) {
+    for (let i = 0; i < msg.data.length; i++) {
+      segments.push({ type: "data", block: msg.data[i], index: i });
+    }
+  }
+
+  return segments;
+}
 
 interface ChatPanelProps {
   messages: ChatState["messages"];
@@ -43,7 +82,13 @@ function ChatPanelInner({ messages, isLoading, error, send }: ChatPanelProps) {
             return (
               <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
                 <MessageContent>
-                  <MessageResponse>{msg.content}</MessageResponse>
+                  {parseContent(msg).map((seg, j) =>
+                    seg.type === "text" ? (
+                      <MessageResponse key={j}>{seg.text}</MessageResponse>
+                    ) : (
+                      <DataCard key={`data-${seg.index}`} data={seg.block} />
+                    ),
+                  )}
                 </MessageContent>
                 {isModel && (
                   <MessageActions

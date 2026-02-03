@@ -136,9 +136,12 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
         onDataBlock(event) {
           addAssistantMessage();
           dataBlocks.push(event);
+          // Insert marker so the card renders inline within the text
+          fullText += `\n\n{{data:${dataBlocks.length - 1}}}\n\n`;
+          const content = fullText;
           const data = [...dataBlocks];
           setMessages((prev) =>
-            prev.map((m) => (m.id === assistantId ? { ...m, data } : m)),
+            prev.map((m) => (m.id === assistantId ? { ...m, content, data } : m)),
           );
         },
         onDone(event) {
@@ -147,7 +150,9 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
               m.id === assistantId
                 ? {
                     ...m,
-                    content: event.answer,
+                    // Keep fullText with markers for inline data cards.
+                    // Only use event.answer if we have no data blocks.
+                    content: dataBlocks.length > 0 ? fullText : event.answer,
                     usage: event.usage,
                     data: event.data.length > 0 ? event.data : null,
                   }
