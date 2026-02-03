@@ -131,10 +131,10 @@ def _parse_tool_output(output):
 
 def _persist_chat(
     db, conversation: dict, user_message: str, result: dict,
-) -> tuple[str, bool, str | None]:
+) -> tuple[str, bool]:
     """Persist user message, model response, tool calls, and update usage.
 
-    Returns (message_id, persisted, new_title or None).
+    Returns (message_id, persisted).
     """
     conv_id = conversation["id"]
     message_id = ""
@@ -182,24 +182,15 @@ def _persist_chat(
             "message_count": old_usage["message_count"] + 1,
         }
 
-        update_fields: dict = {"usage": accumulated}
-
-        new_title = None
-        if conversation["title"] == "New conversation":
-            new_title = user_message[:80]
-            if len(user_message) > 80:
-                new_title += "..."
-            update_fields["title"] = new_title
-
-        db.table("conversations").update(update_fields).eq(
-            "id", conv_id
+        db.table("conversations").update({"usage": accumulated}).eq(
+            "id", conv_id,
         ).execute()
 
     except Exception:
         log.exception("Failed to persist chat: conv=%s", conv_id)
-        return message_id, False, None
+        return message_id, False
 
-    return message_id, True, new_title
+    return message_id, True
 
 
 def _maybe_summarize(
@@ -448,6 +439,20 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
         return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 
     def generate():
+        # Update title immediately so sidebar reflects it before model responds
+        if conversation["title"] == "New conversation":
+            title = request.message[:80]
+            if len(request.message) > 80:
+                title += "..."
+            try:
+                db.table("conversations").update({"title": title}).eq(
+                    "id", conversation["id"],
+                ).execute()
+                conversation["title"] = title
+                yield _sse("title_update", {"title": title})
+            except Exception:
+                log.exception("Failed to update title early")
+
         start = time.time()
         done_data = None
 
@@ -473,14 +478,11 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
             done_data["usage"]["total_cost"],
         )
 
-        message_id, persisted, new_title = _persist_chat(
+        message_id, persisted = _persist_chat(
             db, conversation, request.message, done_data,
         )
 
         yield _sse("persist", {"message_id": message_id, "persisted": persisted})
-
-        if new_title:
-            yield _sse("title_update", {"title": new_title})
 
         # Summarize context (best effort)
         if persisted:
