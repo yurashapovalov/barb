@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useRef } from "react";
 import { cn } from "@/lib/utils";
 
 interface ResizeHandleProps {
@@ -10,34 +10,31 @@ export function ResizeHandle({ onResize, className }: ResizeHandleProps) {
   const dragging = useRef(false);
   const lastX = useRef(0);
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      dragging.current = true;
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    lastX.current = e.clientX;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = e.clientX - lastX.current;
       lastX.current = e.clientX;
+      onResize(delta);
+    };
 
-      const onMouseMove = (e: MouseEvent) => {
-        if (!dragging.current) return;
-        const delta = e.clientX - lastX.current;
-        lastX.current = e.clientX;
-        onResize(delta);
-      };
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
 
-      const onMouseUp = () => {
-        dragging.current = false;
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      };
-
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    },
-    [onResize],
-  );
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
 
   return (
     <div

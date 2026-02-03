@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { createConversation, listConversations } from "@/lib/api";
@@ -29,24 +29,24 @@ export function ConversationsProvider() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const refresh = useCallback(() => {
+  const refresh = () => {
     if (!token) return;
     listConversations(token)
       .then(setConversations)
       .catch((err) => console.error("Failed to refresh conversations:", err));
-  }, [token]);
+  };
 
-  const updateTitle = useCallback((id: string, title: string) => {
+  const updateTitle = (id: string, title: string) => {
     setConversations((prev) =>
       prev.map((c) => (c.id === id ? { ...c, title } : c)),
     );
-  }, []);
+  };
 
-  const create = useCallback(async (instrument: string) => {
+  const create = async (instrument: string) => {
     const conv = await createConversation(instrument, token);
     setConversations((prev) => [conv, ...prev]);
     return conv;
-  }, [token]);
+  };
 
   return (
     <ConversationsContext.Provider value={{ conversations, loading, refresh, updateTitle, create }}>

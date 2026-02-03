@@ -1,5 +1,5 @@
 import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MoonIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -24,14 +24,14 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
 
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const handleNewChat = useCallback(async () => {
+  const handleNewChat = async () => {
     try {
       const conv = await create("NQ");
       navigate(`/c/${conv.id}`);
     } catch (err) {
       console.error("Failed to create conversation:", err);
     }
-  }, [create, navigate]);
+  };
 
   return (
     <div className="flex h-full flex-col bg-sidebar">

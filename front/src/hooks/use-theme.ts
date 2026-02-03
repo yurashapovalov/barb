@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
 
@@ -38,9 +38,9 @@ if (stored === "dark" || stored === "light") {
 export function useTheme() {
   const theme = useSyncExternalStore(subscribe, getTheme);
 
-  const toggle = useCallback(() => {
+  const toggle = () => {
     applyTheme(theme === "dark" ? "light" : "dark");
-  }, [theme]);
+  };
 
   return { theme, toggle };
 }

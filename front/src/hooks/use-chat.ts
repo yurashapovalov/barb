@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createConversation, getMessages, sendMessageStream } from "@/lib/api";
 import type { DataBlock, Message } from "@/types";
 
@@ -65,7 +65,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     };
   }, [conversationId, token]);
 
-  const send = useCallback(async (text: string) => {
+  const send = async (text: string) => {
     setError(null);
 
     // Show user message immediately — before any network calls
@@ -187,7 +187,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
       setIsLoading(false);
       abortRef.current = null;
     }
-  }, [token, instrument, onConversationCreated, onTitleUpdate]);
+  };
 
   return { messages, isLoading, error, send };
 }

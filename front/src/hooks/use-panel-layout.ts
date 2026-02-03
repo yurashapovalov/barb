@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 const SIDEBAR_DEFAULT = 240;
 const SIDEBAR_MIN = 240;
@@ -23,15 +23,15 @@ export function usePanelLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(() => loadNumber(STORAGE_KEY_SIDEBAR, SIDEBAR_DEFAULT));
   const [dataPct, setDataPct] = useState(() => loadNumber(STORAGE_KEY_DATA, DATA_DEFAULT_PCT));
 
-  const onSidebarResize = useCallback((delta: number) => {
+  const onSidebarResize = (delta: number) => {
     setSidebarWidth((w) => {
       const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w + delta));
       localStorage.setItem(STORAGE_KEY_SIDEBAR, String(next));
       return next;
     });
-  }, []);
+  };
 
-  const onDataResize = useCallback((delta: number) => {
+  const onDataResize = (delta: number) => {
     const container = containerRef.current;
     if (!container) return;
     const pctDelta = (delta / container.offsetWidth) * 100;
@@ -41,7 +41,7 @@ export function usePanelLayout() {
       localStorage.setItem(STORAGE_KEY_DATA, String(next));
       return next;
     });
-  }, []);
+  };
 
   return { containerRef, sidebarWidth, dataPct, dataMinPx: DATA_MIN_PX, onSidebarResize, onDataResize };
 }

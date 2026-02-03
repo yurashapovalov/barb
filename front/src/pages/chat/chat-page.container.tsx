@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
 import { useConversations } from "@/hooks/use-conversations";
@@ -19,10 +19,8 @@ export function ChatPageContainer() {
     }
   }, [loading, id, conversations, navigate]);
 
-  const onConversationCreated = useCallback(
-    (convId: string) => navigate(`/c/${convId}`, { replace: true }),
-    [navigate],
-  );
+  const onConversationCreated = (convId: string) =>
+    navigate(`/c/${convId}`, { replace: true });
 
   const { messages, isLoading, error, send } = useChat({
     conversationId: id,
