@@ -39,7 +39,7 @@ export function ResizeHandle({ onResize, className }: ResizeHandleProps) {
   );
 
   const baseClass =
-    "relative w-0.5 shrink-0 cursor-col-resize before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5";
+    "relative w-px shrink-0 cursor-col-resize bg-border before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5";
 
   return (
     <div

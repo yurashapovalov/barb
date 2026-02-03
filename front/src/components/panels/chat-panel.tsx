@@ -24,9 +24,9 @@ interface ChatPanelProps {
 
 export function ChatPanel({ messages, error, send }: ChatPanelProps) {
   return (
-    <div className="relative h-full rounded-none bg-background lg:rounded">
-      <Conversation className="relative size-full p-4">
-        <ConversationContent>
+    <div className="flex h-full flex-col bg-background">
+      <Conversation className="relative min-h-0 flex-1">
+        <ConversationContent className="mx-auto max-w-[700px] pb-12">
           {messages.map((msg) => (
             <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
               <MessageContent>
@@ -42,7 +42,7 @@ export function ChatPanel({ messages, error, send }: ChatPanelProps) {
         )}
         <ConversationScrollButton />
       </Conversation>
-      <div className="absolute inset-x-0 bottom-0 z-10 p-4">
+      <div className="mx-auto w-full max-w-[740px] px-4 pb-8">
         <PromptInput multiple onSubmit={(message) => send(message.text)}>
           <PromptInputAttachments>
             {(attachment) => <PromptInputAttachment data={attachment} />}
