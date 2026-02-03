@@ -85,18 +85,22 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
       }
     }
 
-    // Placeholder assistant message — appears after conversation exists
     const assistantId = crypto.randomUUID();
-    const assistantMsg: Message = {
-      id: assistantId,
-      conversation_id: activeConvId,
-      role: "model",
-      content: "",
-      data: null,
-      usage: null,
-      created_at: new Date().toISOString(),
+    let assistantAdded = false;
+
+    const addAssistantMessage = () => {
+      if (assistantAdded) return;
+      assistantAdded = true;
+      setMessages((prev) => [...prev, {
+        id: assistantId,
+        conversation_id: activeConvId!,
+        role: "model" as const,
+        content: "",
+        data: null,
+        usage: null,
+        created_at: new Date().toISOString(),
+      }]);
     };
-    setMessages((prev) => [...prev, assistantMsg]);
 
     let fullText = "";
     const dataBlocks: DataBlock[] = [];
@@ -107,6 +111,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     try {
       await sendMessageStream(activeConvId, text, token, {
         onTextDelta(event) {
+          addAssistantMessage();
           fullText += event.delta;
           const content = fullText;
           setMessages((prev) =>
@@ -114,6 +119,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
           );
         },
         onDataBlock(event) {
+          addAssistantMessage();
           dataBlocks.push(event);
           const data = [...dataBlocks];
           setMessages((prev) =>
