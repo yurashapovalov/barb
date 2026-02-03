@@ -7,6 +7,7 @@ Tests the full pipeline: query → execute → result.
 import pytest
 
 from barb.interpreter import QueryError, execute
+from barb.validation import ValidationErrors
 
 # --- Validation ---
 
@@ -27,6 +28,16 @@ class TestValidation:
         """Empty query returns all data as count."""
         result = execute({}, nq_minute_slice, sessions)
         assert result["result"] > 0
+
+    def test_expression_errors_caught_before_execution(self, nq_minute_slice, sessions):
+        """Pre-validation catches all expression errors at once."""
+        with pytest.raises(ValidationErrors) as exc_info:
+            execute({
+                "from": "daily",
+                "map": {"x": "close = open", "y": "bogus(high)"},
+                "where": "volume = 1000",
+            }, nq_minute_slice, sessions)
+        assert len(exc_info.value.errors) == 3
 
 
 # --- Session Filtering ---

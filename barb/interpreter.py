@@ -10,7 +10,8 @@ import re
 import pandas as pd
 
 from barb.expressions import ExpressionError, evaluate
-from barb.functions import FUNCTIONS
+from barb.functions import AGGREGATE_FUNCS, FUNCTIONS
+from barb.validation import validate_expressions
 
 # Valid values for the "from" field
 TIMEFRAMES = {
@@ -70,6 +71,7 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
         QueryError: On validation or execution failure
     """
     _validate(query)
+    validate_expressions(query)
 
     warnings = []
 
@@ -347,12 +349,8 @@ def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd
         )
 
     func_name, col = match.groups()
-    agg_map = {
-        "mean": "mean", "sum": "sum", "max": "max", "min": "min",
-        "std": "std", "median": "median",
-    }
 
-    if func_name not in agg_map:
+    if func_name not in AGGREGATE_FUNCS:
         raise QueryError(
             f"Unknown aggregate function '{func_name}' in group context",
             error_type="UnknownFunction", step="select", expression=select_expr,
@@ -365,7 +363,7 @@ def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd
             error_type="ValidationError", step="select", expression=select_expr,
         )
 
-    return col_name, groups[col].agg(agg_map[func_name])
+    return col_name, groups[col].agg(AGGREGATE_FUNCS[func_name])
 
 
 def _aggregate_col_name(expr: str) -> str:

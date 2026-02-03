@@ -101,3 +101,10 @@ FUNCTIONS: dict[str, Callable] = {
     "day": lambda df: pd.Series(df.index.day, index=df.index),
     "quarter": lambda df: pd.Series(df.index.quarter, index=df.index),
 }
+
+# Aggregate functions allowed in group_by context.
+# Keys = Barb names, values = pandas agg method names.
+AGGREGATE_FUNCS: dict[str, str] = {
+    "mean": "mean", "sum": "sum", "max": "max", "min": "min",
+    "std": "std", "median": "median",
+}
