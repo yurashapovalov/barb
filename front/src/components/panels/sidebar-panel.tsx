@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversations } from "@/hooks/use-conversations";
+import { cn } from "@/lib/utils";
 import { PanelHeader } from "./panel-header";
 
 interface SidebarPanelProps {
@@ -22,7 +23,9 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
     try {
       const conv = await create("NQ");
       navigate(`/c/${conv.id}`);
-    } catch {}
+    } catch (err) {
+      console.error("Failed to create conversation:", err);
+    }
   }, [create, navigate]);
 
   return (
@@ -59,7 +62,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
               key={conv.id}
               variant="ghost"
               size="sm"
-              className={`justify-start ${conv.id === id ? "bg-accent" : ""}`}
+              className={cn("justify-start", conv.id === id && "bg-accent")}
               onClick={() => navigate(`/c/${conv.id}`)}
             >
               <MessageCircleIcon />

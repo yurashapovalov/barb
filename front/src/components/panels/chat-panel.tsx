@@ -15,19 +15,20 @@ import { PanelHeader } from "./panel-header";
 
 interface ChatPanelProps {
   messages: ChatState["messages"];
+  isLoading: ChatState["isLoading"];
   error: ChatState["error"];
   send: ChatState["send"];
 }
 
-export function ChatPanel({ messages, error, send }: ChatPanelProps) {
+export function ChatPanel({ messages, isLoading, error, send }: ChatPanelProps) {
   return (
     <PromptInputProvider>
-      <ChatPanelInner messages={messages} error={error} send={send} />
+      <ChatPanelInner messages={messages} isLoading={isLoading} error={error} send={send} />
     </PromptInputProvider>
   );
 }
 
-function ChatPanelInner({ messages, error, send }: ChatPanelProps) {
+function ChatPanelInner({ messages, isLoading, error, send }: ChatPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -77,7 +78,7 @@ function ChatPanelInner({ messages, error, send }: ChatPanelProps) {
             <PromptInputTextarea />
           </PromptInputBody>
           <PromptInputFooter>
-            <PromptInputSubmit className="ml-auto" disabled={isEmpty} />
+            <PromptInputSubmit className="ml-auto" disabled={isEmpty || isLoading} />
           </PromptInputFooter>
         </PromptInput>
       </div>

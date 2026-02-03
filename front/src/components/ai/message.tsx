@@ -363,37 +363,3 @@ export const MessageToolbar = ({ className, children, ...props }: MessageToolbar
     {children}
   </div>
 )
-
-/** Demo component for preview */
-export default function MessageDemo() {
-  return (
-    <TooltipProvider>
-      <div className="flex w-full max-w-2xl flex-col gap-4 p-6">
-        <Message from="user">
-          <MessageContent>
-            <p>Can you explain how React hooks work?</p>
-          </MessageContent>
-        </Message>
-        <Message from="assistant">
-          <MessageContent>
-            <MessageResponse>
-              React hooks are functions that let you **hook into** React state and lifecycle features from function components.
-
-              The most common hooks are:
-              - `useState` - for managing local state
-              - `useEffect` - for side effects like data fetching
-              - `useContext` - for consuming context values
-
-              Would you like me to show you some examples?
-            </MessageResponse>
-          </MessageContent>
-        </Message>
-        <Message from="user">
-          <MessageContent>
-            <p>Yes please, show me a useState example!</p>
-          </MessageContent>
-        </Message>
-      </div>
-    </TooltipProvider>
-  )
-}

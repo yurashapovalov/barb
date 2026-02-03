@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { cn } from "@/lib/utils";
 
 interface ResizeHandleProps {
   onResize: (delta: number) => void;
@@ -38,13 +39,13 @@ export function ResizeHandle({ onResize, className }: ResizeHandleProps) {
     [onResize],
   );
 
-  const baseClass =
-    "relative w-px shrink-0 cursor-col-resize bg-border before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5";
-
   return (
     <div
       onMouseDown={onMouseDown}
-      className={className ? `${baseClass} ${className}` : baseClass}
+      className={cn(
+        "relative w-px shrink-0 cursor-col-resize bg-border before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5",
+        className,
+      )}
     />
   );
 }

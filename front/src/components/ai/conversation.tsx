@@ -4,7 +4,7 @@ import { useCallback } from "react"
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Message, MessageContent } from "@/components/ai/message"
+
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>
 
@@ -82,28 +82,5 @@ export const ConversationScrollButton = ({
         <ArrowDownIcon className="size-4" />
       </Button>
     )
-  )
-}
-
-/** Demo component for preview */
-export default function ConversationDemo() {
-  const messages = [
-    { id: "1", from: "user" as const, text: "Hello, how are you?" },
-    { id: "2", from: "assistant" as const, text: "I'm good, thank you! How can I assist you today?" },
-    { id: "3", from: "user" as const, text: "I'm looking for information about your services." },
-    { id: "4", from: "assistant" as const, text: "Sure! We offer a variety of AI solutions. What are you interested in?" },
-  ]
-
-  return (
-    <Conversation className="relative size-full p-4">
-      <ConversationContent>
-        {messages.map(msg => (
-          <Message from={msg.from} key={msg.id}>
-            <MessageContent>{msg.text}</MessageContent>
-          </Message>
-        ))}
-      </ConversationContent>
-      <ConversationScrollButton />
-    </Conversation>
   )
 }

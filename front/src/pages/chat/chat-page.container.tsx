@@ -24,7 +24,7 @@ export function ChatPageContainer() {
     [navigate],
   );
 
-  const { messages, error, send } = useChat({
+  const { messages, isLoading, error, send } = useChat({
     conversationId: id,
     token,
     onConversationCreated,
@@ -33,5 +33,5 @@ export function ChatPageContainer() {
 
   if (loading) return null;
 
-  return <ChatPage messages={messages} error={error} send={send} />;
+  return <ChatPage messages={messages} isLoading={isLoading} error={error} send={send} />;
 }

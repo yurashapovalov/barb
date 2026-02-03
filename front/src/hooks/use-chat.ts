@@ -59,7 +59,10 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
         if (!cancelled) setIsLoading(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      abortRef.current?.abort();
+    };
   }, [conversationId, token]);
 
   const send = useCallback(async (text: string) => {

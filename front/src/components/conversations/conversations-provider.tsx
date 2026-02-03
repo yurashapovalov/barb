@@ -25,13 +25,15 @@ export function ConversationsProvider() {
     if (!token) return;
     listConversations(token)
       .then(setConversations)
-      .catch(() => {})
+      .catch((err) => console.error("Failed to load conversations:", err))
       .finally(() => setLoading(false));
   }, [token]);
 
   const refresh = useCallback(() => {
     if (!token) return;
-    listConversations(token).then(setConversations).catch(() => {});
+    listConversations(token)
+      .then(setConversations)
+      .catch((err) => console.error("Failed to refresh conversations:", err));
   }, [token]);
 
   const updateTitle = useCallback((id: string, title: string) => {
