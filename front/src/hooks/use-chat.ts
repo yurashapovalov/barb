@@ -25,11 +25,18 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
   // Skip if we just created it (messages already in state from send()).
   const skipLoadRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const cacheRef = useRef(new Map<string, Message[]>());
 
   useEffect(() => {
     if (!conversationId) return;
     if (skipLoadRef.current) {
       skipLoadRef.current = false;
+      return;
+    }
+
+    const cached = cacheRef.current.get(conversationId);
+    if (cached) {
+      setMessages(cached);
       return;
     }
 
@@ -40,7 +47,10 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
 
     getMessages(conversationId, token)
       .then((data) => {
-        if (!cancelled) setMessages(data);
+        if (!cancelled) {
+          setMessages(data);
+          cacheRef.current.set(conversationId, data);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -129,8 +139,8 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
           );
         },
         onDone(event) {
-          setMessages((prev) =>
-            prev.map((m) =>
+          setMessages((prev) => {
+            const updated = prev.map((m) =>
               m.id === assistantId
                 ? {
                     ...m,
@@ -139,8 +149,10 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
                     data: event.data.length > 0 ? event.data : null,
                   }
                 : m,
-            ),
-          );
+            );
+            cacheRef.current.set(activeConvId!, updated);
+            return updated;
+          });
         },
         onPersist(event) {
           if (event.message_id) {
