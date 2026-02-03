@@ -25,9 +25,10 @@ class TestValidation:
             execute({"from": "daily", "limit": -1}, nq_minute_slice, sessions)
 
     def test_empty_query(self, nq_minute_slice, sessions):
-        """Empty query returns all data as count."""
+        """Empty query returns all rows."""
         result = execute({}, nq_minute_slice, sessions)
-        assert result["result"] > 0
+        assert isinstance(result["result"], list)
+        assert len(result["result"]) > 0
 
     def test_expression_errors_caught_before_execution(self, nq_minute_slice, sessions):
         """Pre-validation catches all expression errors at once."""

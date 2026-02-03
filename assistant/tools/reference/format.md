@@ -8,7 +8,7 @@ JSON object with these fields (all optional):
 - map: Derived columns {name: "expression_string"}. Values MUST be strings.
 - where: Row filter expression (boolean)
 - group_by: Column to group by
-- select: Aggregate expression. Default: count()
+- select: Aggregate expression (omit to return rows)
 - sort: "column_name asc" or "column_name desc"
 - limit: Max rows (positive integer)
 

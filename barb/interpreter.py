@@ -104,12 +104,17 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
 
     # 6-7. GROUP BY + SELECT
     group_by = query.get("group_by")
-    select = _normalize_select(query.get("select", "count()"))
+    select_raw = query.get("select")
 
     if group_by:
+        select = _normalize_select(select_raw or "count()")
         result_df = _group_aggregate(df, group_by, select)
-    else:
+    elif select_raw:
+        select = _normalize_select(select_raw)
         result_df = _aggregate(df, select)
+    else:
+        # No select, no group_by → return filtered rows
+        result_df = df
 
     # 8. SORT
     if query.get("sort") and isinstance(result_df, pd.DataFrame):

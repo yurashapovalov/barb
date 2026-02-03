@@ -58,7 +58,8 @@ class TestExecuteQuery:
     def test_empty_query(self, nq_minute_slice, sessions):
         result = run_tool("execute_query", {"query": {}}, nq_minute_slice, sessions)
         data = json.loads(result)
-        assert data["result"] > 0
+        assert data["has_table"] is True
+        assert data["row_count"] > 0
 
 
 class TestGetQueryReference:
