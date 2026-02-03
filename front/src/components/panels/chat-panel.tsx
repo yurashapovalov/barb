@@ -1,18 +1,14 @@
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai/conversation";
-import { Message, MessageContent, MessageResponse } from "@/components/ai/message";
+import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai/message";
+import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
 import {
   PromptInput,
   PromptInputBody,
   PromptInputTextarea,
   PromptInputFooter,
-  PromptInputTools,
-  PromptInputActionMenu,
-  PromptInputActionMenuTrigger,
-  PromptInputActionMenuContent,
-  PromptInputActionAddAttachments,
-  PromptInputAttachments,
-  PromptInputAttachment,
+  PromptInputProvider,
   PromptInputSubmit,
+  usePromptInputController,
 } from "@/components/ai/prompt-input";
 import type { ChatState } from "@/hooks/use-chat";
 
@@ -24,16 +20,47 @@ interface ChatPanelProps {
 
 export function ChatPanel({ messages, error, send }: ChatPanelProps) {
   return (
+    <PromptInputProvider>
+      <ChatPanelInner messages={messages} error={error} send={send} />
+    </PromptInputProvider>
+  );
+}
+
+function ChatPanelInner({ messages, error, send }: ChatPanelProps) {
+  const { textInput } = usePromptInputController();
+  const isEmpty = textInput.value.trim() === "";
+
+  return (
     <div className="flex h-full flex-col bg-background">
       <Conversation className="relative min-h-0 flex-1">
         <ConversationContent className="mx-auto max-w-[700px] gap-12 pb-12">
-          {messages.map((msg) => (
-            <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
-              <MessageContent>
-                <MessageResponse>{msg.content}</MessageResponse>
-              </MessageContent>
-            </Message>
-          ))}
+          {messages.map((msg, i) => {
+            const isModel = msg.role === "model";
+            const isLast = i === messages.length - 1;
+            return (
+              <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
+                <MessageContent>
+                  <MessageResponse>{msg.content}</MessageResponse>
+                </MessageContent>
+                {isModel && (
+                  <MessageActions
+                    className={
+                      isLast
+                        ? ""
+                        : "opacity-0 transition-opacity group-hover:opacity-100 lg:opacity-0 max-lg:opacity-100"
+                    }
+                  >
+                    <MessageAction tooltip="Like">
+                      <ThumbsUpIcon />
+                    </MessageAction>
+                    <MessageAction tooltip="Dislike">
+                      <ThumbsDownIcon />
+                    </MessageAction>
+                  </MessageActions>
+                )}
+              </Message>
+            );
+          })}
         </ConversationContent>
         {error && (
           <div className="mx-4 rounded bg-destructive/10 p-3 text-sm text-destructive">
@@ -44,22 +71,11 @@ export function ChatPanel({ messages, error, send }: ChatPanelProps) {
       </Conversation>
       <div className="mx-auto w-full max-w-[740px] px-4 pb-8">
         <PromptInput multiple onSubmit={(message) => send(message.text)}>
-          <PromptInputAttachments>
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
           <PromptInputBody>
             <PromptInputTextarea />
           </PromptInputBody>
           <PromptInputFooter>
-            <PromptInputTools>
-              <PromptInputActionMenu>
-                <PromptInputActionMenuTrigger />
-                <PromptInputActionMenuContent>
-                  <PromptInputActionAddAttachments />
-                </PromptInputActionMenuContent>
-              </PromptInputActionMenu>
-            </PromptInputTools>
-            <PromptInputSubmit />
+            <PromptInputSubmit className="ml-auto" disabled={isEmpty} />
           </PromptInputFooter>
         </PromptInput>
       </div>
