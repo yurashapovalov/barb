@@ -129,7 +129,9 @@ def _parse_tool_output(output):
         return {"raw": str(output)}
 
 
-def _persist_chat(db, conversation: dict, user_message: str, result: dict) -> tuple[str, bool, str | None]:
+def _persist_chat(
+    db, conversation: dict, user_message: str, result: dict,
+) -> tuple[str, bool, str | None]:
     """Persist user message, model response, tool calls, and update usage.
 
     Returns (message_id, persisted, new_title or None).
