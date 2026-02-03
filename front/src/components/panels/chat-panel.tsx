@@ -11,6 +11,7 @@ import {
   usePromptInputController,
 } from "@/components/ai/prompt-input";
 import type { ChatState } from "@/hooks/use-chat";
+import { PanelHeader } from "./panel-header";
 
 interface ChatPanelProps {
   messages: ChatState["messages"];
@@ -32,6 +33,7 @@ function ChatPanelInner({ messages, error, send }: ChatPanelProps) {
 
   return (
     <div className="flex h-full flex-col bg-background">
+      <PanelHeader />
       <Conversation className="relative min-h-0 flex-1">
         <ConversationContent className="mx-auto max-w-[700px] gap-12 pb-12">
           {messages.map((msg, i) => {
