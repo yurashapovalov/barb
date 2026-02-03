@@ -6,7 +6,7 @@ import logging
 import pandas as pd
 
 from barb.interpreter import QueryError, execute
-from barb.validation import ValidationErrors
+from barb.validation import ValidationError
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ def run(args: dict, df: pd.DataFrame, sessions: dict) -> str:
 
     try:
         result = execute(query, df, sessions)
-    except ValidationErrors as e:
+    except ValidationError as e:
         log.warning("Expression validation errors: %s", e)
         return json.dumps({
             "errors": e.errors,

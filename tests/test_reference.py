@@ -2,8 +2,7 @@
 
 import json
 
-from assistant.tools.reference import run, _REF_DIR
-
+from assistant.tools.reference import _REF_DIR, run
 
 PATTERNS = ["simple_stat", "filter_count", "group_analysis", "pattern_detect", "ranking"]
 

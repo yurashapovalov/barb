@@ -17,7 +17,7 @@ from barb.expressions import (
 from barb.functions import AGGREGATE_FUNCS, FUNCTIONS
 
 
-class ValidationErrors(Exception):
+class ValidationError(Exception):
     """Raised when pre-validation finds one or more expression errors."""
 
     def __init__(self, errors: list[dict]):
@@ -39,7 +39,7 @@ def validate_expressions(query: dict) -> None:
     """Pre-validate all expression fields in a query.
 
     Checks syntax, function names, operator whitelist, and group_by format.
-    Collects ALL errors and raises ValidationErrors if any found.
+    Collects ALL errors and raises ValidationError if any found.
     Does NOT require a DataFrame.
     """
     errors: list[dict] = []
@@ -51,7 +51,10 @@ def validate_expressions(query: dict) -> None:
                 errors.append({
                     "step": "map",
                     "expression": str(expr),
-                    "message": f"map['{name}'] must be a string expression, got {type(expr).__name__}",
+                    "message": (
+                        f"map['{name}'] must be a string expression, "
+                        f"got {type(expr).__name__}"
+                    ),
                 })
                 continue
             _check_expression(expr, f"map['{name}']", "map", errors)
@@ -86,11 +89,14 @@ def validate_expressions(query: dict) -> None:
                 errors.append({
                     "step": "group_by",
                     "expression": col,
-                    "message": f"group_by must be column names, not expressions. Create '{col}' in 'map' first.",
+                    "message": (
+                        f"group_by must be column names, not expressions. "
+                        f"Create '{col}' in 'map' first."
+                    ),
                 })
 
     if errors:
-        raise ValidationErrors(errors)
+        raise ValidationError(errors)
 
 
 def _check_expression(expr: str, label: str, step: str, errors: list[dict]) -> None:
@@ -130,7 +136,10 @@ def _walk_ast(node: ast.AST, label: str, step: str, errors: list[dict]) -> None:
                 errors.append({
                     "step": step,
                     "expression": ast.unparse(node),
-                    "message": f"Unknown function '{func_name}' in {label}. Available: {', '.join(sorted(_KNOWN_FUNCTIONS))}",
+                    "message": (
+                        f"Unknown function '{func_name}' in {label}. "
+                        f"Available: {', '.join(sorted(_KNOWN_FUNCTIONS))}"
+                    ),
                 })
         else:
             errors.append({
@@ -206,7 +215,7 @@ def _check_select(select_raw: str, group_by, errors: list[dict]) -> None:
         if group_by:
             _check_group_select(s, errors)
         else:
-            _check_expression(s, f"select", "select", errors)
+            _check_expression(s, "select", "select", errors)
 
 
 def _check_group_select(expr: str, errors: list[dict]) -> None:
@@ -220,7 +229,10 @@ def _check_group_select(expr: str, errors: list[dict]) -> None:
         errors.append({
             "step": "select",
             "expression": expr,
-            "message": f"Cannot parse aggregate expression: '{expr}'. Expected: func(column) or count()",
+            "message": (
+                f"Cannot parse aggregate expression: '{expr}'. "
+                "Expected: func(column) or count()"
+            ),
         })
         return
 
@@ -229,7 +241,10 @@ def _check_group_select(expr: str, errors: list[dict]) -> None:
         errors.append({
             "step": "select",
             "expression": expr,
-            "message": f"Unknown aggregate function '{func_name}'. Available: {', '.join(sorted(AGGREGATE_FUNCS))}",
+            "message": (
+                f"Unknown aggregate function '{func_name}'. "
+                f"Available: {', '.join(sorted(AGGREGATE_FUNCS))}"
+            ),
         })
 
 

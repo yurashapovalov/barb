@@ -7,7 +7,7 @@ Tests the full pipeline: query → execute → result.
 import pytest
 
 from barb.interpreter import QueryError, execute
-from barb.validation import ValidationErrors
+from barb.validation import ValidationError
 
 # --- Validation ---
 
@@ -31,7 +31,7 @@ class TestValidation:
 
     def test_expression_errors_caught_before_execution(self, nq_minute_slice, sessions):
         """Pre-validation catches all expression errors at once."""
-        with pytest.raises(ValidationErrors) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             execute({
                 "from": "daily",
                 "map": {"x": "close = open", "y": "bogus(high)"},
