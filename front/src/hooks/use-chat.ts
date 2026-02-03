@@ -53,6 +53,20 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
   const send = useCallback(async (text: string) => {
     setError(null);
 
+    // Show user message immediately — before any network calls
+    const tempConvId = convIdRef.current ?? "pending";
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      conversation_id: tempConvId,
+      role: "user",
+      content: text,
+      data: null,
+      usage: null,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+
     let activeConvId = convIdRef.current;
 
     // Create conversation if needed
@@ -65,24 +79,13 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
         onConversationCreated?.(conv.id);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create conversation");
+        setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+        setIsLoading(false);
         return;
       }
     }
 
-    // Optimistic user message
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      conversation_id: activeConvId,
-      role: "user",
-      content: text,
-      data: null,
-      usage: null,
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsLoading(true);
-
-    // Placeholder assistant message — appears immediately, content fills in via stream
+    // Placeholder assistant message — appears after conversation exists
     const assistantId = crypto.randomUUID();
     const assistantMsg: Message = {
       id: assistantId,

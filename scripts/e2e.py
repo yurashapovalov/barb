@@ -133,6 +133,56 @@ def create_assistant():
     )
 
 
+def chat_sync(assistant, message, history=None):
+    """Consume chat_stream into a single result dict."""
+    steps = []
+    data = []
+    answer = ""
+    cost = None
+    current_tool = None
+
+    for event in assistant.chat_stream(message, history=history):
+        etype = event["event"]
+
+        if etype == "tool_start":
+            current_tool = {
+                "tool": event["data"]["tool_name"],
+                "args": event["data"]["input"],
+                "round": len(steps) + 1,
+            }
+
+        elif etype == "tool_end":
+            if current_tool:
+                current_tool["result"] = ""
+                current_tool["duration_ms"] = event["data"]["duration_ms"]
+                current_tool["error"] = event["data"]["error"]
+                steps.append(current_tool)
+                current_tool = None
+
+        elif etype == "data_block":
+            data.append(event["data"])
+
+        elif etype == "text_delta":
+            answer += event["data"]["delta"]
+
+        elif etype == "done":
+            d = event["data"]
+            answer = d["answer"]
+            cost = d["usage"]
+            data = d["data"]
+            # Enrich steps with tool results from done event
+            for i, tc in enumerate(d.get("tool_calls", [])):
+                if i < len(steps):
+                    steps[i]["result"] = tc.get("output", "")
+
+    return {
+        "answer": answer,
+        "steps": steps,
+        "data": data,
+        "cost": cost,
+    }
+
+
 def print_trace(result, show_prompt=False):
     """Print tool call trace from a chat result."""
     if show_prompt:
@@ -155,12 +205,15 @@ def print_trace(result, show_prompt=False):
 
             try:
                 parsed = json.loads(tool_result)
-                if "error" in parsed:
+                if "errors" in parsed:
+                    for err in parsed["errors"]:
+                        print(f"{C.RED}    → {err['message']}{C.END}")
+                elif "error" in parsed:
                     print(f"{C.RED}    → ERROR: {parsed['error']}{C.END}")
                 elif parsed.get("has_table"):
                     print(f"{C.GREEN}    → table: {parsed['row_count']} rows{C.END}")
                 else:
-                    print(f"{C.GREEN}    → {parsed['result']}{C.END}")
+                    print(f"{C.GREEN}    → {parsed.get('result', '?')}{C.END}")
             except json.JSONDecodeError:
                 print(f"{C.YELLOW}    → {tool_result[:100]}{C.END}")
             continue
@@ -219,7 +272,7 @@ def run_scenario(assistant, scenario, quiet=False):
 
         start = time.time()
         try:
-            result = assistant.chat(msg, history=history or None, trace=True)
+            result = chat_sync(assistant, msg, history=history or None)
         except Exception as e:
             print(f"{C.RED}    CRASH: {e}{C.END}")
             turns.append({"user": msg, "error": str(e)})

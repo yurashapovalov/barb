@@ -1,11 +1,11 @@
 # Filter + Count
 
-Filter rows by condition, then count or compute statistics on the filtered set.
+Filter rows by condition. Use select for aggregation, or omit select to return matching rows.
 
 ## Key fields
 - map: compute columns needed for filtering
 - where: boolean expression (use == for equality, not =)
-- select: aggregate on filtered rows
+- select: aggregate on filtered rows. Omit to return rows as a table.
 
 ## Examples
 

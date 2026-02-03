@@ -70,7 +70,8 @@ class Assistant:
                 if not chunk.candidates:
                     continue
 
-                for part in chunk.candidates[0].content.parts:
+                parts = chunk.candidates[0].content.parts or []
+                for part in parts:
                     all_parts.append(part)
                     if part.function_call:
                         has_fn_calls = True
