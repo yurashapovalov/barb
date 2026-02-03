@@ -47,7 +47,7 @@ function ChatPanelInner({ messages, isLoading, error, send }: ChatPanelProps) {
                 <MessageContent>
                   {parseContent(msg).map((seg, j) =>
                     seg.type === "text" ? (
-                      <MessageResponse key={j}>{seg.text}</MessageResponse>
+                      <MessageResponse key={`text-${j}`}>{seg.text}</MessageResponse>
                     ) : (
                       <DataCard key={`data-${seg.index}`} data={seg.block} />
                     ),
