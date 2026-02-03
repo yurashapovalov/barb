@@ -43,9 +43,10 @@ function parseContent(msg: MessageType): ContentSegment[] {
   if (after.trim()) segments.push({ type: "text", text: after });
 
   // No markers found — cards at the end (historical messages from API)
-  if (segments.every((s) => s.type === "text")) {
+  const hasData = segments.some((s) => s.type === "data");
+  if (!hasData) {
     for (let i = 0; i < msg.data.length; i++) {
-      segments.push({ type: "data", block: msg.data[i], index: i });
+      segments.push({ type: "data" as const, block: msg.data[i], index: i });
     }
   }
 
