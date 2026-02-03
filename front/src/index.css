@@ -208,6 +208,7 @@
 @layer base {
   * {
     @apply border-border;
+    scrollbar-width: none;
   }
   button,
   [role="button"],

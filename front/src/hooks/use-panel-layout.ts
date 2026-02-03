@@ -1,10 +1,10 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 const SIDEBAR_DEFAULT = 240;
 const SIDEBAR_MIN = 240;
 const SIDEBAR_MAX = 320;
 
-const DATA_DEFAULT_PCT = 35;
+const DATA_DEFAULT_PCT = 50;
 const DATA_MIN_PX = 480;
 const DATA_MAX_PCT = 60;
 
@@ -19,7 +19,6 @@ function loadNumber(key: string, fallback: number): number {
 }
 
 export function usePanelLayout() {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() => loadNumber(STORAGE_KEY_SIDEBAR, SIDEBAR_DEFAULT));
   const [dataPct, setDataPct] = useState(() => loadNumber(STORAGE_KEY_DATA, DATA_DEFAULT_PCT));
 
@@ -32,10 +31,10 @@ export function usePanelLayout() {
   };
 
   const onDataResize = (delta: number) => {
-    const container = containerRef.current;
-    if (!container || container.offsetWidth === 0) return;
-    const pctDelta = (delta / container.offsetWidth) * 100;
-    const minPct = (DATA_MIN_PX / container.offsetWidth) * 100;
+    const vw = window.innerWidth;
+    if (vw === 0) return;
+    const pctDelta = (delta / vw) * 100;
+    const minPct = (DATA_MIN_PX / vw) * 100;
     setDataPct((w) => {
       const next = Math.min(DATA_MAX_PCT, Math.max(minPct, w - pctDelta));
       localStorage.setItem(STORAGE_KEY_DATA, String(next));
@@ -43,5 +42,5 @@ export function usePanelLayout() {
     });
   };
 
-  return { containerRef, sidebarWidth, dataPct, dataMinPx: DATA_MIN_PX, onSidebarResize, onDataResize };
+  return { sidebarWidth, dataPct, dataMinPx: DATA_MIN_PX, onSidebarResize, onDataResize };
 }

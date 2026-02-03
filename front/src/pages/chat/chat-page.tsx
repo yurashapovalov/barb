@@ -13,10 +13,10 @@ interface ChatPageProps {
 }
 
 export function ChatPage({ messages, isLoading, error, send }: ChatPageProps) {
-  const { containerRef, sidebarWidth, dataPct, dataMinPx, onSidebarResize, onDataResize } = usePanelLayout();
+  const { sidebarWidth, dataPct, dataMinPx, onSidebarResize, onDataResize } = usePanelLayout();
 
   return (
-    <div ref={containerRef} className="flex h-full">
+    <div className="flex h-full">
       <div style={{ width: sidebarWidth }} className="hidden shrink-0 lg:block">
         <SidebarPanel />
       </div>
@@ -25,7 +25,7 @@ export function ChatPage({ messages, isLoading, error, send }: ChatPageProps) {
         <ChatPanel messages={messages} isLoading={isLoading} error={error} send={send} />
       </div>
       <ResizeHandle className="hidden lg:block" onResize={onDataResize} />
-      <div style={{ width: `${dataPct}%`, minWidth: dataMinPx }} className="hidden shrink-0 lg:block">
+      <div style={{ width: `${dataPct}vw`, minWidth: dataMinPx }} className="hidden shrink-0 lg:block">
         <DataPanel />
       </div>
     </div>
