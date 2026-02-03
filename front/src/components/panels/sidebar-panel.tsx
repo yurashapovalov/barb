@@ -15,7 +15,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   const { conversations, create } = useConversations();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const email = user?.email ?? "user@example.com";
+  const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
   const avatar = user?.user_metadata?.avatar_url as string | undefined;
 
   const handleNewChat = useCallback(async () => {
@@ -28,7 +28,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   return (
     <div className="flex h-full flex-col bg-sidebar">
       <PanelHeader>
-        <Button variant="ghost" size="xs">
+        <Button variant="ghost" size="sm">
           {avatar && (
             <img
               src={avatar}
@@ -36,14 +36,14 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
               className="size-5 rounded-full"
             />
           )}
-          {email}
+          {displayName}
         </Button>
-        <Button variant="ghost" size="icon-xs" onClick={onCollapse}>
+        <Button variant="ghost" size="icon-sm" onClick={onCollapse}>
           <ChevronsLeftIcon />
         </Button>
       </PanelHeader>
-      <div className="flex flex-1 flex-col gap-8 overflow-y-auto px-2">
-        <div className="flex flex-col gap-1">
+      <div className="flex flex-1 flex-col overflow-y-auto px-2">
+        <div className="mt-12 flex flex-col gap-1">
           <span className="px-2 text-xs text-muted-foreground">Chats</span>
           <Button
             variant="ghost"
