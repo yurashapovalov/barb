@@ -10,6 +10,7 @@ export function ChatPageContainer() {
   const { session } = useAuth();
   const { conversations, loading, refresh } = useConversations();
   const navigate = useNavigate();
+  const token = session?.access_token ?? "";
 
   // Redirect to most recent conversation on bare "/"
   useEffect(() => {
@@ -17,10 +18,6 @@ export function ChatPageContainer() {
       navigate(`/c/${conversations[0].id}`, { replace: true });
     }
   }, [loading, id, conversations, navigate]);
-
-  if (loading) return null;
-
-  const token = session?.access_token ?? "";
 
   const onConversationCreated = useCallback(
     (convId: string) => navigate(`/c/${convId}`, { replace: true }),
@@ -33,6 +30,8 @@ export function ChatPageContainer() {
     onConversationCreated,
     onTitleUpdate: refresh,
   });
+
+  if (loading) return null;
 
   return <ChatPage messages={messages} error={error} send={send} />;
 }
