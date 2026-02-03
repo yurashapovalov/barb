@@ -325,10 +325,13 @@ class TestChatStream:
             elif call_count == 2:
                 return _mock_table_chain([])
             elif call_count == 3:
-                return _mock_table_chain([{"id": "msg-user-1"}])
+                # Early title update in generate()
+                return _mock_table_chain([])
             elif call_count == 4:
-                return _mock_table_chain([{"id": "msg-model-1"}])
+                return _mock_table_chain([{"id": "msg-user-1"}])
             elif call_count == 5:
+                return _mock_table_chain([{"id": "msg-model-1"}])
+            elif call_count == 6:
                 return _mock_table_chain([])
             else:
                 return _mock_table_chain([])
@@ -353,11 +356,15 @@ class TestChatStream:
         events = self._parse_sse(r.text)
         event_types = [e["event"] for e in events]
 
+        assert "title_update" in event_types
         assert "tool_start" in event_types
         assert "tool_end" in event_types
         assert "text_delta" in event_types
         assert "done" in event_types
         assert "persist" in event_types
+
+        title_event = next(e for e in events if e["event"] == "title_update")
+        assert title_event["data"]["title"] == "What is the average daily range?"
 
         done_event = next(e for e in events if e["event"] == "done")
         assert done_event["data"]["answer"] == "The average range is 150 points."

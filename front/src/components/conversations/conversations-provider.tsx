@@ -6,6 +6,7 @@ import type { Conversation } from "@/types";
 
 interface ConversationsContextValue {
   conversations: Conversation[];
+  loading: boolean;
   refresh: () => void;
   create: (instrument: string) => Promise<Conversation>;
 }
@@ -17,10 +18,14 @@ export function ConversationsProvider() {
   const token = session?.access_token ?? "";
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) return;
-    listConversations(token).then(setConversations).catch(() => {});
+    listConversations(token)
+      .then(setConversations)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [token]);
 
   const refresh = useCallback(() => {
@@ -35,7 +40,7 @@ export function ConversationsProvider() {
   }, [token]);
 
   return (
-    <ConversationsContext.Provider value={{ conversations, refresh, create }}>
+    <ConversationsContext.Provider value={{ conversations, loading, refresh, create }}>
       <Outlet />
     </ConversationsContext.Provider>
   );
