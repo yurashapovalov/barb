@@ -7,7 +7,7 @@ interface UseChatParams {
   token: string;
   instrument?: string;
   onConversationCreated?: (id: string) => void;
-  onTitleUpdate?: (title: string) => void;
+  onTitleUpdate?: (id: string, title: string) => void;
 }
 
 export type ChatState = ReturnType<typeof useChat>;
@@ -152,7 +152,7 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
           }
         },
         onTitleUpdate(event) {
-          onTitleUpdate?.(event.title);
+          onTitleUpdate?.(activeConvId!, event.title);
         },
         onError(event) {
           setError(event.error);

@@ -8,7 +8,7 @@ import { ChatPage } from "./chat-page";
 export function ChatPageContainer() {
   const { id } = useParams<{ id: string }>();
   const { session } = useAuth();
-  const { conversations, loading, refresh } = useConversations();
+  const { conversations, loading, updateTitle } = useConversations();
   const navigate = useNavigate();
   const token = session?.access_token ?? "";
 
@@ -28,7 +28,7 @@ export function ChatPageContainer() {
     conversationId: id,
     token,
     onConversationCreated,
-    onTitleUpdate: refresh,
+    onTitleUpdate: updateTitle,
   });
 
   if (loading) return null;

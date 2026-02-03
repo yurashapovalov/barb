@@ -8,6 +8,7 @@ interface ConversationsContextValue {
   conversations: Conversation[];
   loading: boolean;
   refresh: () => void;
+  updateTitle: (id: string, title: string) => void;
   create: (instrument: string) => Promise<Conversation>;
 }
 
@@ -33,6 +34,12 @@ export function ConversationsProvider() {
     listConversations(token).then(setConversations).catch(() => {});
   }, [token]);
 
+  const updateTitle = useCallback((id: string, title: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title } : c)),
+    );
+  }, []);
+
   const create = useCallback(async (instrument: string) => {
     const conv = await createConversation(instrument, token);
     setConversations((prev) => [conv, ...prev]);
@@ -40,7 +47,7 @@ export function ConversationsProvider() {
   }, [token]);
 
   return (
-    <ConversationsContext.Provider value={{ conversations, loading, refresh, create }}>
+    <ConversationsContext.Provider value={{ conversations, loading, refresh, updateTitle, create }}>
       <Outlet />
     </ConversationsContext.Provider>
   );
