@@ -37,7 +37,7 @@ export function ChatPageContainer() {
 
   useEffect(() => {
     setSelectedData(null);
-    closeSidebar();
+    if (window.innerWidth < 1024) closeSidebar();
   }, [id, closeSidebar]);
 
   const onConversationCreated = (convId: string) =>
