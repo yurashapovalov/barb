@@ -1,7 +1,7 @@
 import { createContext, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
-import { createConversation, listConversations } from "@/lib/api";
+import { createConversation, listConversations, removeConversation } from "@/lib/api";
 import type { Conversation } from "@/types";
 
 interface ConversationsContextValue {
@@ -10,6 +10,7 @@ interface ConversationsContextValue {
   refresh: () => void;
   updateTitle: (id: string, title: string) => void;
   create: (instrument: string) => Promise<Conversation>;
+  remove: (id: string) => Promise<void>;
 }
 
 export const ConversationsContext = createContext<ConversationsContextValue | null>(null);
@@ -51,8 +52,14 @@ export function ConversationsProvider() {
     return conv;
   };
 
+  const remove = async (id: string) => {
+    if (!token) throw new Error("Not authenticated");
+    await removeConversation(id, token);
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+  };
+
   return (
-    <ConversationsContext.Provider value={{ conversations, loading, refresh, updateTitle, create }}>
+    <ConversationsContext.Provider value={{ conversations, loading, refresh, updateTitle, create, remove }}>
       <Outlet />
     </ConversationsContext.Provider>
   );

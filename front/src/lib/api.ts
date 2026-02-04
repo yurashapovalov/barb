@@ -50,7 +50,7 @@ export async function listConversations(
   return handleResponse<Conversation[]>(res);
 }
 
-export async function deleteConversation(
+export async function removeConversation(
   conversationId: string,
   token: string,
 ): Promise<void> {

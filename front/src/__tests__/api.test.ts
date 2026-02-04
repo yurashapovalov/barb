@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   createConversation,
   listConversations,
-  deleteConversation,
+  removeConversation,
   getMessages,
   sendMessageStream,
 } from "@/lib/api";
@@ -71,11 +71,11 @@ describe("listConversations", () => {
   });
 });
 
-describe("deleteConversation", () => {
+describe("removeConversation", () => {
   it("sends DELETE request", async () => {
     mockFetch.mockResolvedValue(jsonResponse({ ok: true }));
 
-    await deleteConversation("conv-1", "tok-123");
+    await removeConversation("conv-1", "tok-123");
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/conversations/conv-1"),
@@ -85,7 +85,7 @@ describe("deleteConversation", () => {
 
   it("throws on error", async () => {
     mockFetch.mockResolvedValue(errorResponse(404, "Not found"));
-    await expect(deleteConversation("bad", "tok")).rejects.toThrow("API error 404");
+    await expect(removeConversation("bad", "tok")).rejects.toThrow("API error 404");
   });
 });
 

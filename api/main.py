@@ -290,6 +290,7 @@ def list_conversations(
             db.table("conversations")
             .select("*")
             .eq("user_id", user["sub"])
+            .eq("status", "active")
             .order("updated_at", desc=True)
             .execute()
         )
@@ -381,10 +382,10 @@ def delete_conversation(
         raise HTTPException(404, "Conversation not found")
 
     try:
-        db.table("conversations").delete().eq("id", conversation_id).execute()
+        db.table("conversations").update({"status": "removed"}).eq("id", conversation_id).execute()
     except Exception:
-        log.exception("Failed to delete conversation: %s", conversation_id)
-        raise HTTPException(503, "Failed to delete conversation")
+        log.exception("Failed to remove conversation: %s", conversation_id)
+        raise HTTPException(503, "Failed to remove conversation")
 
     return {"ok": True}
 

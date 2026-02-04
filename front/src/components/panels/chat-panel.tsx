@@ -1,7 +1,7 @@
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai/conversation";
 import { DataCard } from "@/components/ai/data-card";
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai/message";
-import { EllipsisIcon, MessageCircleIcon, PanelLeftIcon, ThumbsDownIcon, ThumbsUpIcon, Trash2Icon } from "lucide-react";
+import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
 import {
   PromptInput,
   PromptInputBody,
@@ -11,22 +11,12 @@ import {
   PromptInputSubmit,
   usePromptInputController,
 } from "@/components/ai/prompt-input";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type { ChatState } from "@/hooks/use-chat";
 import { parseContent } from "@/lib/parse-content";
 import type { DataBlock } from "@/types";
-import { PanelHeader } from "./panel-header";
 
 interface ChatPanelProps {
-  title?: string;
-  sidebarOpen?: boolean;
-  onToggleSidebar?: () => void;
+  header?: React.ReactNode;
   messages: ChatState["messages"];
   isLoading: ChatState["isLoading"];
   error: ChatState["error"];
@@ -35,46 +25,21 @@ interface ChatPanelProps {
   onSelectData?: (data: DataBlock) => void;
 }
 
-export function ChatPanel({ title, sidebarOpen, onToggleSidebar, messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
+export function ChatPanel({ header, messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
   return (
     <PromptInputProvider>
-      <ChatPanelInner title={title} sidebarOpen={sidebarOpen} onToggleSidebar={onToggleSidebar} messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={onSelectData} />
+      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={onSelectData} />
     </PromptInputProvider>
   );
 }
 
-function ChatPanelInner({ title, sidebarOpen, onToggleSidebar, messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
+function ChatPanelInner({ header, messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <PanelHeader>
-        <div className="flex items-center gap-1.5">
-          {!sidebarOpen && (
-            <Button variant="ghost" size="icon-sm" onClick={onToggleSidebar}>
-              <PanelLeftIcon />
-            </Button>
-          )}
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            <MessageCircleIcon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="truncate text-sm font-medium">{title}</span>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm">
-                <EllipsisIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem>
-                <Trash2Icon />
-                Remove chat
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </PanelHeader>
+      {header}
       <Conversation className="relative min-h-0 flex-1">
         <ConversationContent className="mx-auto max-w-[700px] gap-12 pb-12">
           {messages.map((msg, i) => {
