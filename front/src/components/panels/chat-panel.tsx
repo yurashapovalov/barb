@@ -13,6 +13,7 @@ import {
 } from "@/components/ai/prompt-input";
 import type { ChatState } from "@/hooks/use-chat";
 import { parseContent } from "@/lib/parse-content";
+import type { DataBlock } from "@/types";
 import { PanelHeader } from "./panel-header";
 
 interface ChatPanelProps {
@@ -20,17 +21,19 @@ interface ChatPanelProps {
   isLoading: ChatState["isLoading"];
   error: ChatState["error"];
   send: ChatState["send"];
+  selectedData?: DataBlock | null;
+  onSelectData?: (data: DataBlock) => void;
 }
 
-export function ChatPanel({ messages, isLoading, error, send }: ChatPanelProps) {
+export function ChatPanel({ messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
   return (
     <PromptInputProvider>
-      <ChatPanelInner messages={messages} isLoading={isLoading} error={error} send={send} />
+      <ChatPanelInner messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={onSelectData} />
     </PromptInputProvider>
   );
 }
 
-function ChatPanelInner({ messages, isLoading, error, send }: ChatPanelProps) {
+function ChatPanelInner({ messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -49,7 +52,7 @@ function ChatPanelInner({ messages, isLoading, error, send }: ChatPanelProps) {
                     seg.type === "text" ? (
                       <MessageResponse key={`text-${j}`}>{seg.text}</MessageResponse>
                     ) : (
-                      <DataCard key={`data-${seg.index}`} data={seg.block} />
+                      <DataCard key={`data-${seg.index}`} data={seg.block} active={selectedData === seg.block} onClick={() => onSelectData?.(seg.block)} />
                     ),
                   )}
                 </MessageContent>

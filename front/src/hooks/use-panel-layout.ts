@@ -5,7 +5,7 @@ const SIDEBAR_MIN = 240;
 const SIDEBAR_MAX = 320;
 
 const DATA_DEFAULT_PCT = 50;
-const DATA_MIN_PX = 480;
+const DATA_MIN_PCT = 0;
 const DATA_MAX_PCT = 60;
 
 const STORAGE_KEY_SIDEBAR = "panel-sidebar-width";
@@ -34,7 +34,7 @@ export function usePanelLayout() {
     const vw = window.innerWidth;
     if (vw === 0) return;
     const pctDelta = (delta / vw) * 100;
-    const minPct = (DATA_MIN_PX / vw) * 100;
+    const minPct = DATA_MIN_PCT;
     setDataPct((w) => {
       const next = Math.min(DATA_MAX_PCT, Math.max(minPct, w - pctDelta));
       localStorage.setItem(STORAGE_KEY_DATA, String(next));
@@ -42,5 +42,5 @@ export function usePanelLayout() {
     });
   };
 
-  return { sidebarWidth, dataPct, dataMinPx: DATA_MIN_PX, onSidebarResize, onDataResize };
+  return { sidebarWidth, dataPct, onSidebarResize, onDataResize };
 }

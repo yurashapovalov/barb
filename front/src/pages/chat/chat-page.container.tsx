@@ -31,5 +31,5 @@ export function ChatPageContainer() {
 
   if (loading) return null;
 
-  return <ChatPage messages={messages} isLoading={isLoading} error={error} send={send} />;
+  return <ChatPage conversationId={id} messages={messages} isLoading={isLoading} error={error} send={send} />;
 }
