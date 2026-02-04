@@ -31,5 +31,7 @@ export function ChatPageContainer() {
 
   if (loading) return null;
 
-  return <ChatPage conversationId={id} messages={messages} isLoading={isLoading} error={error} send={send} />;
+  const conversation = conversations.find((c) => c.id === id);
+
+  return <ChatPage conversationId={id} title={conversation?.title} messages={messages} isLoading={isLoading} error={error} send={send} />;
 }

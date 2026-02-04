@@ -4,24 +4,28 @@ import { ChatPanel } from "@/components/panels/chat-panel";
 import { DataPanel } from "@/components/panels/data-panel";
 import { ResizeHandle } from "@/components/panels/resize-handle";
 import { usePanelLayout } from "@/hooks/use-panel-layout";
+import { useSidebar } from "@/hooks/use-sidebar";
 import type { ChatState } from "@/hooks/use-chat";
 import type { DataBlock } from "@/types";
 
 interface ChatPageProps {
   conversationId?: string;
+  title?: string;
   messages: ChatState["messages"];
   isLoading: ChatState["isLoading"];
   error: ChatState["error"];
   send: ChatState["send"];
 }
 
-export function ChatPage({ conversationId, messages, isLoading, error, send }: ChatPageProps) {
+export function ChatPage({ conversationId, title, messages, isLoading, error, send }: ChatPageProps) {
   const { sidebarWidth, dataPct, onSidebarResize, onDataResize } = usePanelLayout();
+  const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar();
   const [selectedData, setSelectedData] = useState<DataBlock | null>(null);
 
   useEffect(() => {
     setSelectedData(null);
-  }, [conversationId]);
+    closeSidebar();
+  }, [conversationId, closeSidebar]);
 
   const handleSelectData = useCallback((data: DataBlock) => {
     setSelectedData((prev) => (prev === data ? null : data));
@@ -29,12 +33,19 @@ export function ChatPage({ conversationId, messages, isLoading, error, send }: C
 
   return (
     <div className="flex h-full">
-      <div style={{ width: sidebarWidth }} className="hidden shrink-0 lg:block">
-        <SidebarPanel />
-      </div>
-      <ResizeHandle className="hidden lg:block" onResize={onSidebarResize} />
-      <div className="min-w-0 flex-1">
-        <ChatPanel messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={handleSelectData} />
+      {sidebarOpen && (
+        <>
+          <div
+            style={{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
+            className="w-[80vw] shrink-0 lg:w-(--sidebar-w)"
+          >
+            <SidebarPanel onCollapse={toggleSidebar} />
+          </div>
+          <ResizeHandle className="hidden lg:block" onResize={onSidebarResize} />
+        </>
+      )}
+      <div className="min-w-full flex-1 lg:min-w-0">
+        <ChatPanel title={title} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={handleSelectData} />
       </div>
       {selectedData && (
         <>
