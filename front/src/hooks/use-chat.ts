@@ -37,7 +37,11 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
   };
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      setMessages([]);
+      setError(null);
+      return;
+    }
     if (skipLoadRef.current) {
       skipLoadRef.current = false;
       return;
