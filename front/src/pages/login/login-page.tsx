@@ -30,7 +30,7 @@ export function LoginPage({ onSignIn, onMagicLink }: LoginPageProps) {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md text-left">
+      <div className="mx-4 w-full max-w-md text-left">
         <div className="flex size-11 items-center justify-center rounded bg-[var(--color-neutral-t1)]">
           <svg className="size-11" viewBox="0 0 44 44" fill="none">
             <path d="M13.7501 8.04005C13.7501 7.67682 14.0445 7.38235 14.4078 7.38235H19.6694C20.0326 7.38235 20.3271 7.67682 20.3271 8.04005V33.0326C20.3271 33.3958 20.0326 33.6903 19.6694 33.6903H14.4078C14.0445 33.6903 13.7501 33.3958 13.7501 33.0326V8.04005Z" fill="currentColor" />
@@ -64,7 +64,7 @@ export function LoginPage({ onSignIn, onMagicLink }: LoginPageProps) {
         </Button>
         <div className="my-6 text-center text-sm text-muted-foreground">or</div>
         <InputGroup className="h-[44px] rounded-md bg-transparent [box-shadow:none]">
-          <InputGroupInput className="h-full" type="email" placeholder="Enter your work email..." value={email} onChange={(e) => setEmail(e.target.value)} />
+          <InputGroupInput className="h-full text-base md:text-base" type="email" placeholder="Enter your email..." value={email} onChange={(e) => setEmail(e.target.value)} />
           <InputGroupAddon align="inline-end">
             <InputGroupButton size="icon-sm" variant="ghost" disabled={!isValidEmail || sending} onClick={handleMagicLink}>
               {sending ? <LoaderIcon className="size-5 animate-spin" /> : <ArrowRightIcon className="size-5" />}
