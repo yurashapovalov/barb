@@ -225,6 +225,6 @@
     }
   }
   body {
-    @apply bg-background text-foreground antialiased overflow-hidden h-screen;
+    @apply bg-background text-foreground antialiased overflow-hidden h-dvh;
   }
 }
