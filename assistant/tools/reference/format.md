@@ -31,3 +31,9 @@ Cumulative: cummax(col), cummin(col), cumsum(col)
 Pattern: streak(cond), bars_since(cond), rank(col)
 Aggregate: mean(col), sum(col), max(col), min(col), std(col), median(col), count(), percentile(col, p), correlation(col1, col2), last(col)
 Time: dayofweek(), dayname(), hour(), month(), monthname(), year(), day(), quarter(), date()
+
+## Limitations
+- No cross-timeframe queries (e.g. comparing daily with weekly in one query)
+- No subqueries or nested queries
+- No JOINs or multiple data sources
+- No loops or arbitrary code
