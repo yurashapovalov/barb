@@ -1,6 +1,8 @@
-# Fix Response Quality — Stop Dumping Internal Process to User
+# Fix Response Quality
 
-## Problem
+## Problems
+
+### 1. Многословность
 
 Модель вываливает пользователю внутреннюю кухню вместо результата:
 - Пересказывает вопрос
@@ -15,6 +17,32 @@
 2. `understand_question` tool возвращает статический JSON, не анализирует вопрос, его `instructions` field дублирует "explain to user"
 3. Примеры в промпте показывают текст ДО tool calls — модель думает надо комментировать процесс
 4. `rows` в data_block показывает обработанные строки (4644), а не результат (448)
+
+### 2. Галлюцинация данных
+
+Модель генерирует конкретные даты, цены, время минимума — без вызова инструментов.
+
+Реальный пример (сессия `c4af0fe9`, 17 обменов):
+- Из 17 ответов модели **только 3 содержали tool calls** (7 вызовов всего)
+- Успешных `execute_query` — **2 штуки**, оба `count()` (вернули 5 и 10)
+- Остальные 14 ответов — модель выдумала: конкретные даты 15 дней, цены open/close/low, время минимума с точностью до минуты, диапазоны 12:00-16:50
+- Модель писала "выполняю запрос для проверки..." но tool call не делала
+
+**Корневая причина:** нет механизма принуждения. Модель может ответить текстом вместо вызова инструмента, и ничего её не остановит.
+
+### 3. Нет доказательств
+
+Даже когда модель вызывает инструмент — результат непрозрачен. `count()` возвращает `5`, но пользователь не видит какие именно 5 строк. Верить можно только на слово.
+
+Это касается всех агрегаций:
+- `count()` → 5, а какие 5 строк?
+- `mean(range)` → 245.3, а range каждого дня какой?
+- `max(volume)` → 180000, а когда это было?
+- `group_by: weekday, select: mean(range)` → таблица по дням недели, а на основе каких данных?
+
+Интерпретер знает эти строки (они есть в `df` после шага `where`), но при агрегации выбрасывает их.
+
+**Детальный план решения:** [interpreter-source-rows.md](interpreter-source-rows.md)
 
 ## Target Flow
 
@@ -82,6 +110,8 @@ Round 1 (ответ):
 - Never describe your internal process (which tools you call, what steps you take).
 - Never list steps or plans — just do it.
 - The confirmation step (#2) must be ONE sentence, not a paragraph.
+- Never state specific prices, dates, counts, or statistics unless they come from an execute_query result in the current conversation turn. If you need data, call the tool.
+- If the user asks a follow-up that requires different data (e.g. specific dates after a count, or intraday detail after daily), you MUST call execute_query again — do not extrapolate or invent data from previous results.
 ```
 
 **Examples — переписать:**
@@ -152,30 +182,37 @@ else:
 
 ## План реализации
 
-### Step 1: Удалить `understand_question`
-- Удалить `assistant/tools/understand.py`
-- В `assistant/tools/__init__.py`: убрать `import understand`, убрать из `TOOL_DECLARATIONS` и `_HANDLERS`
-- Добавить `## Limitations` секцию в `assistant/tools/reference/format.md`
+### Phase 1: Source rows (evidence)
 
-### Step 2: Переписать системный промпт
-- В `assistant/prompt.py`: заменить `<instructions>`, `<constraints>`, `<examples>`
-- Убрать ссылку на `understand_question`
-- Добавить ограничения на формат ответа (no JSON, no process, one sentence confirmation)
-- Переписать примеры с коротким подтверждением
+Детальный план: [interpreter-source-rows.md](interpreter-source-rows.md)
 
-### Step 3: Исправить `rows` в data_block
-- В `assistant/chat.py` → `_collect_query_data_block`: rows из result, не из metadata
+1. `barb/interpreter.py` — сохранять отфильтрованные строки до агрегации, добавить `source_rows` и `source_row_count` в response
+2. `tests/test_interpreter.py` — тесты на source_rows (scalar, group_by, no select, limit)
+3. `assistant/tools/__init__.py` — `run_tool` возвращает `(str, dict | None)` вместо `str`
+4. `assistant/tools/execute.py` — возвращать `(json_str, raw_result)`, добавить `source_row_count` в JSON для модели
+5. `assistant/chat.py` — передавать raw_result в `_collect_query_data_block`, включать source_rows в data_block; исправить rows (из result, не из metadata)
+6. Прогнать все тесты
 
-### Step 4: Обновить тесты
-- `tests/test_api.py`: убрать/обновить тесты ссылающиеся на `understand_question`
-- Проверить что все существующие тесты проходят
+### Phase 2: Промпт и understand_question
 
-### Step 5: Ручная проверка
+1. Удалить `assistant/tools/understand.py`
+2. В `assistant/tools/__init__.py`: убрать из `TOOL_DECLARATIONS` и `_HANDLERS`
+3. Добавить `## Limitations` секцию в `assistant/tools/reference/format.md`
+4. В `assistant/prompt.py`: переписать `<instructions>`, `<constraints>`, `<examples>`
+   - Убрать ссылку на `understand_question`
+   - Добавить constraints: no JSON, no process, one sentence confirmation, no data without tool call, no extrapolation
+   - Переписать примеры с коротким подтверждением
+5. Обновить тесты (`tests/test_api.py`) — убрать ссылки на `understand_question`
+
+### Phase 3: Ручная проверка
+
 - Отправить "частота дней когда range > 2x предыдущего дня"
   - Модель подтверждает ОДНИМ предложением
   - После подтверждения: делает запрос, 1-2 предложения комментария
   - Никакого JSON, планов, описания процесса
-  - Карточка показывает корректные данные
+  - Карточка показывает корректные данные + source rows доступны
+- Отправить "покажи эти дни" (follow-up)
+  - Модель вызывает execute_query заново, а не выдумывает данные
 - Отправить "что такое inside day?"
   - Ответ без tool calls
 - Отправить "сравни дневной и недельный range"
@@ -183,11 +220,14 @@ else:
 
 ## Files to change
 
-| File | Change |
-|------|--------|
-| `assistant/prompt.py` | Rewrite instructions, constraints, examples |
-| `assistant/tools/understand.py` | DELETE |
-| `assistant/tools/__init__.py` | Remove understand_question |
-| `assistant/tools/reference/format.md` | Add ## Limitations section |
-| `assistant/chat.py` | Fix `_collect_query_data_block` rows logic |
-| `tests/test_api.py` | Update tests |
+| File | Phase | Change |
+|------|-------|--------|
+| `barb/interpreter.py` | 1 | Add source_rows to execute() and _build_response() |
+| `tests/test_interpreter.py` | 1 | Add TestSourceRows tests |
+| `assistant/tools/__init__.py` | 1+2 | run_tool returns (str, dict), remove understand_question |
+| `assistant/tools/execute.py` | 1 | Return (json_str, raw_result), add source_row_count |
+| `assistant/chat.py` | 1 | Pass raw_result to data_block, fix rows logic |
+| `assistant/tools/understand.py` | 2 | DELETE |
+| `assistant/tools/reference/format.md` | 2 | Add ## Limitations section |
+| `assistant/prompt.py` | 2 | Rewrite instructions, constraints, examples |
+| `tests/test_api.py` | 2 | Remove understand_question references |
