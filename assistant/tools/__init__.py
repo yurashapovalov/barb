@@ -21,15 +21,15 @@ TOOL_DECLARATIONS = [
 ]
 
 _HANDLERS = {
-    "understand_question": lambda args, df, sessions: understand.run(args),
-    "get_query_reference": lambda args, df, sessions: reference.run(args),
+    "understand_question": lambda args, df, sessions: (understand.run(args), None),
+    "get_query_reference": lambda args, df, sessions: (reference.run(args), None),
     "execute_query": lambda args, df, sessions: execute.run(args, df, sessions),
 }
 
 
-def run_tool(name: str, args: dict, df: pd.DataFrame, sessions: dict) -> str:
-    """Execute a tool and return result as string for the LLM."""
+def run_tool(name: str, args: dict, df: pd.DataFrame, sessions: dict) -> tuple[str, dict | None]:
+    """Execute a tool. Returns (result_string_for_llm, raw_result_or_none)."""
     handler = _HANDLERS.get(name)
     if handler:
         return handler(args, df, sessions)
-    return json.dumps({"error": f"Unknown tool: {name}"})
+    return json.dumps({"error": f"Unknown tool: {name}"}), None

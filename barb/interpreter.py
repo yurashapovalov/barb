@@ -106,6 +106,9 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     group_by = query.get("group_by")
     select_raw = query.get("select")
 
+    # Save filtered rows before aggregation destroys them
+    source_df = df
+
     if group_by:
         select = _normalize_select(select_raw or "count()")
         result_df = _group_aggregate(df, group_by, select)
@@ -113,8 +116,9 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
         select = _normalize_select(select_raw)
         result_df = _aggregate(df, select)
     else:
-        # No select, no group_by → return filtered rows
+        # No select, no group_by → result IS the rows, don't duplicate
         result_df = df
+        source_df = None
 
     # 8. SORT
     if query.get("sort") and isinstance(result_df, pd.DataFrame):
@@ -124,7 +128,7 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     if query.get("limit") and isinstance(result_df, pd.DataFrame):
         result_df = result_df.head(query["limit"])
 
-    return _build_response(result_df, query, rows_after_filter, session_name, timeframe, warnings)
+    return _build_response(result_df, query, rows_after_filter, session_name, timeframe, warnings, source_df)
 
 
 # --- Normalization ---
@@ -402,7 +406,7 @@ def _sort(df: pd.DataFrame, sort: str) -> pd.DataFrame:
     )
 
 
-def _build_response(result, query, rows, session, timeframe, warnings) -> dict:
+def _build_response(result, query, rows, session, timeframe, warnings, source_df=None) -> dict:
     """Build the structured response."""
     metadata = {
         "rows": rows,
@@ -411,6 +415,13 @@ def _build_response(result, query, rows, session, timeframe, warnings) -> dict:
         "warnings": warnings,
     }
 
+    # Source rows: evidence for aggregated results
+    source_rows = None
+    source_row_count = None
+    if source_df is not None and isinstance(source_df, pd.DataFrame) and not source_df.empty:
+        source_row_count = len(source_df)
+        source_rows = source_df.reset_index().to_dict("records")
+
     if isinstance(result, pd.DataFrame):
         table = result.reset_index().to_dict("records")
         return {
@@ -418,6 +429,8 @@ def _build_response(result, query, rows, session, timeframe, warnings) -> dict:
             "metadata": metadata,
             "table": table,
             "query": query,
+            "source_rows": source_rows,
+            "source_row_count": source_row_count,
         }
 
     if isinstance(result, dict):
@@ -426,6 +439,8 @@ def _build_response(result, query, rows, session, timeframe, warnings) -> dict:
             "metadata": metadata,
             "table": None,
             "query": query,
+            "source_rows": source_rows,
+            "source_row_count": source_row_count,
         }
 
     # Scalar
@@ -438,4 +453,6 @@ def _build_response(result, query, rows, session, timeframe, warnings) -> dict:
         "metadata": metadata,
         "table": None,
         "query": query,
+        "source_rows": source_rows,
+        "source_row_count": source_row_count,
     }

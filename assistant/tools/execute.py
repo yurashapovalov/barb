@@ -69,8 +69,8 @@ DECLARATION = {
 }
 
 
-def run(args: dict, df: pd.DataFrame, sessions: dict) -> str:
-    """Execute a Barb Script query and return result as JSON string."""
+def run(args: dict, df: pd.DataFrame, sessions: dict) -> tuple[str, dict | None]:
+    """Execute a Barb Script query. Returns (json_for_model, raw_result)."""
     # Gemini may send query nested under "query" key or flat at top level
     query = _normalize_query(args["query"] if "query" in args else args)
     log.info("Executing query: %s", json.dumps(query))
@@ -83,7 +83,7 @@ def run(args: dict, df: pd.DataFrame, sessions: dict) -> str:
             "errors": e.errors,
             "error_count": len(e.errors),
             "hint": "Fix ALL errors above and retry.",
-        })
+        }), None
     except QueryError as e:
         log.warning("Query error: %s", e)
         return json.dumps({
@@ -92,20 +92,23 @@ def run(args: dict, df: pd.DataFrame, sessions: dict) -> str:
             "step": e.step,
             "expression": e.expression,
             "hint": "Fix the query and retry.",
-        })
+        }), None
     except Exception as e:
         log.exception("Unexpected error executing query")
         return json.dumps({
             "error": f"Internal error: {e}",
             "hint": "Simplify the query and retry.",
-        })
+        }), None
 
-    return json.dumps({
+    json_for_model = json.dumps({
         "result": result["result"],
         "metadata": result["metadata"],
         "has_table": result["table"] is not None,
         "row_count": len(result["table"]) if result["table"] else None,
+        "source_row_count": result.get("source_row_count"),
     }, default=str)
+
+    return json_for_model, result
 
 
 def _normalize_query(query: dict) -> dict:

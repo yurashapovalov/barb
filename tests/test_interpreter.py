@@ -393,3 +393,70 @@ class TestSpecExamples:
             "select": "count()",
         }, nq_minute_slice, sessions)
         assert result["result"] >= 0
+
+
+# --- Source Rows (Evidence) ---
+
+class TestSourceRows:
+    def test_scalar_has_source_rows(self, nq_minute_slice, sessions):
+        """count() with where returns source_rows matching the count."""
+        result = execute({
+            "session": "RTH",
+            "from": "daily",
+            "where": "close > open",
+            "select": "count()",
+        }, nq_minute_slice, sessions)
+        assert isinstance(result["result"], (int, float))
+        assert result["source_rows"] is not None
+        assert len(result["source_rows"]) == result["result"]
+        assert result["source_row_count"] == result["result"]
+
+    def test_mean_has_source_rows(self, nq_minute_slice, sessions):
+        """mean() returns all filtered rows as source_rows."""
+        result = execute({
+            "session": "RTH",
+            "from": "daily",
+            "map": {"range": "high - low"},
+            "select": "mean(range)",
+        }, nq_minute_slice, sessions)
+        assert result["source_rows"] is not None
+        assert result["source_row_count"] > 0
+        assert len(result["source_rows"]) == result["source_row_count"]
+
+    def test_group_by_has_source_rows(self, nq_minute_slice, sessions):
+        """group_by returns grouped table + pre-grouped source rows."""
+        result = execute({
+            "session": "RTH",
+            "from": "daily",
+            "map": {"weekday": "dayofweek()"},
+            "group_by": "weekday",
+            "select": "mean(close)",
+        }, nq_minute_slice, sessions)
+        assert result["table"] is not None
+        assert result["source_rows"] is not None
+        assert result["source_row_count"] > len(result["table"])
+
+    def test_no_select_no_source_rows(self, nq_minute_slice, sessions):
+        """Without select, result IS the rows — source_rows is None."""
+        result = execute({
+            "session": "RTH",
+            "from": "daily",
+            "where": "close > open",
+        }, nq_minute_slice, sessions)
+        assert result["source_rows"] is None
+        assert result["source_row_count"] is None
+        assert isinstance(result["result"], list)
+
+    def test_source_rows_have_columns(self, nq_minute_slice, sessions):
+        """Source rows contain the columns available before aggregation."""
+        result = execute({
+            "session": "RTH",
+            "from": "daily",
+            "map": {"range": "high - low"},
+            "where": "close > open",
+            "select": "mean(range)",
+        }, nq_minute_slice, sessions)
+        row = result["source_rows"][0]
+        assert "open" in row
+        assert "close" in row
+        assert "range" in row

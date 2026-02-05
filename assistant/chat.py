@@ -102,8 +102,9 @@ class Assistant:
                 call_start = time.time()
                 call_error = None
 
+                raw_result = None
                 try:
-                    tool_result = run_tool(call.name, call_args, self.df, self.sessions)
+                    tool_result, raw_result = run_tool(call.name, call_args, self.df, self.sessions)
                 except Exception as exc:
                     call_error = str(exc)
                     tool_result = json.dumps({"error": call_error})
@@ -126,7 +127,7 @@ class Assistant:
                 })
 
                 if call.name == "execute_query" and not call_error:
-                    block = _collect_query_data_block(call_args, tool_result)
+                    block = _collect_query_data_block(call_args, tool_result, raw_result)
                     if block:
                         data.append(block)
                         yield {"event": "data_block", "data": block}
@@ -167,7 +168,7 @@ def _build_contents(history: list[dict], message: str) -> list[types.Content]:
     return contents
 
 
-def _collect_query_data_block(args: dict, tool_result: str) -> dict | None:
+def _collect_query_data_block(args: dict, tool_result: str, raw_result: dict | None = None) -> dict | None:
     """Parse execute_query result into a data block, or None."""
     try:
         parsed = json.loads(tool_result)
@@ -177,10 +178,22 @@ def _collect_query_data_block(args: dict, tool_result: str) -> dict | None:
     if "error" in parsed:
         return None
 
-    return {
+    result = parsed.get("result")
+    if isinstance(result, list):
+        rows = len(result)
+    else:
+        rows = None
+
+    block = {
         "query": args["query"] if "query" in args else args,
-        "result": parsed.get("result"),
-        "rows": parsed.get("metadata", {}).get("rows"),
+        "result": result,
+        "rows": rows,
         "session": parsed.get("metadata", {}).get("session"),
         "timeframe": parsed.get("metadata", {}).get("from"),
     }
+
+    if raw_result:
+        block["source_rows"] = raw_result.get("source_rows")
+        block["source_row_count"] = raw_result.get("source_row_count")
+
+    return block

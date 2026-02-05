@@ -45,7 +45,7 @@ class TestCollectQueryDataBlock:
         assert block is not None
         assert block["query"] == {"select": "close", "session": "RTH"}
         assert block["result"] == 18500.50
-        assert block["rows"] == 1
+        assert block["rows"] is None  # scalar result → no row count
         assert block["session"] == "RTH"
         assert block["timeframe"] == "daily"
 
