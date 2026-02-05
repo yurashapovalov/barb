@@ -436,15 +436,15 @@ class TestSourceRows:
         assert result["source_rows"] is not None
         assert result["source_row_count"] > len(result["table"])
 
-    def test_no_select_no_source_rows(self, nq_minute_slice, sessions):
-        """Without select, result IS the rows — source_rows is None."""
+    def test_no_select_has_source_rows(self, nq_minute_slice, sessions):
+        """Without select, source_rows matches result."""
         result = execute({
             "session": "RTH",
             "from": "daily",
             "where": "close > open",
         }, nq_minute_slice, sessions)
-        assert result["source_rows"] is None
-        assert result["source_row_count"] is None
+        assert result["source_rows"] is not None
+        assert result["source_row_count"] == len(result["result"])
         assert isinstance(result["result"], list)
 
     def test_source_rows_have_columns(self, nq_minute_slice, sessions):

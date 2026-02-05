@@ -79,7 +79,7 @@ export function DataPanel({ data, onClose }: DataPanelProps) {
     setSorting([]);
   }, [data]);
 
-  const rows = useMemo(() => normalizeResult(data.result), [data.result]);
+  const rows = useMemo(() => normalizeResult(data.source_rows ?? data.result), [data.source_rows, data.result]);
   const columns = useMemo(() => buildColumns(rows), [rows]);
 
   const table = useReactTable({

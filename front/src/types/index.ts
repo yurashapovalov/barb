@@ -23,6 +23,8 @@ export interface DataBlock {
   rows: number | null;
   session: string | null;
   timeframe: string | null;
+  source_rows: Record<string, unknown>[] | null;
+  source_row_count: number | null;
 }
 
 export interface UsageBlock {

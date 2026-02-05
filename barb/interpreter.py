@@ -116,9 +116,7 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
         select = _normalize_select(select_raw)
         result_df = _aggregate(df, select)
     else:
-        # No select, no group_by → result IS the rows, don't duplicate
         result_df = df
-        source_df = None
 
     # 8. SORT
     if query.get("sort") and isinstance(result_df, pd.DataFrame):
