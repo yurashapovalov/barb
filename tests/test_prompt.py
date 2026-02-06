@@ -67,16 +67,14 @@ class TestBuildSystemPrompt:
 
     def test_has_follow_up_example(self):
         prompt = build_system_prompt("NQ")
-        # Example 5 in the prompt shows follow-up pattern
-        assert "Example 5" in prompt
+        # Example 4 in the prompt shows follow-up pattern
+        assert "Example 4" in prompt
         assert "2023" in prompt  # follow-up period change
 
     def test_has_barb_script_fields(self):
         prompt = build_system_prompt("NQ")
-        # Key Barb Script query fields should be mentioned
+        # Key Barb Script query fields mentioned in instructions
         assert "session" in prompt
         assert "from" in prompt
         assert "map" in prompt
-        assert "where" in prompt
-        assert "group_by" in prompt
-        assert "select" in prompt
+        # group_by and select are in tool description, not system prompt
