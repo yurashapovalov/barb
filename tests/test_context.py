@@ -15,7 +15,7 @@ def _make_history(n_exchanges: int) -> list[dict]:
     history = []
     for i in range(n_exchanges):
         history.append({"role": "user", "text": f"Question {i + 1}"})
-        history.append({"role": "model", "text": f"Answer {i + 1}"})
+        history.append({"role": "assistant", "text": f"Answer {i + 1}"})
     return history
 
 
@@ -70,7 +70,7 @@ class TestBuildHistoryWithContext:
         result = build_history_with_context(context, history)
 
         # First message is summary
-        assert result[0]["role"] == "model"
+        assert result[0]["role"] == "assistant"
         assert "[Previous context]" in result[0]["text"]
         assert "We discussed ranges." in result[0]["text"]
 
@@ -86,49 +86,54 @@ class TestBuildHistoryWithContext:
 
         # Summary + all messages
         assert len(result) == 1 + 10
-        assert result[0]["role"] == "model"
+        assert result[0]["role"] == "assistant"
 
 
 class TestSummarize:
-    def test_calls_gemini_without_tools(self):
+    def test_calls_anthropic_without_tools(self):
         mock_client = MagicMock()
+        mock_content = MagicMock()
+        mock_content.type = "text"
+        mock_content.text = "User asked about daily ranges and volume patterns."
         mock_response = MagicMock()
-        mock_response.text = "User asked about daily ranges and volume patterns."
-        mock_client.models.generate_content.return_value = mock_response
+        mock_response.content = [mock_content]
+        mock_client.messages.create.return_value = mock_response
 
         messages = _make_history(10)
-        result = summarize(mock_client, "gemini-2.5-flash-lite", None, messages)
+        result = summarize(mock_client, "claude-sonnet-4-5-20250514", None, messages)
 
         assert result == "User asked about daily ranges and volume patterns."
-        mock_client.models.generate_content.assert_called_once()
+        mock_client.messages.create.assert_called_once()
 
         # Verify no tools in the call
-        call_kwargs = mock_client.models.generate_content.call_args
+        call_kwargs = mock_client.messages.create.call_args
         assert "tools" not in (call_kwargs.kwargs or {})
 
     def test_includes_old_summary(self):
         mock_client = MagicMock()
+        mock_content = MagicMock()
+        mock_content.type = "text"
+        mock_content.text = "Extended summary."
         mock_response = MagicMock()
-        mock_response.text = "Extended summary."
-        mock_client.models.generate_content.return_value = mock_response
+        mock_response.content = [mock_content]
+        mock_client.messages.create.return_value = mock_response
 
         messages = _make_history(5)
         result = summarize(
-            mock_client, "gemini-2.5-flash-lite", "Old summary.", messages,
+            mock_client, "claude-sonnet-4-5-20250514", "Old summary.", messages,
         )
 
         assert result == "Extended summary."
         # Verify old summary was included in the prompt
-        call_args = mock_client.models.generate_content.call_args
-        contents = call_args.kwargs.get("contents") or call_args[1]
-        text = contents[0].parts[0].text
-        assert "Old summary." in text
+        call_kwargs = mock_client.messages.create.call_args
+        prompt_messages = call_kwargs.kwargs.get("messages", [])
+        assert any("Old summary." in msg.get("content", "") for msg in prompt_messages)
 
     def test_empty_response(self):
         mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.text = None
-        mock_client.models.generate_content.return_value = mock_response
+        mock_response.content = []
+        mock_client.messages.create.return_value = mock_response
 
-        result = summarize(mock_client, "gemini-2.5-flash-lite", None, [])
+        result = summarize(mock_client, "claude-sonnet-4-5-20250514", None, [])
         assert result == ""

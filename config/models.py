@@ -27,38 +27,27 @@ class ModelConfig:
     pricing: ModelPricing
     context_window: int
     max_output: int
-    thinking_budget: int | None = None  # None = use thinkingLevel, int = use thinkingBudget
+    thinking_budget: int | None = None  # Gemini 2.5: None = dynamic, 0 = off
+    thinking_level: str | None = None   # Gemini 3: "minimal", "low", "medium", "high"
 
 
 MODELS = {
-    "gemini-3-flash": ModelConfig(
-        id="gemini-3-flash-preview",
-        name="Gemini 3 Flash",
+    "gemini-2.5-flash": ModelConfig(
+        id="gemini-2.5-flash",
+        name="Gemini 2.5 Flash",
         pricing=ModelPricing(
-            input=0.50,
-            output=3.00,
-            thinking=3.00,
-            cache=0.05,
+            input=0.30,
+            output=2.50,
+            thinking=2.50,
+            cache=0.03,
         ),
         context_window=1_000_000,
         max_output=65_536,
-    ),
-    "gemini-2.5-flash-lite": ModelConfig(
-        id="gemini-2.5-flash-lite-preview-09-2025",
-        name="Gemini 2.5 Flash Lite",
-        pricing=ModelPricing(
-            input=0.10,
-            output=0.40,
-            thinking=0.40,
-            cache=0.01,
-        ),
-        context_window=1_000_000,
-        max_output=65_536,
-        thinking_budget=512,
+        thinking_budget=0,
     ),
 }
 
-DEFAULT_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 def get_model(name: str = DEFAULT_MODEL) -> ModelConfig:

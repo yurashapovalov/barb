@@ -100,17 +100,17 @@ class ChatRequest(BaseModel):
 
 @lru_cache
 def _get_assistant(instrument: str) -> Assistant:
-    """One Assistant (and genai.Client) per instrument, reused across requests."""
+    """One Assistant per instrument, reused across requests."""
     settings = get_settings()
-    if not settings.gemini_api_key:
-        raise RuntimeError("GEMINI_API_KEY not configured")
+    if not settings.anthropic_api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
     instrument_config = get_instrument(instrument)
     if not instrument_config:
         raise ValueError(f"Unknown instrument: {instrument}")
 
     return Assistant(
-        api_key=settings.gemini_api_key,
+        api_key=settings.anthropic_api_key,
         instrument=instrument,
         df=load_data(instrument),
         sessions=instrument_config["sessions"],
@@ -173,11 +173,12 @@ def _persist_chat(
         accumulated = {
             "input_tokens": old_usage["input_tokens"] + new_usage["input_tokens"],
             "output_tokens": old_usage["output_tokens"] + new_usage["output_tokens"],
-            "thinking_tokens": old_usage["thinking_tokens"] + new_usage["thinking_tokens"],
-            "cached_tokens": old_usage["cached_tokens"] + new_usage["cached_tokens"],
+            "cache_read_tokens": old_usage.get("cache_read_tokens", 0) + new_usage.get("cache_read_tokens", 0),
+            "cache_write_tokens": old_usage.get("cache_write_tokens", 0) + new_usage.get("cache_write_tokens", 0),
             "input_cost": old_usage["input_cost"] + new_usage["input_cost"],
             "output_cost": old_usage["output_cost"] + new_usage["output_cost"],
-            "thinking_cost": old_usage["thinking_cost"] + new_usage["thinking_cost"],
+            "cache_read_cost": old_usage.get("cache_read_cost", 0) + new_usage.get("cache_read_cost", 0),
+            "cache_write_cost": old_usage.get("cache_write_cost", 0) + new_usage.get("cache_write_cost", 0),
             "total_cost": old_usage["total_cost"] + new_usage["total_cost"],
             "message_count": old_usage["message_count"] + 1,
         }
@@ -208,7 +209,7 @@ def _maybe_summarize(
         msgs_to_summarize = raw_history[summary_up_to * 2 : cutoff * 2]
 
         summary_text = summarize(
-            assistant.client, assistant.model_config.id,
+            assistant.client, assistant.model,
             old_summary, msgs_to_summarize,
         )
         db.table("conversations").update({
@@ -236,8 +237,8 @@ def health():
     except Exception:
         checks["supabase"] = "fail"
 
-    # Gemini API key
-    checks["gemini"] = "ok" if get_settings().gemini_api_key else "fail"
+    # Anthropic API key
+    checks["anthropic"] = "ok" if get_settings().anthropic_api_key else "fail"
 
     # Data file
     checks["data"] = "ok" if (DATA_DIR / "NQ.parquet").exists() else "fail"
@@ -416,15 +417,15 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
     try:
         assistant = _get_assistant(instrument)
     except RuntimeError:
-        raise HTTPException(500, "GEMINI_API_KEY not configured")
+        raise HTTPException(500, "ANTHROPIC_API_KEY not configured")
     except ValueError:
         raise HTTPException(400, f"Unknown instrument: {instrument}")
 
-    # Load message history from DB
+    # Load message history from DB (including tool calls for context)
     try:
         msg_result = (
             db.table("messages")
-            .select("role, content")
+            .select("id, role, content")
             .eq("conversation_id", request.conversation_id)
             .order("created_at", desc=False)
             .execute()
@@ -433,7 +434,28 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
         log.exception("Failed to load messages")
         raise HTTPException(503, "Service temporarily unavailable")
 
-    raw_history = [{"role": m["role"], "text": m["content"]} for m in msg_result.data]
+    model_ids = [m["id"] for m in msg_result.data if m["role"] == "model"]
+    tc_by_msg = {}
+    if model_ids:
+        try:
+            tc_result = (
+                db.table("tool_calls")
+                .select("message_id, tool_name, input, output")
+                .in_("message_id", model_ids)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            for tc in tc_result.data:
+                tc_by_msg.setdefault(tc["message_id"], []).append(tc)
+        except Exception:
+            log.warning("Failed to load tool calls for history, continuing without")
+
+    raw_history = []
+    for m in msg_result.data:
+        entry = {"role": m["role"], "text": m["content"]}
+        if m["role"] == "model" and m["id"] in tc_by_msg:
+            entry["tool_calls"] = tc_by_msg[m["id"]]
+        raw_history.append(entry)
     history = build_history_with_context(conversation.get("context"), raw_history)
 
     def _sse(event: str, data) -> str:

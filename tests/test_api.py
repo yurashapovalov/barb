@@ -267,28 +267,23 @@ class TestChatStream:
         """Events that chat_stream() yields."""
         return [
             {"event": "tool_start", "data": {
-                "tool_name": "execute_query", "input": {"query": {"select": "range"}},
+                "tool_name": "compute_stat", "input": {"function": "mean", "column": "range"},
             }},
             {"event": "tool_end", "data": {
-                "tool_name": "execute_query", "duration_ms": 45, "error": None,
-            }},
-            {"event": "data_block", "data": {
-                "query": {"select": "range"}, "result": 150,
-                "rows": 1, "session": "RTH", "timeframe": None,
+                "tool_name": "compute_stat", "duration_ms": 45, "error": None,
             }},
             {"event": "text_delta", "data": {"delta": "The average range is 150 points."}},
             {"event": "done", "data": {
                 "answer": "The average range is 150 points.",
-                "data": [{"query": {"select": "range"}, "result": 150,
-                          "rows": 1, "session": "RTH", "timeframe": None}],
+                "data": [],
                 "usage": {
                     "input_tokens": 500, "output_tokens": 200, "thinking_tokens": 0,
                     "cached_tokens": 100, "input_cost": 0.0001, "output_cost": 0.0002,
                     "thinking_cost": 0.0, "total_cost": 0.0003,
                 },
                 "tool_calls": [
-                    {"tool_name": "execute_query", "input": {"query": {"select": "range"}},
-                     "output": json.dumps({"result": 150}), "error": None, "duration_ms": 45},
+                    {"tool_name": "compute_stat", "input": {"function": "mean", "column": "range"},
+                     "output": "150.3", "error": None, "duration_ms": 45},
                 ],
             }},
         ]

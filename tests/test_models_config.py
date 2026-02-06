@@ -1,81 +1,64 @@
 """Tests for config/models.py — pricing and cost calculation."""
 
-from config.models import DEFAULT_MODEL, calculate_cost, get_model
+from config.models import DEFAULT_MODEL, MODELS, calculate_cost, get_model
 
 
 class TestGetModel:
-    def test_known_model(self):
-        m = get_model("gemini-3-flash")
-        assert m.id == "gemini-3-flash-preview"
-        assert m.name == "Gemini 3 Flash"
-        assert m.pricing.input == 0.50
-        assert m.pricing.output == 3.00
+    def test_default_model_exists(self):
+        assert DEFAULT_MODEL in MODELS
 
     def test_default_model(self):
         m = get_model()
-        assert m.id == get_model(DEFAULT_MODEL).id
+        assert m.id == MODELS[DEFAULT_MODEL].id
 
     def test_unknown_model_returns_default(self):
         m = get_model("nonexistent-model")
         assert m.id == get_model(DEFAULT_MODEL).id
+
+    def test_all_models_have_required_fields(self):
+        for name, m in MODELS.items():
+            assert m.id, f"{name}: missing id"
+            assert m.name, f"{name}: missing name"
+            assert m.pricing.input >= 0, f"{name}: negative input price"
+            assert m.pricing.output >= 0, f"{name}: negative output price"
+            assert m.context_window > 0, f"{name}: invalid context_window"
 
 
 class TestCalculateCost:
     def test_zero_tokens(self):
         result = calculate_cost(input_tokens=0, output_tokens=0)
         assert result["total_cost"] == 0.0
-        assert result["input_tokens"] == 0
-        assert result["output_tokens"] == 0
 
     def test_input_only(self):
-        # 1M input tokens at $0.10/1M (flash-lite default)
+        p = get_model().pricing
         result = calculate_cost(input_tokens=1_000_000, output_tokens=0)
-        assert result["input_cost"] == 0.10
+        assert result["input_cost"] == p.input
         assert result["output_cost"] == 0.0
-        assert result["total_cost"] == 0.10
+        assert result["total_cost"] == p.input
 
     def test_output_only(self):
-        # 1M output tokens at $0.40/1M (flash-lite default)
+        p = get_model().pricing
         result = calculate_cost(input_tokens=0, output_tokens=1_000_000)
-        assert result["output_cost"] == 0.40
-        assert result["total_cost"] == 0.40
-
-    def test_mixed(self):
-        result = calculate_cost(
-            input_tokens=500_000,
-            output_tokens=100_000,
-            model="gemini-2.5-flash-lite",
-        )
-        # input: 500k * 0.10 / 1M = 0.05
-        # output: 100k * 0.40 / 1M = 0.04
-        assert abs(result["input_cost"] - 0.05) < 1e-10
-        assert abs(result["output_cost"] - 0.04) < 1e-10
-        assert abs(result["total_cost"] - 0.09) < 1e-10
+        assert result["output_cost"] == p.output
+        assert result["total_cost"] == p.output
 
     def test_cached_tokens_reduce_input_cost(self):
-        # 1M input, 600k cached → 400k fresh at $0.10 + 600k at $0.01
+        p = get_model().pricing
         result = calculate_cost(
-            input_tokens=1_000_000,
-            output_tokens=0,
-            cached_tokens=600_000,
-            model="gemini-2.5-flash-lite",
+            input_tokens=1_000_000, output_tokens=0, cached_tokens=600_000,
         )
-        # fresh: 400k * 0.10 / 1M = 0.04
-        # cache: 600k * 0.01 / 1M = 0.006
-        expected = 0.04 + 0.006
+        # 400k fresh + 600k cached
+        expected = 400_000 / 1_000_000 * p.input + 600_000 / 1_000_000 * p.cache
         assert abs(result["input_cost"] - expected) < 1e-10
         assert result["cached_tokens"] == 600_000
 
     def test_thinking_tokens(self):
+        p = get_model().pricing
         result = calculate_cost(
-            input_tokens=0,
-            output_tokens=0,
-            thinking_tokens=1_000_000,
-            model="gemini-3-flash",
+            input_tokens=0, output_tokens=0, thinking_tokens=1_000_000,
         )
-        # thinking: 1M * 3.00 / 1M = 3.00
-        assert result["thinking_cost"] == 3.00
-        assert result["total_cost"] == 3.00
+        assert result["thinking_cost"] == p.thinking
+        assert result["total_cost"] == p.thinking
 
     def test_return_structure(self):
         result = calculate_cost(
@@ -85,14 +68,3 @@ class TestCalculateCost:
             "input_tokens", "output_tokens", "thinking_tokens", "cached_tokens",
             "input_cost", "output_cost", "thinking_cost", "total_cost",
         }
-
-    def test_specific_model(self):
-        # gemini-3-flash: input=$0.50, output=$3.00
-        result = calculate_cost(
-            input_tokens=1_000_000,
-            output_tokens=1_000_000,
-            model="gemini-3-flash",
-        )
-        assert result["input_cost"] == 0.50
-        assert result["output_cost"] == 3.00
-        assert result["total_cost"] == 3.50

@@ -2,7 +2,7 @@
 
 import logging
 
-from google.genai import types
+import anthropic
 
 log = logging.getLogger(__name__)
 
@@ -35,20 +35,20 @@ def build_history_with_context(
         return messages
 
     summary_up_to = context.get("summary_up_to", 0)
-    # Each exchange = 2 rows (user + model)
+    # Each exchange = 2 rows (user + assistant)
     recent = messages[summary_up_to * 2 :]
 
     summary_msg = {
-        "role": "model",
+        "role": "assistant",
         "text": f"[Previous context]\n{context['summary']}",
     }
     return [summary_msg] + recent
 
 
 def summarize(
-    client, model_id: str, old_summary: str | None, messages: list[dict],
+    client: anthropic.Anthropic, model_id: str, old_summary: str | None, messages: list[dict],
 ) -> str:
-    """Summarize conversation history via direct Gemini call (no tools)."""
+    """Summarize conversation history via direct Anthropic call (no tools)."""
     parts = []
     if old_summary:
         parts.append(f"Previous summary:\n{old_summary}\n\nNew messages:\n")
@@ -60,14 +60,14 @@ def summarize(
 
     conversation_text = "\n".join(parts)
 
-    response = client.models.generate_content(
+    response = client.messages.create(
         model=model_id,
-        contents=[
-            types.Content(
-                role="user",
-                parts=[types.Part(text=f"{_SUMMARY_PROMPT}\n\n{conversation_text}")],
-            ),
+        max_tokens=1024,
+        messages=[
+            {"role": "user", "content": f"{_SUMMARY_PROMPT}\n\n{conversation_text}"},
         ],
     )
 
-    return response.text or ""
+    if response.content and response.content[0].type == "text":
+        return response.content[0].text
+    return ""

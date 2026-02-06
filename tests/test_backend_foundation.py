@@ -110,7 +110,7 @@ class TestHealthCheck:
         mock_db.table.return_value = _mock_table_chain([])
 
         mock_settings = MagicMock()
-        mock_settings.gemini_api_key = "test-key"
+        mock_settings.anthropic_api_key = "test-key"
 
         with (
             patch("api.main.get_db", return_value=mock_db),
@@ -124,7 +124,7 @@ class TestHealthCheck:
         data = r.json()
         assert data["status"] == "ok"
         assert data["checks"]["supabase"] == "ok"
-        assert data["checks"]["gemini"] == "ok"
+        assert data["checks"]["anthropic"] == "ok"
         assert data["checks"]["data"] == "ok"
 
     def test_supabase_fail(self, client):
@@ -132,7 +132,7 @@ class TestHealthCheck:
         mock_db.table.side_effect = Exception("connection refused")
 
         mock_settings = MagicMock()
-        mock_settings.gemini_api_key = "test-key"
+        mock_settings.anthropic_api_key = "test-key"
 
         with (
             patch("api.main.get_db", return_value=mock_db),
@@ -146,14 +146,14 @@ class TestHealthCheck:
         data = r.json()
         assert data["status"] == "fail"
         assert data["checks"]["supabase"] == "fail"
-        assert data["checks"]["gemini"] == "ok"
+        assert data["checks"]["anthropic"] == "ok"
 
-    def test_gemini_key_missing(self, client):
+    def test_anthropic_key_missing(self, client):
         mock_db = MagicMock()
         mock_db.table.return_value = _mock_table_chain([])
 
         mock_settings = MagicMock()
-        mock_settings.gemini_api_key = ""
+        mock_settings.anthropic_api_key = ""
 
         with (
             patch("api.main.get_db", return_value=mock_db),
@@ -165,14 +165,14 @@ class TestHealthCheck:
 
         assert r.status_code == 503
         data = r.json()
-        assert data["checks"]["gemini"] == "fail"
+        assert data["checks"]["anthropic"] == "fail"
 
     def test_data_file_missing(self, client):
         mock_db = MagicMock()
         mock_db.table.return_value = _mock_table_chain([])
 
         mock_settings = MagicMock()
-        mock_settings.gemini_api_key = "test-key"
+        mock_settings.anthropic_api_key = "test-key"
 
         with (
             patch("api.main.get_db", return_value=mock_db),

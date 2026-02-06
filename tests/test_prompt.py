@@ -25,28 +25,58 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt("NQ")
         assert "2008" in prompt
 
-    def test_contains_rules(self):
+    def test_contains_run_query_tool(self):
         prompt = build_system_prompt("NQ")
-        assert "get_query_reference" in prompt
-        assert "error" in prompt.lower()
+        assert "run_query" in prompt
+        assert "ONE tool" in prompt
 
     def test_has_few_shot_examples(self):
         prompt = build_system_prompt("NQ")
         assert "<examples>" in prompt
-        assert "execute_query" in prompt
-        assert "inside day" in prompt.lower()
+        assert "run_query" in prompt
+        # Check for Barb Script query structure
+        assert "session" in prompt
+        assert "from" in prompt
+        assert "map" in prompt
 
     def test_data_shown_separately(self):
         prompt = build_system_prompt("NQ")
-        assert "do not repeat numbers" in prompt.lower()
+        assert "data is shown" in prompt.lower()
 
     def test_has_structured_sections(self):
         prompt = build_system_prompt("NQ")
-        assert "<role>" in prompt
         assert "<context>" in prompt
         assert "<instructions>" in prompt
-        assert "<constraints>" in prompt
+        assert "<examples>" in prompt
 
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError, match="Unknown instrument"):
             build_system_prompt("BOGUS")
+
+    def test_has_percentage_instructions(self):
+        prompt = build_system_prompt("NQ")
+        # Barb Script approach: two queries for percentage
+        assert "percentage" in prompt.lower()
+        assert "TWO queries" in prompt
+
+    def test_has_session_instruction(self):
+        prompt = build_system_prompt("NQ")
+        # Should tell model to use default session for daily+
+        assert "session" in prompt.lower()
+        assert "daily" in prompt.lower()
+
+    def test_has_follow_up_example(self):
+        prompt = build_system_prompt("NQ")
+        # Example 5 in the prompt shows follow-up pattern
+        assert "Example 5" in prompt
+        assert "2023" in prompt  # follow-up period change
+
+    def test_has_barb_script_fields(self):
+        prompt = build_system_prompt("NQ")
+        # Key Barb Script query fields should be mentioned
+        assert "session" in prompt
+        assert "from" in prompt
+        assert "map" in prompt
+        assert "where" in prompt
+        assert "group_by" in prompt
+        assert "select" in prompt
