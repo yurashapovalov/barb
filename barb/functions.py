@@ -94,6 +94,7 @@ FUNCTIONS: dict[str, Callable] = {
     "dayofweek": lambda df: pd.Series(df.index.dayofweek, index=df.index),
     "dayname": lambda df: pd.Series(df.index.day_name(), index=df.index),
     "hour": lambda df: pd.Series(df.index.hour, index=df.index),
+    "minute": lambda df: pd.Series(df.index.minute, index=df.index),
     "month": lambda df: pd.Series(df.index.month, index=df.index),
     "monthname": lambda df: pd.Series(df.index.month_name(), index=df.index),
     "year": lambda df: pd.Series(df.index.year, index=df.index),

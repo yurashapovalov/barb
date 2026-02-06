@@ -240,6 +240,11 @@ class TestTime:
         result = FUNCTIONS["monthname"](df)
         assert result.iloc[0] == "January"
 
+    def test_minute(self, df):
+        result = FUNCTIONS["minute"](df)
+        # Daily bars at midnight → minute is 0
+        assert result.iloc[0] == 0
+
     def test_quarter(self, df):
         result = FUNCTIONS["quarter"](df)
         assert result.iloc[0] == 1  # Q1

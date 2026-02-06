@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end test: real Gemini API calls through the full Barb pipeline.
+"""End-to-end test: real Anthropic API calls through the full Barb pipeline.
 
 Usage:
     python scripts/e2e.py              # run all scenarios
@@ -46,91 +46,91 @@ class C:
 
 
 # --- Test scenarios ---
+# Based on real trader tasks. See docs/e2e-scenarios.md for rationale.
 
 SCENARIOS = [
     {
-        "name": "Analytical — average daily range",
+        "name": "Gap fade — стоит ли торговать закрытие гэпа",
         "messages": [
-            "What is the average daily range for NQ?",
+            "Какой процент гэпов на открытии закрывается в тот же день?",
+            "да, только считай гэпы больше 20 пунктов",
+            "а отдельно для гэпов вверх и вниз?",
         ],
-        "expect_tools": ["execute_query"],
+        "expect_tool": True,
+        "expect_data": True,  # count() returns source_rows as evidence
+    },
+    {
+        "name": "Пятничный bias — стоит ли держать позицию",
+        "messages": [
+            "какой средний range последнего часа торгов по пятницам за 2024 год по сравнению с другими днями?",
+            "давай",
+            "а в какой процент пятниц цена закрытия была ниже цены на 15:00?",
+        ],
+        "expect_tool": True,
         "expect_data": True,
     },
     {
-        "name": "Filtered — inside days in 2024",
+        "name": "ORB — когда формируется хай дня",
         "messages": [
-            "How many inside days were there in 2024?",
+            "In what percentage of days is the high or low of the RTH session set within the first 30 minutes?",
+            "yes",
+            "show me by quarter for 2024",
         ],
-        "expect_tools": ["execute_query"],
+        "expect_tool": True,
         "expect_data": True,
     },
     {
-        "name": "Knowledge — no query needed",
+        "name": "Volatility clustering — чего ждать завтра",
+        "messages": [
+            "после дней с range больше 300 пунктов какой средний range на следующий день?",
+            "да, RTH",
+            "покажи эти дни и что было на следующий день",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
+        "name": "Сезонность объёма — когда не торговать",
+        "messages": [
+            "покажи средний дневной объём по месяцам за последние 2 года",
+            "давай, только ETH сессию используй",
+            "а по дням недели?",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
+        "name": "Inside day breakout — стоит ли ждать движение",
+        "messages": [
+            "сколько inside days было за 2024-2025?",
+            "да, RTH",
+            "какой средний range на следующий день после inside day?",
+            "покажи топ-10 самых сильных движений после inside day",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
+        "name": "Knowledge — NR7",
         "messages": [
             "What is NR7?",
         ],
-        "expect_tools": [],
-        "expect_data": False,
-    },
-    {
-        "name": "Multi-turn — follow-up question",
-        "messages": [
-            "What is the average daily range for NQ?",
-            "Now break it down by weekday",
-        ],
-        "expect_tools": ["execute_query"],
-        "expect_data": True,
-    },
-    {
-        "name": "Group-by — volume by month 2024",
-        "messages": [
-            "Show me average daily volume by month for 2024",
-        ],
-        "expect_tools": ["execute_query"],
-        "expect_data": True,
-    },
-    {
-        "name": "Russian — gap analysis",
-        "messages": [
-            "Какой средний размер гэпа на открытии NQ за последний год?",
-        ],
-        "expect_tools": ["execute_query"],
-        "expect_data": True,
-    },
-    {
-        "name": "Russian — weekday high/low distribution",
-        "messages": [
-            "Распредели дни недели по частоте хай лоу приходящимся на этот день в течение недели",
-        ],
-        "expect_tools": [],
-        "expect_data": False,
-    },
-    {
-        "name": "Russian — ATH by weekday",
-        "messages": [
-            "На какие дни недели чаще всего приходился ATH показать списком по убыванию частоты",
-        ],
-        "expect_tools": [],
+        "expect_tool": False,
         "expect_data": False,
     },
 ]
 
 
 def create_assistant():
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print(f"{C.RED}ERROR: GEMINI_API_KEY not set. Add to .env or export.{C.END}")
+        print(f"{C.RED}ERROR: ANTHROPIC_API_KEY not set. Add to .env or export.{C.END}")
         sys.exit(1)
 
     instrument = "NQ"
     config = get_instrument(instrument)
     df = load_data(instrument)
-    return Assistant(
-        api_key=api_key,
-        instrument=instrument,
-        df=df,
-        sessions=config["sessions"],
-    )
+    return Assistant(api_key=api_key, instrument=instrument, df=df, sessions=config["sessions"])
 
 
 def chat_sync(assistant, message, history=None):
@@ -185,70 +185,50 @@ def chat_sync(assistant, message, history=None):
 
 def print_trace(result, show_prompt=False):
     """Print tool call trace from a chat result."""
-    if show_prompt:
-        print(f"{C.DIM}    Model: {result.get('model', '?')}{C.END}")
-
     for step in result.get("steps", []):
         tool = step["tool"]
         args = step["args"]
-        tool_result = step["result"]
+        tool_result = step.get("result", "")
 
-        if tool == "get_query_reference":
-            print(f"{C.CYAN}    [{step['round']}] {tool}{C.END}"
-                  f"{C.DIM} → {len(tool_result)} chars{C.END}")
-            continue
+        # Format query args nicely
+        if "query" in args:
+            args_str = json.dumps(args["query"], ensure_ascii=False)
+            if len(args_str) > 80:
+                args_str = args_str[:77] + "..."
+        else:
+            args_str = ", ".join(f"{k}={v!r}" for k, v in args.items()) if args else ""
 
-        if tool == "execute_query":
-            query = args.get("query", {})
-            print(f"{C.CYAN}    [{step['round']}] {tool}{C.END}")
-            print(f"{C.DIM}    Query: {json.dumps(query)}{C.END}")
+        prefix = f"{C.CYAN}    [{step['round']}] {tool}({args_str}){C.END}"
 
-            try:
-                parsed = json.loads(tool_result)
-                if "errors" in parsed:
-                    for err in parsed["errors"]:
-                        print(f"{C.RED}    → {err['message']}{C.END}")
-                elif "error" in parsed:
-                    print(f"{C.RED}    → ERROR: {parsed['error']}{C.END}")
-                elif parsed.get("has_table"):
-                    print(f"{C.GREEN}    → table: {parsed['row_count']} rows{C.END}")
-                else:
-                    print(f"{C.GREEN}    → {parsed.get('result', '?')}{C.END}")
-            except json.JSONDecodeError:
-                print(f"{C.YELLOW}    → {tool_result[:100]}{C.END}")
-            continue
-
-        print(f"{C.CYAN}    [{step['round']}] {tool}({args}){C.END}")
+        if step.get("error"):
+            print(f"{prefix} {C.RED}→ ERROR: {step['error']}{C.END}")
+        elif tool_result and len(tool_result) > 100:
+            print(f"{prefix} {C.DIM}→ {tool_result[:80]}...{C.END}")
+        elif tool_result:
+            print(f"{prefix} {C.GREEN}→ {tool_result}{C.END}")
+        else:
+            print(prefix)
 
 
-def run_checks(result, scenario):
-    """Run soft checks on a scenario result. Returns list of warnings."""
+def run_checks(turns, scenario):
+    """Run soft checks across all turns. Returns list of warnings."""
     warnings = []
 
-    if not result["answer"].strip():
+    last_answer = turns[-1].get("answer", "") if turns else ""
+    if not last_answer.strip():
         warnings.append("Empty answer")
 
-    tools_called = [s["tool"] for s in result.get("steps", [])]
-    expect_tools = scenario["expect_tools"]
+    # Check if tool was called when expected
+    all_tools = []
+    for turn in turns:
+        for step in turn.get("steps", []):
+            all_tools.append(step["tool"])
 
-    if expect_tools:
-        for expected in expect_tools:
-            if expected not in tools_called:
-                warnings.append(f"Expected tool '{expected}' not called (got: {tools_called})")
-    else:
-        if tools_called:
-            warnings.append(f"Expected no tools, got: {tools_called}")
-
-    data = result.get("data", [])
-    if scenario.get("expect_data"):
-        if not data:
-            warnings.append("Expected data block but got none")
-        for d in data:
-            if d.get("result") is None:
-                warnings.append("Data block has no result")
-    else:
-        if data:
-            warnings.append(f"Expected no data, got {len(data)} blocks")
+    expect_tool = scenario.get("expect_tool", False)
+    if expect_tool and not all_tools:
+        warnings.append("Expected tool call but got none")
+    elif not expect_tool and all_tools:
+        warnings.append(f"Expected no tools, got: {all_tools}")
 
     return warnings
 
@@ -287,15 +267,14 @@ def run_scenario(assistant, scenario, quiet=False):
         if not quiet:
             print_trace(result, show_prompt=(i == 0))
 
-        # Print data blocks (direct from interpreter, not from model)
+        # Print data blocks
         for d in result.get("data", []):
-            query_str = json.dumps(d["query"])
-            print(f"\n{C.BOLD}    DATA:{C.END} {d['result']}")
-            print(f"{C.DIM}    Query: {query_str}{C.END}")
-            if d.get("rows"):
-                print(f"{C.DIM}    Rows: {d['rows']}, "
-                      f"Session: {d.get('session', '-')}, "
-                      f"Timeframe: {d.get('timeframe', '-')}{C.END}")
+            tool_name = d.get("tool", "?")
+            rows = d.get("rows")
+            result_preview = str(d.get("result", ""))[:200]
+            print(f"\n{C.BOLD}    DATA ({tool_name}):{C.END} {result_preview}")
+            if rows:
+                print(f"{C.DIM}    Rows: {rows}{C.END}")
 
         # Print model commentary
         answer = result["answer"]
@@ -305,27 +284,52 @@ def run_scenario(assistant, scenario, quiet=False):
 
         # Cost and timing
         cost = result["cost"]
+        cache_read = cost.get("cache_read_tokens", 0)
+        cache_write = cost.get("cache_write_tokens", 0)
+        extras = ""
+        if cache_read:
+            extras += f" cache_read:{cache_read}"
+        if cache_write:
+            extras += f" cache_write:{cache_write}"
         print(f"{C.DIM}    ${cost['total_cost']:.6f} "
-              f"({cost['input_tokens']}in/{cost['output_tokens']}out) "
+              f"({cost['input_tokens']}in/{cost['output_tokens']}out{extras}) "
               f"{elapsed:.1f}s{C.END}")
 
-        # Run checks on last message
+        # Run checks after last message
         if i == len(messages) - 1:
-            all_warnings = run_checks(result, scenario)
+            all_warnings = run_checks(turns + [{"answer": result["answer"], "steps": result.get("steps", [])}], scenario)
+            # Check data across all turns
+            all_data = []
+            for t in turns:
+                all_data.extend(t.get("data", []))
+            all_data.extend(result.get("data", []))
+            if scenario.get("expect_data"):
+                if not all_data:
+                    all_warnings.append("Expected data block but got none")
+            else:
+                if all_data:
+                    all_warnings.append(f"Expected no data, got {len(all_data)} blocks")
 
         # Save turn for log
         turns.append({
             "user": msg,
             "answer": result["answer"],
             "steps": result.get("steps", []),
+            "data": result.get("data", []),
             "cost": result["cost"],
-            "model": result.get("model"),
             "elapsed_s": round(elapsed, 2),
         })
 
-        # Accumulate history
+        # Accumulate history with tool calls for model context
         history.append({"role": "user", "text": msg})
-        history.append({"role": "model", "text": result["answer"]})
+        entry = {"role": "assistant", "text": result["answer"]}
+        tool_calls = [
+            {"tool_name": s["tool"], "input": s["args"], "output": s["result"]}
+            for s in result.get("steps", [])
+        ]
+        if tool_calls:
+            entry["tool_calls"] = tool_calls
+        history.append(entry)
 
     # Print status
     if all_warnings:
@@ -335,10 +339,21 @@ def run_scenario(assistant, scenario, quiet=False):
     else:
         print(f"\n    {C.GREEN}PASS{C.END}")
 
+    # Sum cost across all turns
+    total_cost = {
+        "input_tokens": 0, "output_tokens": 0,
+        "cache_read_tokens": 0, "cache_write_tokens": 0,
+        "input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0,
+    }
+    for t in turns:
+        if t.get("cost"):
+            for k in total_cost:
+                total_cost[k] += t["cost"].get(k, 0)
+
     return {
         "name": name,
         "passed": len(all_warnings) == 0,
-        "cost": last_result["cost"] if last_result else None,
+        "cost": total_cost,
         "turns": turns,
         "warnings": all_warnings,
     }
@@ -352,7 +367,7 @@ def main():
 
     print(f"{C.BOLD}Loading data...{C.END}")
     assistant = create_assistant()
-    print(f"{C.DIM}Ready.{C.END}")
+    print(f"{C.DIM}Ready. Model: {assistant.model}{C.END}")
 
     scenarios = SCENARIOS
     if args.scenario:
@@ -394,6 +409,7 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report = {
         "timestamp": datetime.now().isoformat(),
+        "model": assistant.model,
         "passed": passed,
         "total": len(results),
         "total_cost": total_cost,
@@ -409,7 +425,7 @@ def main():
         ],
     }
 
-    path = results_dir / f"{timestamp}.json"
+    path = results_dir / f"{timestamp}_sonnet.json"
     path.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str))
     print(f"\n  Saved: {path.relative_to(ROOT)}")
 

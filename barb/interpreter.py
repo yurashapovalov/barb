@@ -21,7 +21,7 @@ TIMEFRAMES = {
 }
 
 # Resample rules for pandas
-_RESAMPLE_RULES = {
+RESAMPLE_RULES = {
     "1m": None,  # no resampling
     "5m": "5min",
     "15m": "15min",
@@ -78,27 +78,27 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     # 1. SESSION — filter minute data by time of day
     session_name = query.get("session")
     if session_name:
-        df, warn = _filter_session(df, session_name, sessions)
+        df, warn = filter_session(df, session_name, sessions)
         if warn:
             warnings.append(warn)
 
     # 2. PERIOD — filter by date range
     period = query.get("period")
     if period:
-        df = _filter_period(df, period)
+        df = filter_period(df, period)
 
     # 3. FROM — resample to target timeframe
     timeframe = query.get("from", "1m")
     if timeframe != "1m":
-        df = _resample(df, timeframe)
+        df = resample(df, timeframe)
 
     # 4. MAP — compute derived columns
     if query.get("map"):
-        df = _compute_map(df, query["map"])
+        df = compute_map(df, query["map"])
 
     # 5. WHERE — filter rows
     if query.get("where"):
-        df = _filter_where(df, query["where"])
+        df = filter_where(df, query["where"])
 
     rows_after_filter = len(df)
 
@@ -120,7 +120,7 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
 
     # 8. SORT
     if query.get("sort") and isinstance(result_df, pd.DataFrame):
-        result_df = _sort(result_df, query["sort"])
+        result_df = sort_df(result_df, query["sort"])
 
     # 9. LIMIT
     if query.get("limit") and isinstance(result_df, pd.DataFrame):
@@ -171,7 +171,7 @@ def _validate(query: dict):
 
 # --- Pipeline steps ---
 
-def _filter_session(
+def filter_session(
     df: pd.DataFrame, session: str, sessions: dict,
 ) -> tuple[pd.DataFrame, str | None]:
     """Step 1: Filter by session time range."""
@@ -197,7 +197,7 @@ _RELATIVE_PERIODS = {"last_year", "last_month", "last_week"}
 _PERIOD_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 
-def _filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
+def filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
     """Step 2: Filter by date range."""
     if df.empty:
         return df
@@ -233,9 +233,9 @@ def _filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
     return df.loc[period]
 
 
-def _resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     """Step 3: Resample to target timeframe."""
-    rule = _RESAMPLE_RULES.get(timeframe)
+    rule = RESAMPLE_RULES.get(timeframe)
     if not rule:
         return df
 
@@ -251,7 +251,7 @@ def _resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     return resampled.dropna(subset=["open"])
 
 
-def _compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
+def compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
     """Step 4: Compute derived columns in declaration order."""
     df = df.copy()
     for name, expr in map_config.items():
@@ -269,7 +269,7 @@ def _compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
     return df
 
 
-def _filter_where(df: pd.DataFrame, where_expr: str) -> pd.DataFrame:
+def filter_where(df: pd.DataFrame, where_expr: str) -> pd.DataFrame:
     """Step 5: Filter rows by boolean expression."""
     try:
         mask = evaluate(where_expr, df, FUNCTIONS)
@@ -384,7 +384,7 @@ def _aggregate_col_name(expr: str) -> str:
     return expr
 
 
-def _sort(df: pd.DataFrame, sort: str) -> pd.DataFrame:
+def sort_df(df: pd.DataFrame, sort: str) -> pd.DataFrame:
     """Step 8: Sort result."""
     parts = sort.split()
     col = parts[0]
@@ -405,7 +405,7 @@ def _sort(df: pd.DataFrame, sort: str) -> pd.DataFrame:
 
 
 def _build_response(result, query, rows, session, timeframe, warnings, source_df=None) -> dict:
-    """Build the structured response."""
+    """Build the structured response with summary for model and table for UI."""
     metadata = {
         "rows": rows,
         "session": session,
@@ -413,44 +413,130 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
         "warnings": warnings,
     }
 
-    # Source rows: evidence for aggregated results
+    # Determine which columns to include in stats and first/last
+    map_columns = list(query.get("map", {}).keys())
+    sort_col = query.get("sort", "").split()[0] if query.get("sort") else None
+    summary_columns = set(map_columns)
+    if sort_col:
+        summary_columns.add(sort_col)
+
+    # Source rows: evidence for aggregated results (scalar/dict only)
     source_rows = None
     source_row_count = None
-    if source_df is not None and isinstance(source_df, pd.DataFrame) and not source_df.empty:
+    has_aggregation = query.get("select") is not None
+
+    if has_aggregation and source_df is not None and isinstance(source_df, pd.DataFrame) and not source_df.empty:
         source_row_count = len(source_df)
         source_rows = source_df.reset_index().to_dict("records")
 
+    # DataFrame result (table or grouped)
     if isinstance(result, pd.DataFrame):
         table = result.reset_index().to_dict("records")
+        is_grouped = query.get("group_by") is not None
+
+        summary = _build_summary_for_table(
+            result, table, query, summary_columns, map_columns, is_grouped,
+        )
+
         return {
-            "result": table,
-            "metadata": metadata,
+            "summary": summary,
             "table": table,
-            "query": query,
             "source_rows": source_rows,
             "source_row_count": source_row_count,
-        }
-
-    if isinstance(result, dict):
-        return {
-            "result": result,
             "metadata": metadata,
-            "table": None,
             "query": query,
-            "source_rows": source_rows,
-            "source_row_count": source_row_count,
         }
 
-    # Scalar
-    # Convert numpy types to Python native for JSON serialization
+    # Dict result (multiple aggregates)
+    if isinstance(result, dict):
+        summary = {
+            "type": "dict",
+            "values": result,
+            "rows_scanned": source_row_count or rows,
+        }
+        return {
+            "summary": summary,
+            "table": None,
+            "source_rows": source_rows,
+            "source_row_count": source_row_count,
+            "metadata": metadata,
+            "query": query,
+        }
+
+    # Scalar result
     if hasattr(result, "item"):
         result = result.item()
 
+    summary = {
+        "type": "scalar",
+        "value": result,
+        "rows_scanned": source_row_count or rows,
+    }
     return {
-        "result": result,
-        "metadata": metadata,
+        "summary": summary,
         "table": None,
-        "query": query,
         "source_rows": source_rows,
         "source_row_count": source_row_count,
+        "metadata": metadata,
+        "query": query,
     }
+
+
+def _build_summary_for_table(
+    df: pd.DataFrame, table: list, query: dict,
+    summary_columns: set, map_columns: list, is_grouped: bool,
+) -> dict:
+    """Build summary metadata for table results."""
+    summary = {
+        "type": "grouped" if is_grouped else "table",
+        "rows": len(table),
+        "columns": list(df.columns),
+    }
+
+    if is_grouped:
+        group_by = query.get("group_by")
+        summary["by"] = group_by if isinstance(group_by, str) else group_by[0]
+
+    # Stats for numeric columns in summary_columns
+    stats = {}
+    for col in summary_columns:
+        if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
+            stats[col] = {
+                "min": float(df[col].min()) if not df[col].isna().all() else None,
+                "max": float(df[col].max()) if not df[col].isna().all() else None,
+                "mean": float(df[col].mean()) if not df[col].isna().all() else None,
+            }
+    if stats:
+        summary["stats"] = stats
+
+    # First/last rows with timestamp + map columns
+    if table:
+        first_last_cols = ["timestamp"] + map_columns
+        # Filter to columns that exist
+        first_last_cols = [c for c in first_last_cols if c in table[0]]
+
+        first_row = {k: table[0].get(k) for k in first_last_cols if k in table[0]}
+        last_row = {k: table[-1].get(k) for k in first_last_cols if k in table[-1]}
+
+        # Convert timestamps to string for JSON
+        for row in [first_row, last_row]:
+            if "timestamp" in row and hasattr(row["timestamp"], "isoformat"):
+                row["timestamp"] = row["timestamp"].isoformat()
+
+        if first_row:
+            summary["first"] = first_row
+        if last_row and len(table) > 1:
+            summary["last"] = last_row
+
+    # For grouped: find min/max rows by first aggregate column
+    if is_grouped and table:
+        agg_cols = [c for c in df.columns if c not in (query.get("group_by") or [])]
+        if agg_cols:
+            agg_col = agg_cols[0]
+            if pd.api.types.is_numeric_dtype(df[agg_col]):
+                min_idx = df[agg_col].idxmin()
+                max_idx = df[agg_col].idxmax()
+                summary["min_row"] = {summary["by"]: min_idx, agg_col: float(df[agg_col].min())}
+                summary["max_row"] = {summary["by"]: max_idx, agg_col: float(df[agg_col].max())}
+
+    return summary

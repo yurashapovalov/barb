@@ -1,199 +1,254 @@
-"""Gemini chat with tool calling."""
+"""Anthropic Claude chat with Barb Script tool."""
 
 import json
 import logging
 import time
 from collections.abc import Generator
 
+import anthropic
 import pandas as pd
-from google import genai
-from google.genai import types
 
 from assistant.prompt import build_system_prompt
-from assistant.tools import TOOL_DECLARATIONS, run_tool
-from config.models import DEFAULT_MODEL, calculate_cost, get_model
+from assistant.tools import BARB_TOOL, run_query
 
 log = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 5
+MODEL = "claude-sonnet-4-5-20250929"
 
 
 class Assistant:
-    """Stateless chat assistant. Client sends full history each request."""
+    """Chat assistant using Anthropic Claude with prompt caching."""
 
-    def __init__(self, api_key: str, instrument: str, df: pd.DataFrame, sessions: dict,
-                 model: str = DEFAULT_MODEL):
-        self.client = genai.Client(api_key=api_key)
+    model = MODEL  # expose for summarization
+
+    def __init__(self, api_key: str, instrument: str, df: pd.DataFrame, sessions: dict):
+        self.client = anthropic.Anthropic(api_key=api_key)
         self.instrument = instrument
         self.df = df
         self.sessions = sessions
         self.system_prompt = build_system_prompt(instrument)
-        self.model_name = model
-        self.model_config = get_model(model)
 
     def chat_stream(self, message: str, history: list[dict] | None = None) -> Generator[dict]:
-        """Process chat message, yielding SSE events as dicts.
+        """Process chat message, yielding SSE events.
 
         Yields dicts with "event" and "data" keys:
             tool_start, tool_end, data_block, text_delta, done.
         """
-        contents = _build_contents(history or [], message)
-
-        tools = types.Tool(function_declarations=TOOL_DECLARATIONS)
-        config = types.GenerateContentConfig(
-            tools=[tools],
-            system_instruction=self.system_prompt,
-        )
+        messages = _build_messages(history or [], message)
 
         total_input_tokens = 0
         total_output_tokens = 0
-        data = []
+        total_cache_read = 0
+        total_cache_write = 0
         tool_call_log = []
+        data_blocks = []
         answer = ""
 
         for round_num in range(MAX_TOOL_ROUNDS):
-            stream = self.client.models.generate_content_stream(
-                model=self.model_config.id,
-                contents=contents,
-                config=config,
-            )
+            # Stream response with prompt caching
+            with self.client.messages.stream(
+                model=MODEL,
+                max_tokens=4096,
+                system=[{
+                    "type": "text",
+                    "text": self.system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+                tools=[BARB_TOOL],
+                messages=messages,
+            ) as stream:
+                # Collect response
+                tool_uses = []
+                text_parts = []
 
-            # Consume stream: yield text deltas in real-time, collect tool call parts
-            all_parts = []
-            has_fn_calls = False
-            last_usage = None
+                for event in stream:
+                    if event.type == "content_block_start":
+                        if event.content_block.type == "tool_use":
+                            tool_uses.append({
+                                "id": event.content_block.id,
+                                "name": event.content_block.name,
+                                "input": "",
+                            })
+                    elif event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            text_parts.append(event.delta.text)
+                            answer += event.delta.text
+                            yield {"event": "text_delta", "data": {"delta": event.delta.text}}
+                        elif event.delta.type == "input_json_delta":
+                            if tool_uses:
+                                tool_uses[-1]["input"] += event.delta.partial_json
 
-            for chunk in stream:
-                if chunk.usage_metadata:
-                    last_usage = chunk.usage_metadata
+                # Get final message for usage stats
+                response = stream.get_final_message()
 
-                if not chunk.candidates:
-                    continue
+            # Update token counts
+            if response.usage:
+                total_input_tokens += response.usage.input_tokens
+                total_output_tokens += response.usage.output_tokens
+                total_cache_read += getattr(response.usage, "cache_read_input_tokens", 0) or 0
+                total_cache_write += getattr(response.usage, "cache_creation_input_tokens", 0) or 0
 
-                parts = chunk.candidates[0].content.parts or []
-                for part in parts:
-                    all_parts.append(part)
-                    if part.function_call:
-                        has_fn_calls = True
-                    elif part.text:
-                        answer += part.text
-                        yield {"event": "text_delta", "data": {"delta": part.text}}
-
-            if last_usage:
-                total_input_tokens += last_usage.prompt_token_count or 0
-                total_output_tokens += last_usage.candidates_token_count or 0
-
-            if not has_fn_calls:
+            # No tool calls — done
+            if response.stop_reason != "tool_use":
                 break
 
-            contents.append(types.Content(role="model", parts=all_parts))
+            # Parse tool inputs
+            for tu in tool_uses:
+                try:
+                    tu["input"] = json.loads(tu["input"]) if tu["input"] else {}
+                except json.JSONDecodeError:
+                    tu["input"] = {}
 
-            fn_calls = [p.function_call for p in all_parts if p.function_call]
+            # Add assistant message with tool uses
+            messages.append({
+                "role": "assistant",
+                "content": response.content,
+            })
 
-            tool_response_parts = []
-            for call in fn_calls:
-                call_args = dict(call.args)
-                log.info("Tool call: %s(%s)", call.name, call.args)
+            # Execute tools and collect results
+            tool_results = []
+            for tu in tool_uses:
+                query = tu["input"].get("query", {})
+                log.info("Tool call: %s(%s)", tu["name"], query)
 
                 yield {"event": "tool_start", "data": {
-                    "tool_name": call.name, "input": call_args,
+                    "tool_name": tu["name"],
+                    "input": {"query": query},
                 }}
 
                 call_start = time.time()
                 call_error = None
+                model_response = ""
+                table_data = None
+                source_rows = None
 
-                raw_result = None
                 try:
-                    tool_result, raw_result = run_tool(call.name, call_args, self.df, self.sessions)
+                    result = run_query(query, self.df, self.sessions)
+                    model_response = result.get("model_response", "")
+                    table_data = result.get("table")
+                    source_rows = result.get("source_rows")
+
+                    if model_response.startswith("Error:"):
+                        call_error = model_response[7:].strip()
                 except Exception as exc:
                     call_error = str(exc)
-                    tool_result = json.dumps({"error": call_error})
-                    log.exception("Tool call failed: %s", call.name)
+                    model_response = f"Error: {call_error}"
+                    log.exception("Tool call failed")
 
                 duration_ms = int((time.time() - call_start) * 1000)
 
                 yield {"event": "tool_end", "data": {
-                    "tool_name": call.name,
+                    "tool_name": tu["name"],
                     "duration_ms": duration_ms,
                     "error": call_error,
                 }}
 
                 tool_call_log.append({
-                    "tool_name": call.name,
-                    "input": call_args,
-                    "output": tool_result,
+                    "tool_name": tu["name"],
+                    "input": {"query": query},
+                    "output": model_response,
                     "error": call_error,
                     "duration_ms": duration_ms,
                 })
 
-                if call.name == "execute_query" and not call_error:
-                    block = _collect_query_data_block(call_args, tool_result, raw_result)
-                    if block:
-                        data.append(block)
-                        yield {"event": "data_block", "data": block}
+                # Send data block to UI (table or source_rows as evidence)
+                ui_data = table_data or source_rows
+                if not call_error and ui_data:
+                    block = {
+                        "tool": tu["name"],
+                        "input": {"query": query},
+                        "result": ui_data,
+                        "rows": len(ui_data) if isinstance(ui_data, list) else None,
+                    }
+                    data_blocks.append(block)
+                    yield {"event": "data_block", "data": block}
 
-                tool_response_parts.append(
-                    types.Part.from_function_response(
-                        name=call.name, response={"result": tool_result},
-                    )
-                )
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu["id"],
+                    "content": model_response,
+                    "is_error": bool(call_error),
+                })
 
-            contents.append(types.Content(role="user", parts=tool_response_parts))
+            # Add tool results (must be in user message)
+            messages.append({
+                "role": "user",
+                "content": tool_results,
+            })
 
-        if not answer:
-            log.warning("No text response after %d tool rounds", round_num + 1)
+        # Calculate costs
+        # Sonnet 4.5: $3/MTok input, $0.30/MTok cached read, $3.75/MTok cache write, $15/MTok output
+        # API returns: input_tokens = tokens AFTER cache breakpoint (uncached)
+        #              cache_read_input_tokens = tokens read from cache
+        #              cache_creation_input_tokens = tokens written to cache
+        input_cost = total_input_tokens * 3.0 / 1_000_000
+        cache_read_cost = total_cache_read * 0.30 / 1_000_000
+        cache_write_cost = total_cache_write * 3.75 / 1_000_000
+        output_cost = total_output_tokens * 15.0 / 1_000_000
+        total_cost = input_cost + cache_read_cost + cache_write_cost + output_cost
 
-        usage = calculate_cost(
-            input_tokens=total_input_tokens,
-            output_tokens=total_output_tokens,
-            model=self.model_name,
-        )
+        usage = {
+            "input_tokens": total_input_tokens,
+            "output_tokens": total_output_tokens,
+            "cache_read_tokens": total_cache_read,
+            "cache_write_tokens": total_cache_write,
+            "input_cost": input_cost,
+            "cache_read_cost": cache_read_cost,
+            "cache_write_cost": cache_write_cost,
+            "output_cost": output_cost,
+            "total_cost": total_cost,
+        }
 
         yield {"event": "done", "data": {
             "answer": answer,
             "usage": usage,
             "tool_calls": tool_call_log,
-            "data": data,
+            "data": data_blocks,
         }}
 
 
-def _build_contents(history: list[dict], message: str) -> list[types.Content]:
-    """Convert chat history + new message to Gemini contents format."""
-    contents = []
+def _build_messages(history: list[dict], message: str) -> list[dict]:
+    """Convert chat history to Anthropic messages format."""
+    messages = []
+
     for msg in history:
         role = msg.get("role", "user")
         text = msg.get("text", "")
-        contents.append(types.Content(role=role, parts=[types.Part(text=text)]))
-    contents.append(types.Content(role="user", parts=[types.Part(text=message)]))
-    return contents
+        tool_calls = msg.get("tool_calls", [])
+
+        if role == "assistant" and tool_calls:
+            # Assistant message with tool calls
+            content = []
+            for tc in tool_calls:
+                content.append({
+                    "type": "tool_use",
+                    "id": tc.get("id", f"toolu_{len(content)}"),
+                    "name": tc["tool_name"],
+                    "input": tc.get("input", {}),
+                })
+            if text:
+                content.insert(0, {"type": "text", "text": text})
+            messages.append({"role": "assistant", "content": content})
+
+            # Tool results (user message)
+            tool_results = []
+            for tc in tool_calls:
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tc.get("id", f"toolu_{len(tool_results)}"),
+                    "content": _compact_output(tc.get("output", "done")),
+                })
+            messages.append({"role": "user", "content": tool_results})
+        else:
+            messages.append({"role": role, "content": text})
+
+    messages.append({"role": "user", "content": message})
+    return messages
 
 
-def _collect_query_data_block(args: dict, tool_result: str, raw_result: dict | None = None) -> dict | None:
-    """Parse execute_query result into a data block, or None."""
-    try:
-        parsed = json.loads(tool_result)
-    except (json.JSONDecodeError, TypeError):
-        return None
-
-    if "error" in parsed:
-        return None
-
-    result = parsed.get("result")
-    if isinstance(result, list):
-        rows = len(result)
-    else:
-        rows = None
-
-    block = {
-        "query": args["query"] if "query" in args else args,
-        "result": result,
-        "rows": rows,
-        "session": parsed.get("metadata", {}).get("session"),
-        "timeframe": parsed.get("metadata", {}).get("from"),
-    }
-
-    if raw_result:
-        block["source_rows"] = raw_result.get("source_rows")
-        block["source_row_count"] = raw_result.get("source_row_count")
-
-    return block
+def _compact_output(output: str) -> str:
+    """Compact tool output for history."""
+    if not output or len(output) < 500:
+        return output
+    return output[:400] + "..."

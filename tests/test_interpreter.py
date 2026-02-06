@@ -27,8 +27,8 @@ class TestValidation:
     def test_empty_query(self, nq_minute_slice, sessions):
         """Empty query returns all rows."""
         result = execute({}, nq_minute_slice, sessions)
-        assert isinstance(result["result"], list)
-        assert len(result["result"]) > 0
+        assert isinstance(result["table"], list)
+        assert len(result["table"]) > 0
 
     def test_expression_errors_caught_before_execution(self, nq_minute_slice, sessions):
         """Pre-validation catches all expression errors at once."""
@@ -51,7 +51,7 @@ class TestSession:
         }, nq_minute_slice, sessions)
         all_result = execute({"select": "count()"}, nq_minute_slice, sessions)
         # RTH should have fewer bars than all data
-        assert result["result"] < all_result["result"]
+        assert result["summary"]["value"] < all_result["summary"]["value"]
 
     def test_unknown_session_warning(self, nq_minute_slice, sessions):
         result = execute({
@@ -71,7 +71,7 @@ class TestResample:
             "select": "count()",
         }, nq_minute_slice, sessions)
         # ~125 trading days in 6 months
-        assert 100 < result["result"] < 150
+        assert 100 < result["summary"]["value"] < 150
 
     def test_weekly_resample(self, nq_minute_slice, sessions):
         result = execute({
@@ -80,7 +80,7 @@ class TestResample:
             "select": "count()",
         }, nq_minute_slice, sessions)
         # ~26 weeks in 6 months
-        assert 20 < result["result"] < 30
+        assert 20 < result["summary"]["value"] < 30
 
 
 # --- Map ---
@@ -94,7 +94,7 @@ class TestMap:
             "select": "mean(range)",
         }, nq_minute_slice, sessions)
         # NQ daily range should be positive and reasonable
-        assert 30 < result["result"] < 300
+        assert 30 < result["summary"]["value"] < 300
 
     def test_map_ordering(self, nq_minute_slice, sessions):
         """Later map columns can reference earlier ones."""
@@ -108,7 +108,7 @@ class TestMap:
             "select": "mean(half_range)",
         }, nq_minute_slice, sessions)
         # half_range should be positive
-        assert result["result"] > 0
+        assert result["summary"]["value"] > 0
 
 
 # --- Where ---
@@ -129,7 +129,7 @@ class TestWhere:
         }, nq_minute_slice, sessions)
 
         # Some days are bullish, but not all
-        assert 0 < bullish["result"] < all_days["result"]
+        assert 0 < bullish["summary"]["value"] < all_days["summary"]["value"]
 
     def test_inside_day(self, nq_minute_slice, sessions):
         result = execute({
@@ -138,7 +138,7 @@ class TestWhere:
             "where": "high < prev(high) and low > prev(low)",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert result["result"] >= 0
+        assert result["summary"]["value"] >= 0
 
 
 # --- Normalization ---
@@ -164,7 +164,7 @@ class TestNormalization:
             "from": "daily",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert isinstance(result["result"], (int, float))
+        assert isinstance(result["summary"]["value"], (int, float))
 
 
 # --- Group By ---
@@ -276,7 +276,7 @@ class TestPeriod:
             "from": "daily",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert result["result"] > 0
+        assert result["summary"]["value"] > 0
 
     def test_month_filter(self, nq_minute_slice, sessions):
         result = execute({
@@ -285,7 +285,7 @@ class TestPeriod:
             "select": "count()",
         }, nq_minute_slice, sessions)
         # March has ~21 weekdays + some Sundays (NQ trades Sunday evening)
-        assert 15 < result["result"] < 30
+        assert 15 < result["summary"]["value"] < 30
 
     def test_invalid_period_string(self, nq_minute_slice, sessions):
         """Invalid period like 'all' gives clear error, not internal crash."""
@@ -303,7 +303,7 @@ class TestPeriod:
             "from": "daily",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert result["result"] > 0
+        assert result["summary"]["value"] > 0
 
 
 # --- Response Format ---
@@ -315,11 +315,11 @@ class TestResponse:
             "from": "daily",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert "result" in result
+        assert "summary" in result
         assert "metadata" in result
         assert "query" in result
         assert result["table"] is None  # scalar result
-        assert isinstance(result["result"], (int, float))
+        assert isinstance(result["summary"]["value"], (int, float))
 
     def test_table_response(self, nq_minute_slice, sessions):
         result = execute({
@@ -367,7 +367,7 @@ class TestSpecExamples:
             "select": "mean(range)",
         }, nq_minute_slice, sessions)
         # NQ daily RTH range should be reasonable
-        assert 30 < result["result"] < 300
+        assert 30 < result["summary"]["value"] < 300
 
     def test_gap_analysis(self, nq_minute_slice, sessions):
         """Spec 13.7-like: gap analysis."""
@@ -378,7 +378,7 @@ class TestSpecExamples:
             "where": "gap != 0",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert result["result"] > 0
+        assert result["summary"]["value"] > 0
 
     def test_nr7_count(self, nq_minute_slice, sessions):
         """Spec 13.9-like: NR7 days."""
@@ -392,7 +392,7 @@ class TestSpecExamples:
             "where": "range == min_range_7",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert result["result"] >= 0
+        assert result["summary"]["value"] >= 0
 
 
 # --- Source Rows (Evidence) ---
@@ -406,10 +406,10 @@ class TestSourceRows:
             "where": "close > open",
             "select": "count()",
         }, nq_minute_slice, sessions)
-        assert isinstance(result["result"], (int, float))
+        assert isinstance(result["summary"]["value"], (int, float))
         assert result["source_rows"] is not None
-        assert len(result["source_rows"]) == result["result"]
-        assert result["source_row_count"] == result["result"]
+        assert len(result["source_rows"]) == result["summary"]["value"]
+        assert result["source_row_count"] == result["summary"]["value"]
 
     def test_mean_has_source_rows(self, nq_minute_slice, sessions):
         """mean() returns all filtered rows as source_rows."""
@@ -436,16 +436,17 @@ class TestSourceRows:
         assert result["source_rows"] is not None
         assert result["source_row_count"] > len(result["table"])
 
-    def test_no_select_has_source_rows(self, nq_minute_slice, sessions):
-        """Without select, source_rows matches result."""
+    def test_no_select_returns_table(self, nq_minute_slice, sessions):
+        """Without select, table contains filtered rows directly."""
         result = execute({
             "session": "RTH",
             "from": "daily",
             "where": "close > open",
         }, nq_minute_slice, sessions)
-        assert result["source_rows"] is not None
-        assert result["source_row_count"] == len(result["result"])
-        assert isinstance(result["result"], list)
+        # No aggregation = no source_rows needed, table IS the result
+        assert result["source_rows"] is None
+        assert isinstance(result["table"], list)
+        assert len(result["table"]) > 0
 
     def test_source_rows_have_columns(self, nq_minute_slice, sessions):
         """Source rows contain the columns available before aggregation."""
