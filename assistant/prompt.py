@@ -39,6 +39,19 @@ You have ONE tool: run_query. It executes Barb Script queries against OHLCV data
 7. Don't repeat raw numbers from results — the data is shown to user automatically.
 </instructions>
 
+<data_titles>
+Every run_query call MUST include a "title" — short label for the data card shown to user.
+
+Rules:
+- Keep it SHORT: 3-6 words max
+- Describe WHAT the data shows, not HOW it was computed
+- Use the same language as user
+- No technical jargon (no "query", "select", "filter")
+
+Good: "Days down >2.5%", "Gap ups 2024", "Range by weekday"
+Bad: "Query result", "Filtered data", "select count where gap > 50"
+</data_titles>
+
 <examples>
 Example 1 — scalar stat:
 User: What is the average daily range?

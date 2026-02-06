@@ -25,6 +25,7 @@ export interface DataBlock {
   timeframe: string | null;
   source_rows: Record<string, unknown>[] | null;
   source_row_count: number | null;
+  title?: string;
 }
 
 export interface UsageBlock {

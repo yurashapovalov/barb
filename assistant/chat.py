@@ -155,11 +155,13 @@ class Assistant:
                 # Send data block to UI (table or source_rows as evidence)
                 ui_data = table_data or source_rows
                 if not call_error and ui_data:
+                    title = tu["input"].get("title", "")
                     block = {
                         "tool": tu["name"],
                         "input": {"query": query},
                         "result": ui_data,
                         "rows": len(ui_data) if isinstance(ui_data, list) else None,
+                        "title": title,
                     }
                     data_blocks.append(block)
                     yield {"event": "data_block", "data": block}

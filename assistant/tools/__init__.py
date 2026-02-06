@@ -49,8 +49,12 @@ IMPORTANT:
                     "limit": {"type": "integer", "minimum": 1},
                 },
             },
+            "title": {
+                "type": "string",
+                "description": "Short descriptive title for this data (shown to user)",
+            },
         },
-        "required": ["query"],
+        "required": ["query", "title"],
     },
 }
 
