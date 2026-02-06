@@ -51,22 +51,11 @@ class TestBuildMessages:
 
 
 class TestCompactOutput:
-    def test_short_output_kept(self):
-        assert _compact_output("42") == "42"
+    """_compact_output always returns 'done' - model should re-query for fresh data."""
 
-    def test_status_message_kept(self):
-        msg = "Session RTH (09:30-16:00). 2,345,678 rows."
-        assert _compact_output(msg) == msg
-
-    def test_long_output_truncated(self):
-        long = "x" * 600
-        result = _compact_output(long)
-        assert len(result) < 450
-        assert result.endswith("...")
-
-    def test_empty_output(self):
-        assert _compact_output("") == ""
-
-    def test_none_output(self):
-        # Should handle None gracefully
-        assert _compact_output(None) is None
+    def test_always_returns_done(self):
+        assert _compact_output("42") == "done"
+        assert _compact_output("x" * 600) == "done"
+        assert _compact_output("") == "done"
+        assert _compact_output(None) == "done"
+        assert _compact_output({"raw": "data"}) == "done"
