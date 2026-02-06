@@ -287,6 +287,26 @@ class TestPeriod:
         # March has ~21 weekdays + some Sundays (NQ trades Sunday evening)
         assert 15 < result["summary"]["value"] < 30
 
+    def test_open_end_range(self, nq_minute_slice, sessions):
+        """Open-ended range '2024-06:' means from June 2024 to end."""
+        result = execute({
+            "period": "2024-06:",
+            "from": "daily",
+            "select": "count()",
+        }, nq_minute_slice, sessions)
+        # June 2024 to end of data (June 30)
+        assert result["summary"]["value"] > 0
+
+    def test_month_range(self, nq_minute_slice, sessions):
+        """Month range '2024-03:2024-04' filters by months."""
+        result = execute({
+            "period": "2024-03:2024-04",
+            "from": "daily",
+            "select": "count()",
+        }, nq_minute_slice, sessions)
+        # March + April ~ 40-50 days
+        assert 30 < result["summary"]["value"] < 60
+
     def test_invalid_period_string(self, nq_minute_slice, sessions):
         """Invalid period like 'all' gives clear error, not internal crash."""
         with pytest.raises(QueryError, match="Invalid period 'all'") as exc_info:
@@ -294,7 +314,7 @@ class TestPeriod:
         assert exc_info.value.step == "period"
 
     def test_invalid_period_range(self, nq_minute_slice, sessions):
-        with pytest.raises(QueryError, match="Invalid period range"):
+        with pytest.raises(QueryError, match="Invalid period start"):
             execute({"period": "start:end", "from": "daily"}, nq_minute_slice, sessions)
 
     def test_relative_period_last_month(self, nq_minute_slice, sessions):

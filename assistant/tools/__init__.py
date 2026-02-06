@@ -14,7 +14,7 @@ BARB_TOOL = {
 Query is a flat JSON object with these fields (all optional):
 - session: "RTH" or "ETH" — filter by trading session (REQUIRED for daily+ timeframes)
 - from: "1m", "5m", "15m", "30m", "1h", "daily", "weekly" — timeframe (default: "1m")
-- period: "2024", "2024-03", "2024-01:2024-06", "last_year" — date filter
+- period: "2024", "2024-03", "2024-01:2024-06", "2023:", "last_year" — date filter
 - map: {{"col_name": "expression"}} — compute derived columns
 - where: "expression" — filter rows (boolean expression)
 - group_by: "column" or ["col1", "col2"] — group rows (must be column name, not expression)

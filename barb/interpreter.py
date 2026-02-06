@@ -205,15 +205,24 @@ def filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
         return df
 
     if ":" in period:
-        # Explicit range: "2024-01-01:2024-12-31"
+        # Range: "2024-01:2024-06", "2023:", ":2024"
         parts = period.split(":", 1)
-        if not (_PERIOD_RE.match(parts[0]) and _PERIOD_RE.match(parts[1])):
+        start, end = parts[0], parts[1]
+
+        # Validate non-empty parts
+        if start and not _PERIOD_RE.match(start):
             raise QueryError(
-                f"Invalid period range '{period}'. "
-                f"Use 'YYYY-MM-DD:YYYY-MM-DD', e.g. '2024-01-01:2024-06-30'",
+                f"Invalid period start '{start}'. Use YYYY, YYYY-MM, or YYYY-MM-DD",
                 error_type="ValidationError", step="period", expression=period,
             )
-        return df.loc[parts[0]:parts[1]]
+        if end and not _PERIOD_RE.match(end):
+            raise QueryError(
+                f"Invalid period end '{end}'. Use YYYY, YYYY-MM, or YYYY-MM-DD",
+                error_type="ValidationError", step="period", expression=period,
+            )
+
+        # Open-ended ranges: "2023:" or ":2024"
+        return df.loc[start if start else None : end if end else None]
 
     if period in _RELATIVE_PERIODS:
         offsets = {
