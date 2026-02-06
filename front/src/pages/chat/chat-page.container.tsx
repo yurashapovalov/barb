@@ -20,7 +20,7 @@ import { ChatPage } from "./chat-page";
 export function ChatPageContainer() {
   const { id } = useParams<{ id: string }>();
   const { session } = useAuth();
-  const { conversations, loading, updateTitle, remove } = useConversations();
+  const { conversations, loading, refresh, updateTitle, remove } = useConversations();
   const navigate = useNavigate();
   const token = session?.access_token ?? "";
 
@@ -40,8 +40,10 @@ export function ChatPageContainer() {
     if (window.innerWidth < 1024) closeSidebar();
   }, [id, closeSidebar]);
 
-  const onConversationCreated = (convId: string) =>
+  const onConversationCreated = (convId: string) => {
+    refresh();  // Update sidebar with new conversation
     navigate(`/c/${convId}`, { replace: true });
+  };
 
   const { messages, isLoading, error, send } = useChat({
     conversationId: id,
