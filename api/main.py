@@ -139,22 +139,33 @@ def _persist_chat(
     conv_id = conversation["id"]
     message_id = ""
     try:
+        log.info("Persisting chat: conv=%s, user_msg_len=%d", conv_id, len(user_message))
+
         db.table("messages").insert({
             "conversation_id": conv_id,
             "role": "user",
             "content": user_message,
         }).execute()
+        log.info("User message saved: conv=%s", conv_id)
+
+        data_to_save = result["data"] or None
+        log.info(
+            "Saving model message: conv=%s, answer_len=%d, data_blocks=%d",
+            conv_id, len(result["answer"]), len(result["data"]) if result["data"] else 0,
+        )
 
         model_msg = db.table("messages").insert({
             "conversation_id": conv_id,
             "role": "model",
             "content": result["answer"],
-            "data": result["data"] or None,
+            "data": data_to_save,
             "usage": result["usage"],
         }).execute()
         message_id = model_msg.data[0]["id"]
+        log.info("Model message saved: conv=%s, msg_id=%s", conv_id, message_id)
 
         if result["tool_calls"]:
+            log.info("Saving tool calls: conv=%s, count=%d", conv_id, len(result["tool_calls"]))
             tool_rows = [
                 {
                     "message_id": message_id,
@@ -167,6 +178,7 @@ def _persist_chat(
                 for tc in result["tool_calls"]
             ]
             db.table("tool_calls").insert(tool_rows).execute()
+            log.info("Tool calls saved: conv=%s", conv_id)
 
         old_usage = conversation["usage"]
         new_usage = result["usage"]
@@ -191,8 +203,10 @@ def _persist_chat(
             "id", conv_id,
         ).execute()
 
-    except Exception:
-        log.exception("Failed to persist chat: conv=%s", conv_id)
+        log.info("Chat persisted successfully: conv=%s, msg_id=%s", conv_id, message_id)
+
+    except Exception as e:
+        log.exception("Failed to persist chat: conv=%s, error=%s", conv_id, str(e))
         return message_id, False
 
     return message_id, True
