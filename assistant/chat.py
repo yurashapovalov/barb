@@ -247,8 +247,15 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
     return messages
 
 
-def _compact_output(output: str) -> str:
+def _compact_output(output) -> str:
     """Compact tool output for history."""
-    if not output or len(output) < 500:
+    if output is None:
+        return "done"
+    # Handle dict format from Supabase ({"raw": "..."})
+    if isinstance(output, dict):
+        output = output.get("raw", str(output))
+    if not isinstance(output, str):
+        output = str(output)
+    if len(output) < 500:
         return output
     return output[:400] + "..."
