@@ -61,8 +61,16 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     getMessages(conversationId, token)
       .then((data) => {
         if (!cancelled) {
-          setMessages(data);
-          cacheSet(conversationId, data);
+          // Reconstruct data markers for messages that have data blocks
+          const messagesWithMarkers = data.map((m) => {
+            if (m.data && m.data.length > 0) {
+              const markers = m.data.map((_, i) => `\n\n{{data:${i}}}`).join("");
+              return { ...m, content: m.content + markers };
+            }
+            return m;
+          });
+          setMessages(messagesWithMarkers);
+          cacheSet(conversationId, messagesWithMarkers);
         }
       })
       .catch((err) => {
