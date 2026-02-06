@@ -126,7 +126,9 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     if query.get("limit") and isinstance(result_df, pd.DataFrame):
         result_df = result_df.head(query["limit"])
 
-    return _build_response(result_df, query, rows_after_filter, session_name, timeframe, warnings, source_df)
+    return _build_response(
+        result_df, query, rows_after_filter, session_name, timeframe, warnings, source_df
+    )
 
 
 # --- Normalization ---
@@ -425,7 +427,8 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
     source_row_count = None
     has_aggregation = query.get("select") is not None
 
-    if has_aggregation and source_df is not None and isinstance(source_df, pd.DataFrame) and not source_df.empty:
+    is_valid_source = source_df is not None and isinstance(source_df, pd.DataFrame)
+    if has_aggregation and is_valid_source and not source_df.empty:
         source_row_count = len(source_df)
         source_rows = source_df.reset_index().to_dict("records")
 

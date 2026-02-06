@@ -69,4 +69,4 @@ class TestCompactOutput:
 
     def test_none_output(self):
         # Should handle None gracefully
-        assert _compact_output(None) == None
+        assert _compact_output(None) is None

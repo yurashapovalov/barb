@@ -1,9 +1,8 @@
 """Single Barb Script tool for Anthropic Claude."""
 
-import json
 from pathlib import Path
 
-from barb.interpreter import execute, QueryError
+from barb.interpreter import QueryError, execute
 
 _EXPRESSIONS_MD = (Path(__file__).parent / "reference" / "expressions.md").read_text()
 
@@ -78,7 +77,8 @@ def run_query(query: dict, df, sessions: dict) -> dict:
     except QueryError as e:
         return {"model_response": f"Error: {e}", "table": None, "source_rows": None}
     except Exception as e:
-        return {"model_response": f"Error: {type(e).__name__}: {e}", "table": None, "source_rows": None}
+        msg = f"Error: {type(e).__name__}: {e}"
+        return {"model_response": msg, "table": None, "source_rows": None}
 
 
 def _format_summary_for_model(summary: dict) -> str:

@@ -170,15 +170,19 @@ def _persist_chat(
 
         old_usage = conversation["usage"]
         new_usage = result["usage"]
+        old_cr_tokens = old_usage.get("cache_read_tokens", 0)
+        old_cw_tokens = old_usage.get("cache_write_tokens", 0)
+        old_cr_cost = old_usage.get("cache_read_cost", 0)
+        old_cw_cost = old_usage.get("cache_write_cost", 0)
         accumulated = {
             "input_tokens": old_usage["input_tokens"] + new_usage["input_tokens"],
             "output_tokens": old_usage["output_tokens"] + new_usage["output_tokens"],
-            "cache_read_tokens": old_usage.get("cache_read_tokens", 0) + new_usage.get("cache_read_tokens", 0),
-            "cache_write_tokens": old_usage.get("cache_write_tokens", 0) + new_usage.get("cache_write_tokens", 0),
+            "cache_read_tokens": old_cr_tokens + new_usage.get("cache_read_tokens", 0),
+            "cache_write_tokens": old_cw_tokens + new_usage.get("cache_write_tokens", 0),
             "input_cost": old_usage["input_cost"] + new_usage["input_cost"],
             "output_cost": old_usage["output_cost"] + new_usage["output_cost"],
-            "cache_read_cost": old_usage.get("cache_read_cost", 0) + new_usage.get("cache_read_cost", 0),
-            "cache_write_cost": old_usage.get("cache_write_cost", 0) + new_usage.get("cache_write_cost", 0),
+            "cache_read_cost": old_cr_cost + new_usage.get("cache_read_cost", 0),
+            "cache_write_cost": old_cw_cost + new_usage.get("cache_write_cost", 0),
             "total_cost": old_usage["total_cost"] + new_usage["total_cost"],
             "message_count": old_usage["message_count"] + 1,
         }
