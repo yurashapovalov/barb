@@ -220,10 +220,12 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
         if role == "assistant" and tool_calls:
             # Assistant message with tool calls
             content = []
-            for tc in tool_calls:
+            for i, tc in enumerate(tool_calls):
+                # Generate consistent ID for both tool_use and tool_result
+                tool_id = tc.get("id", f"toolu_hist_{i}")
                 content.append({
                     "type": "tool_use",
-                    "id": tc.get("id", f"toolu_{len(content)}"),
+                    "id": tool_id,
                     "name": tc["tool_name"],
                     "input": tc.get("input", {}),
                 })
@@ -233,10 +235,11 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
 
             # Tool results (user message)
             tool_results = []
-            for tc in tool_calls:
+            for i, tc in enumerate(tool_calls):
+                tool_id = tc.get("id", f"toolu_hist_{i}")
                 tool_results.append({
                     "type": "tool_result",
-                    "tool_use_id": tc.get("id", f"toolu_{len(tool_results)}"),
+                    "tool_use_id": tool_id,
                     "content": _compact_output(tc.get("output", "done")),
                 })
             messages.append({"role": "user", "content": tool_results})

@@ -188,7 +188,7 @@ class TestGetMessages:
             {
                 "id": "msg-2",
                 "conversation_id": "conv-1",
-                "role": "model",
+                "role": "assistant",
                 "content": "The average range is 150.",
                 "data": [{"query": {"select": "range"}, "result": 150, "rows": 1,
                           "session": "RTH", "timeframe": None}],
@@ -215,7 +215,7 @@ class TestGetMessages:
         data = r.json()
         assert len(data) == 2
         assert data[0]["role"] == "user"
-        assert data[1]["role"] == "model"
+        assert data[1]["role"] == "assistant"
         assert data[1]["data"] is not None
 
     def test_not_found(self, client):

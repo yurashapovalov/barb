@@ -156,7 +156,7 @@ def _persist_chat(
 
         model_msg = db.table("messages").insert({
             "conversation_id": conv_id,
-            "role": "model",
+            "role": "assistant",
             "content": result["answer"],
             "data": data_to_save,
             "usage": result["usage"],
@@ -452,7 +452,7 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
         log.exception("Failed to load messages")
         raise HTTPException(503, "Service temporarily unavailable")
 
-    model_ids = [m["id"] for m in msg_result.data if m["role"] == "model"]
+    model_ids = [m["id"] for m in msg_result.data if m["role"] == "assistant"]
     tc_by_msg = {}
     if model_ids:
         try:
@@ -471,7 +471,7 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
     raw_history = []
     for m in msg_result.data:
         entry = {"role": m["role"], "text": m["content"]}
-        if m["role"] == "model" and m["id"] in tc_by_msg:
+        if m["role"] == "assistant" and m["id"] in tc_by_msg:
             entry["tool_calls"] = tc_by_msg[m["id"]]
         raw_history.append(entry)
     history = build_history_with_context(conversation.get("context"), raw_history)
