@@ -26,6 +26,8 @@ export interface DataBlock {
   source_rows: Record<string, unknown>[] | null;
   source_row_count: number | null;
   title?: string;
+  status?: "loading" | "success" | "error";
+  error?: string;
 }
 
 export interface UsageBlock {

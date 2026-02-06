@@ -147,6 +147,8 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     const abort = new AbortController();
     abortRef.current = abort;
 
+    let loadingBlockIndex = -1;
+
     try {
       await sendMessageStream(activeConvId, text, token, {
         onTextDelta(event) {
@@ -157,11 +159,53 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
             prev.map((m) => (m.id === assistantId ? { ...m, content } : m)),
           );
         },
+        onToolStart() {
+          addAssistantMessage();
+          // Add loading placeholder
+          const loadingBlock = {
+            query: {},
+            result: null,
+            rows: null,
+            session: null,
+            timeframe: null,
+            source_rows: null,
+            source_row_count: null,
+            status: "loading" as const,
+          };
+          dataBlocks.push(loadingBlock);
+          loadingBlockIndex = dataBlocks.length - 1;
+          fullText += `\n\n{{data:${loadingBlockIndex}}}\n\n`;
+          const content = fullText;
+          const data = [...dataBlocks];
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content, data } : m)),
+          );
+        },
+        onToolEnd(event) {
+          if (event.error && loadingBlockIndex >= 0) {
+            // Update loading block to error state
+            dataBlocks[loadingBlockIndex] = {
+              ...dataBlocks[loadingBlockIndex],
+              status: "error" as const,
+              error: event.error,
+            };
+            const data = [...dataBlocks];
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, data } : m)),
+            );
+          }
+        },
         onDataBlock(event) {
           addAssistantMessage();
-          dataBlocks.push(event);
-          // Insert marker so the card renders inline within the text
-          fullText += `\n\n{{data:${dataBlocks.length - 1}}}\n\n`;
+          if (loadingBlockIndex >= 0) {
+            // Replace loading block with real data
+            dataBlocks[loadingBlockIndex] = { ...event, status: "success" as const };
+            loadingBlockIndex = -1;
+          } else {
+            // No loading block, add new
+            dataBlocks.push({ ...event, status: "success" as const });
+            fullText += `\n\n{{data:${dataBlocks.length - 1}}}\n\n`;
+          }
           const content = fullText;
           const data = [...dataBlocks];
           setMessages((prev) =>
@@ -178,7 +222,8 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
                     // Only use event.answer if we have no data blocks.
                     content: dataBlocks.length > 0 ? fullText : event.answer,
                     usage: event.usage,
-                    data: event.data.length > 0 ? event.data : null,
+                    // Use local dataBlocks (has status field) over event.data
+                    data: dataBlocks.length > 0 ? dataBlocks : null,
                   }
                 : m,
             );

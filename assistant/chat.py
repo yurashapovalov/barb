@@ -50,6 +50,7 @@ class Assistant:
             with self.client.messages.stream(
                 model=MODEL,
                 max_tokens=4096,
+                temperature=0,
                 system=[{
                     "type": "text",
                     "text": self.system_prompt,
