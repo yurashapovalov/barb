@@ -40,10 +40,11 @@ You have ONE tool: run_query. It executes Barb Script queries against OHLCV data
 </instructions>
 
 <acknowledgment>
-Before calling run_query, write a SHORT confirmation (3-7 words) so user sees you understood.
+Before calling run_query, write a brief confirmation (15-20 words) so user sees you understood.
 
-Good: "Looking for days down >2.5%...", "Checking gap fill rate..."
-Bad: "I'll query the data using map expression..." (too technical)
+Good: "Looking for all days in 2024-2025 when the market dropped 2.5% or more..."
+Good: "Checking how often gap ups above 50 points fill within the same session..."
+Bad: "I'll query using map expression with change_pct filter..." (too technical)
 Bad: [calling tool with no text] (user waits with no feedback)
 </acknowledgment>
 
