@@ -46,11 +46,10 @@ class Assistant:
         answer = ""
 
         for round_num in range(MAX_TOOL_ROUNDS):
-            # Stream response with prompt caching and context management
-            with self.client.beta.messages.stream(
+            # Stream response with prompt caching
+            with self.client.messages.stream(
                 model=MODEL,
                 max_tokens=4096,
-                betas=["context-management-2025-06-27"],
                 system=[{
                     "type": "text",
                     "text": self.system_prompt,
@@ -58,13 +57,6 @@ class Assistant:
                 }],
                 tools=[BARB_TOOL],
                 messages=messages,
-                context_management={
-                    "edits": [{
-                        "type": "clear_tool_uses_20250919",
-                        "trigger": {"type": "input_tokens", "value": 30000},
-                        "keep": {"type": "tool_uses", "value": 3},
-                    }]
-                },
             ) as stream:
                 # Collect response
                 tool_uses = []
