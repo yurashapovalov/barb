@@ -167,3 +167,45 @@ class TestErrors:
     def test_method_call_rejected(self, df, functions):
         with pytest.raises(ExpressionError, match="Only simple function calls"):
             evaluate("close.mean()", df, functions)
+
+
+# --- Date Comparison ---
+
+class TestDateComparison:
+    @pytest.fixture
+    def df_with_dates(self):
+        """DataFrame with datetime index for date comparison tests."""
+        import datetime
+        dates = pd.date_range("2024-03-01", periods=5, freq="D")
+        df = pd.DataFrame({
+            "close": [100.0, 101.0, 102.0, 103.0, 104.0],
+        }, index=dates)
+        df.index.name = "timestamp"
+        return df
+
+    @pytest.fixture
+    def date_functions(self):
+        """Functions including date()."""
+        from barb.functions import FUNCTIONS
+        return FUNCTIONS
+
+    def test_date_greater_equal_string(self, df_with_dates, date_functions):
+        """date() >= '2024-03-03' should work."""
+        result = evaluate("date() >= '2024-03-03'", df_with_dates, date_functions)
+        # 2024-03-01, 02, 03, 04, 05 -> [F, F, T, T, T]
+        assert list(result) == [False, False, True, True, True]
+
+    def test_date_less_string(self, df_with_dates, date_functions):
+        """date() < '2024-03-03' should work."""
+        result = evaluate("date() < '2024-03-03'", df_with_dates, date_functions)
+        assert list(result) == [True, True, False, False, False]
+
+    def test_date_equal_string(self, df_with_dates, date_functions):
+        """date() == '2024-03-03' should work."""
+        result = evaluate("date() == '2024-03-03'", df_with_dates, date_functions)
+        assert list(result) == [False, False, True, False, False]
+
+    def test_date_in_list(self, df_with_dates, date_functions):
+        """date() in ['2024-03-01', '2024-03-05'] should work."""
+        result = evaluate("date() in ['2024-03-01', '2024-03-05']", df_with_dates, date_functions)
+        assert list(result) == [True, False, False, False, True]

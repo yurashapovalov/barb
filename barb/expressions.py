@@ -6,10 +6,44 @@ No arbitrary code execution — only approved node types and functions.
 """
 
 import ast
+import datetime
 import operator
 import re
 
 import pandas as pd
+
+
+def _is_date_series(s) -> bool:
+    """Check if Series contains date objects."""
+    if not isinstance(s, pd.Series):
+        return False
+    if len(s) == 0:
+        return False
+    first = s.iloc[0]
+    return isinstance(first, datetime.date)
+
+
+def _parse_date_string(s: str) -> datetime.date | None:
+    """Parse date string like '2024-03-15' to date object."""
+    if not isinstance(s, str):
+        return None
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _coerce_for_date_comparison(left, right):
+    """Convert string to date if comparing date Series with string."""
+    if _is_date_series(left) and isinstance(right, str):
+        parsed = _parse_date_string(right)
+        if parsed:
+            return left, parsed
+    if _is_date_series(right) and isinstance(left, str):
+        parsed = _parse_date_string(left)
+        if parsed:
+            return parsed, right
+    return left, right
 
 
 class ExpressionError(Exception):
@@ -118,6 +152,9 @@ def _eval_node(node: ast.AST, df: pd.DataFrame, functions: dict):
         for op, comparator_node in zip(node.ops, node.comparators):
             if isinstance(op, ast.In):
                 right = _eval_node(comparator_node, df, functions)
+                # Auto-convert date strings in list when comparing with date Series
+                if _is_date_series(current) and isinstance(right, list):
+                    right = [_parse_date_string(x) or x for x in right]
                 if isinstance(current, pd.Series):
                     comparison = current.isin(right)
                 else:
@@ -133,6 +170,8 @@ def _eval_node(node: ast.AST, df: pd.DataFrame, functions: dict):
                 op_func = _COMPARE_OPS.get(type(op))
                 if op_func is None:
                     raise ExpressionError(f"Unsupported comparison: {type(op).__name__}")
+                # Auto-convert date strings when comparing with date Series
+                current, right = _coerce_for_date_comparison(current, right)
                 comparison = op_func(current, right)
             result = comparison if result is None else (result & comparison)
             current = right
