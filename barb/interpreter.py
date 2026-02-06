@@ -406,6 +406,24 @@ def sort_df(df: pd.DataFrame, sort: str) -> pd.DataFrame:
     )
 
 
+def _serialize_records(records: list[dict]) -> list[dict]:
+    """Convert DataFrame records to JSON-serializable format."""
+    result = []
+    for record in records:
+        row = {}
+        for key, value in record.items():
+            if pd.isna(value):
+                row[key] = None
+            elif isinstance(value, pd.Timestamp):
+                row[key] = value.isoformat()
+            elif hasattr(value, "item"):  # numpy types
+                row[key] = value.item()
+            else:
+                row[key] = value
+        result.append(row)
+    return result
+
+
 def _build_response(result, query, rows, session, timeframe, warnings, source_df=None) -> dict:
     """Build the structured response with summary for model and table for UI."""
     metadata = {
@@ -430,11 +448,11 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
     is_valid_source = source_df is not None and isinstance(source_df, pd.DataFrame)
     if has_aggregation and is_valid_source and not source_df.empty:
         source_row_count = len(source_df)
-        source_rows = source_df.reset_index().to_dict("records")
+        source_rows = _serialize_records(source_df.reset_index().to_dict("records"))
 
     # DataFrame result (table or grouped)
     if isinstance(result, pd.DataFrame):
-        table = result.reset_index().to_dict("records")
+        table = _serialize_records(result.reset_index().to_dict("records"))
         is_grouped = query.get("group_by") is not None
 
         summary = _build_summary_for_table(
