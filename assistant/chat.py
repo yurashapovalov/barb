@@ -46,10 +46,11 @@ class Assistant:
         answer = ""
 
         for round_num in range(MAX_TOOL_ROUNDS):
-            # Stream response with prompt caching
-            with self.client.messages.stream(
+            # Stream response with prompt caching and context management
+            with self.client.beta.messages.stream(
                 model=MODEL,
                 max_tokens=4096,
+                betas=["context-management-2025-06-27"],
                 system=[{
                     "type": "text",
                     "text": self.system_prompt,
@@ -57,6 +58,13 @@ class Assistant:
                 }],
                 tools=[BARB_TOOL],
                 messages=messages,
+                context_management={
+                    "edits": [{
+                        "type": "clear_tool_uses_20250919",
+                        "trigger": {"type": "input_tokens", "value": 30000},
+                        "keep": {"type": "tool_uses", "value": 3},
+                    }]
+                },
             ) as stream:
                 # Collect response
                 tool_uses = []
@@ -250,15 +258,9 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
     return messages
 
 
-def _compact_output(output) -> str:
-    """Compact tool output for history."""
-    if output is None:
-        return "done"
-    # Handle dict format from Supabase ({"raw": "..."})
-    if isinstance(output, dict):
-        output = output.get("raw", str(output))
-    if not isinstance(output, str):
-        output = str(output)
-    if len(output) < 500:
-        return output
-    return output[:400] + "..."
+def _compact_output(*_args) -> str:
+    """Return minimal acknowledgment for history.
+
+    Model should re-query for fresh data, not reference old results.
+    """
+    return "done"
