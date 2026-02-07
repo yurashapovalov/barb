@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { formatLabel } from "@/components/ai/data-card";
 import { BarChart } from "@/components/charts/bar-chart";
+import { formatColumnLabel } from "@/lib/format";
 import type { DataBlock } from "@/types";
 import { PanelHeader } from "./panel-header";
 
@@ -62,10 +63,11 @@ function buildColumns(rows: Row[]): ColumnDef<Row>[] {
     accessorKey: key,
     header: ({ column }) => {
       const sorted = column.getIsSorted();
+      const label = formatColumnLabel(key);
       return (
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-1 outline-none">
-            {key}
+            {label}
             {sorted === "asc" && <ArrowUpIcon className="size-3" />}
             {sorted === "desc" && <ArrowDownIcon className="size-3" />}
           </DropdownMenuTrigger>

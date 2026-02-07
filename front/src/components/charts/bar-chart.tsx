@@ -5,6 +5,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { formatColumnLabel, formatValue } from "@/lib/format";
 
 const COLOR_POSITIVE = "oklch(0.65 0.2 145)"; // green
 const COLOR_NEGATIVE = "oklch(0.65 0.2 25)";  // red
@@ -16,7 +17,10 @@ interface BarChartProps {
 }
 
 export function BarChart({ data, categoryKey, valueKey }: BarChartProps) {
+  const valueLabel = formatColumnLabel(valueKey);
+
   const config: ChartConfig = {
+    [valueKey]: { label: valueLabel },
     positive: { label: "Positive", color: COLOR_POSITIVE },
     negative: { label: "Negative", color: COLOR_NEGATIVE },
   };
@@ -36,7 +40,13 @@ export function BarChart({ data, categoryKey, valueKey }: BarChartProps) {
           tickMargin={8}
           width={50}
         />
-        <ChartTooltip content={<ChartTooltipContent />} />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={(value) => formatValue(value, { decimals: 2 })}
+            />
+          }
+        />
         <Bar dataKey={valueKey} radius={[4, 4, 0, 0]}>
           {data.map((entry, index) => {
             const value = entry[valueKey];
