@@ -17,35 +17,6 @@ MAX_TOOL_ROUNDS = 5
 MODEL = "claude-sonnet-4-5-20250929"
 
 
-def _build_chart_hint(query: dict, data: list) -> dict | None:
-    """Build chart hint from query structure.
-
-    Returns {"category": "col_name", "value": "col_name"} or None.
-    """
-    group_by = query.get("group_by")
-    if not group_by:
-        return None
-
-    # Category is the group_by column
-    category = group_by[0] if isinstance(group_by, list) else group_by
-
-    # Value is from select - find first numeric column that's not the category
-    if not data:
-        return None
-
-    first_row = data[0]
-    value = None
-    for key, val in first_row.items():
-        if key != category and isinstance(val, (int, float)):
-            value = key
-            break
-
-    if not value:
-        return None
-
-    return {"category": category, "value": value}
-
-
 class Assistant:
     """Chat assistant using Anthropic Claude with prompt caching."""
 
@@ -184,6 +155,7 @@ class Assistant:
 
                 # Send data block to UI (table or source_rows as evidence)
                 ui_data = table_data or source_rows
+                chart_hint = result.get("chart")
                 if not call_error and ui_data:
                     title = tu["input"].get("title", "")
                     block = {
@@ -192,7 +164,7 @@ class Assistant:
                         "result": ui_data,
                         "rows": len(ui_data) if isinstance(ui_data, list) else None,
                         "title": title,
-                        "chart": _build_chart_hint(query, ui_data),
+                        "chart": chart_hint,
                     }
                     # Insert marker into answer for proper positioning
                     block_index = len(data_blocks)

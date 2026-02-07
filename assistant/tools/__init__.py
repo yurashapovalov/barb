@@ -66,6 +66,7 @@ def run_query(query: dict, df, sessions: dict) -> dict:
         - model_response: str - compact summary for model
         - table: list | None - full data for UI
         - source_rows: list | None - evidence for aggregations
+        - chart: dict | None - chart hints (category, value columns)
     """
     try:
         result = execute(query, df, sessions)
@@ -76,13 +77,14 @@ def run_query(query: dict, df, sessions: dict) -> dict:
             "table": result.get("table"),
             "source_rows": result.get("source_rows"),
             "source_row_count": result.get("source_row_count"),
+            "chart": result.get("chart"),
         }
 
     except QueryError as e:
-        return {"model_response": f"Error: {e}", "table": None, "source_rows": None}
+        return {"model_response": f"Error: {e}", "table": None, "source_rows": None, "chart": None}
     except Exception as e:
         msg = f"Error: {type(e).__name__}: {e}"
-        return {"model_response": msg, "table": None, "source_rows": None}
+        return {"model_response": msg, "table": None, "source_rows": None, "chart": None}
 
 
 def _format_summary_for_model(summary: dict) -> str:

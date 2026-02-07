@@ -468,6 +468,17 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
             result, table, query, summary_columns, map_columns, is_grouped,
         )
 
+        # Chart hint for grouped results
+        chart = None
+        if is_grouped:
+            group_by = query.get("group_by")
+            category = group_by if isinstance(group_by, str) else group_by[0]
+            # Value columns = all columns except group_by key(s)
+            group_keys = {group_by} if isinstance(group_by, str) else set(group_by)
+            value_cols = [c for c in result.columns if c not in group_keys]
+            if value_cols:
+                chart = {"category": category, "value": value_cols[0]}
+
         return {
             "summary": summary,
             "table": table,
@@ -475,6 +486,7 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
             "source_row_count": source_row_count,
             "metadata": metadata,
             "query": query,
+            "chart": chart,
         }
 
     # Dict result (multiple aggregates)
