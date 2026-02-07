@@ -1,10 +1,13 @@
-import { Bar, BarChart as RechartsBarChart, XAxis, YAxis } from "recharts";
+import { Bar, BarChart as RechartsBarChart, Cell, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+
+const COLOR_POSITIVE = "oklch(0.65 0.2 145)"; // green
+const COLOR_NEGATIVE = "oklch(0.65 0.2 25)";  // red
 
 interface BarChartProps {
   data: Record<string, unknown>[];
@@ -14,10 +17,8 @@ interface BarChartProps {
 
 export function BarChart({ data, categoryKey, valueKey }: BarChartProps) {
   const config: ChartConfig = {
-    [valueKey]: {
-      label: valueKey,
-      color: "hsl(var(--chart-1))",
-    },
+    positive: { label: "Positive", color: COLOR_POSITIVE },
+    negative: { label: "Negative", color: COLOR_NEGATIVE },
   };
 
   return (
@@ -36,11 +37,18 @@ export function BarChart({ data, categoryKey, valueKey }: BarChartProps) {
           width={50}
         />
         <ChartTooltip content={<ChartTooltipContent />} />
-        <Bar
-          dataKey={valueKey}
-          fill={`var(--color-${valueKey})`}
-          radius={[4, 4, 0, 0]}
-        />
+        <Bar dataKey={valueKey} radius={[4, 4, 0, 0]}>
+          {data.map((entry, index) => {
+            const value = entry[valueKey];
+            const isPositive = typeof value === "number" && value >= 0;
+            return (
+              <Cell
+                key={index}
+                fill={isPositive ? COLOR_POSITIVE : COLOR_NEGATIVE}
+              />
+            );
+          })}
+        </Bar>
       </RechartsBarChart>
     </ChartContainer>
   );

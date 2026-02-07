@@ -28,6 +28,7 @@ export interface DataBlock {
   title?: string;
   status?: "loading" | "success" | "error";
   error?: string;
+  chart?: { category: string; value: string } | null;
 }
 
 export interface UsageBlock {

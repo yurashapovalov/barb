@@ -29,48 +29,23 @@ import type { DataBlock } from "@/types";
 import { PanelHeader } from "./panel-header";
 
 type ChartInfo = {
-  type: "bar" | "line" | null;
+  type: "bar";
   categoryKey: string;
   valueKey: string;
 } | null;
 
-function detectChart(rows: Record<string, unknown>[]): ChartInfo {
-  // Need 2-20 rows for a meaningful bar chart
-  if (rows.length < 2 || rows.length > 20) return null;
-
-  const firstRow = rows[0];
-  const keys = Object.keys(firstRow);
-
-  // Need at least 2 columns (category + value)
-  if (keys.length < 2) return null;
-
-  // Find category column (first non-numeric or small integer like weekday 0-6)
-  // Find value column (numeric)
-  let categoryKey: string | null = null;
-  let valueKey: string | null = null;
-
-  for (const key of keys) {
-    const value = firstRow[key];
-    const isNumeric = typeof value === "number";
-
-    if (!categoryKey && !isNumeric) {
-      categoryKey = key;
-    } else if (!categoryKey && isNumeric && Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 12) {
-      // Small integers (0-12) could be weekday/month - treat as category
-      categoryKey = key;
-    } else if (!valueKey && isNumeric) {
-      valueKey = key;
+function getChartInfo(data: DataBlock, rows: Record<string, unknown>[]): ChartInfo {
+  // Use chart hint from backend if available
+  const hint = data.chart as { category?: string; value?: string } | undefined;
+  if (hint?.category && hint?.value) {
+    // Verify columns exist in data
+    if (rows.length > 0 && hint.category in rows[0] && hint.value in rows[0]) {
+      return { type: "bar", categoryKey: hint.category, valueKey: hint.value };
     }
   }
 
-  // If no category found, use first column
-  if (!categoryKey && keys.length >= 2) {
-    categoryKey = keys[0];
-  }
-
-  if (!categoryKey || !valueKey) return null;
-
-  return { type: "bar", categoryKey, valueKey };
+  // No chart hint - don't show chart
+  return null;
 }
 
 type Row = Record<string, unknown>;
@@ -127,7 +102,7 @@ export function DataPanel({ data, onClose }: DataPanelProps) {
 
   const rows = normalizeResult(data.source_rows ?? data.result);
   const columns = buildColumns(rows);
-  const chartInfo = detectChart(rows);
+  const chartInfo = getChartInfo(data, rows);
 
   const table = useReactTable({
     data: rows,
