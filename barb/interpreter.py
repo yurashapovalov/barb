@@ -45,6 +45,9 @@ _OHLC_COLUMNS = ["open", "high", "low", "close"]
 # Columns to preserve original precision (source data, not calculated)
 _PRESERVE_PRECISION = {"open", "high", "low", "close", "volume"}
 
+# Decimal places for calculated values (FP noise removal)
+CALCULATED_PRECISION = 4
+
 # Fields allowed in a query
 _VALID_FIELDS = {
     "session", "from", "period", "map",
@@ -492,7 +495,7 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
 def _serialize_records(records: list[dict]) -> list[dict]:
     """Convert DataFrame records to JSON-serializable format.
 
-    Rounds calculated float values to 2 decimals, preserves OHLCV precision.
+    Rounds calculated float values to CALCULATED_PRECISION, preserves OHLCV precision.
     """
     result = []
     for record in records:
@@ -504,9 +507,9 @@ def _serialize_records(records: list[dict]) -> list[dict]:
                 row[key] = value.isoformat()
             elif hasattr(value, "item"):  # numpy types
                 v = value.item()
-                row[key] = v if key in _PRESERVE_PRECISION or not isinstance(v, float) else round(v, 2)
+                row[key] = v if key in _PRESERVE_PRECISION or not isinstance(v, float) else round(v, CALCULATED_PRECISION)
             elif isinstance(value, float):
-                row[key] = value if key in _PRESERVE_PRECISION else round(value, 2)
+                row[key] = value if key in _PRESERVE_PRECISION else round(value, CALCULATED_PRECISION)
             else:
                 row[key] = value
         result.append(row)
