@@ -42,6 +42,9 @@ _INTRADAY_TIMEFRAMES = {"1m", "5m", "15m", "30m", "1h", "2h", "4h"}
 # Standard OHLC column order
 _OHLC_COLUMNS = ["open", "high", "low", "close"]
 
+# Columns to preserve original precision (source data, not calculated)
+_PRESERVE_PRECISION = {"open", "high", "low", "close", "volume"}
+
 # Fields allowed in a query
 _VALID_FIELDS = {
     "session", "from", "period", "map",
@@ -487,7 +490,10 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
 
 
 def _serialize_records(records: list[dict]) -> list[dict]:
-    """Convert DataFrame records to JSON-serializable format."""
+    """Convert DataFrame records to JSON-serializable format.
+
+    Rounds calculated float values to 2 decimals, preserves OHLCV precision.
+    """
     result = []
     for record in records:
         row = {}
@@ -497,7 +503,10 @@ def _serialize_records(records: list[dict]) -> list[dict]:
             elif isinstance(value, pd.Timestamp):
                 row[key] = value.isoformat()
             elif hasattr(value, "item"):  # numpy types
-                row[key] = value.item()
+                v = value.item()
+                row[key] = v if key in _PRESERVE_PRECISION or not isinstance(v, float) else round(v, 2)
+            elif isinstance(value, float):
+                row[key] = value if key in _PRESERVE_PRECISION else round(value, 2)
             else:
                 row[key] = value
         result.append(row)
