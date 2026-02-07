@@ -4,11 +4,6 @@
 
 ## Модули
 
-### models.py
-Конфигурация LLM-моделей. Pricing (USD за 1M токенов), context window, max output. Функция `calculate_cost()` считает стоимость запроса.
-
-Текущие модели: `gemini-3-flash`, `gemini-2.5-flash-lite` (дефолт).
-
 ### market/instruments.py
 Конфигурация торговых инструментов. Сейчас один — NQ (Nasdaq 100 E-mini).
 

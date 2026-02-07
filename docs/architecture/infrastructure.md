@@ -53,7 +53,7 @@ Deploy запускается только после успешных тест�
 
 ## Секреты
 
-- `GEMINI_API_KEY` — Google Gemini API
+- `ANTHROPIC_API_KEY` — Anthropic Claude API
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY` — Supabase
 - `SUPABASE_JWT_SECRET` — валидация JWT на бэкенде
 - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL` — фронт (публичные)
@@ -61,4 +61,4 @@ Deploy запускается только после успешных тест�
 
 ## База данных (Supabase)
 
-Три таблицы: conversations, messages, tool_calls. RLS — пользователь видит только свои данные. Подробности в `docs/database-schema.md`.
+Три таблицы: conversations, messages, tool_calls. RLS — пользователь видит только свои данные.

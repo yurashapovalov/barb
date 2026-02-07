@@ -9,8 +9,8 @@ React SPA. Vite + TypeScript + Tailwind v4 + shadcn/ui.
 - **Tailwind CSS v4** — стили
 - **shadcn/ui** — UI компоненты
 - **React Router** — маршрутизация
-- **Supabase JS** — авторизация + хранение чатов
-- **Plain fetch** — запросы к API
+- **Supabase JS** — авторизация
+- **Plain fetch** — запросы к API (SSE streaming)
 
 ## Маршруты
 
@@ -30,14 +30,6 @@ Google OAuth через Supabase. Поток:
 
 AuthProvider — единственный глобальный стейт (контекст). Предоставляет: user, session, loading, signInWithGoogle, signOut.
 
-## Хранение данных
-
-Фронт напрямую работает с Supabase (не через API):
-- Создание/загрузка чатов (conversations)
-- Сохранение/загрузка сообщений (messages)
-
-API не трогает Supabase. API только обрабатывает чат-запросы и возвращает ответ.
-
 ## Структура
 
 ```
@@ -46,21 +38,34 @@ front/src/
   main.tsx                  — точка входа
   lib/
     supabase.ts             — Supabase клиент
-    api.ts                  — sendMessage() → POST /api/chat
+    api.ts                  — SSE streaming (sendMessageStream)
     utils.ts                — cn() для shadcn
   hooks/
     use-auth.ts             — доступ к AuthContext
-    use-chat.ts             — управление одним чатом (TODO)
-    use-conversations.ts    — список чатов (TODO)
+    use-chat.ts             — управление сообщениями, SSE handlers
+    use-conversations.ts    — CRUD разговоров
   types/
-    index.ts                — Message, Conversation, DataBlock, UsageBlock, ToolCall
+    index.ts                — Message, Conversation, DataBlock, UsageBlock, ToolCall, SSE events
   components/
     ui/                     — shadcn компоненты
     auth/                   — AuthProvider, AuthGuard, LoginPage
-    chat/                   — ChatPage (TODO)
-    sidebar/                — список чатов (TODO)
+    ai/                     — ChatMessage, DataCard, MarkdownContent
+    sidebar/                — ConversationList, ConversationItem
     layout/                 — RootLayout
+  pages/
+    chat/                   — ChatPage container и presenter
 ```
+
+## SSE Handling
+
+`use-chat.ts` обрабатывает SSE events от API:
+- `onTextDelta` — добавляет текст к ответу
+- `onToolStart` — показывает loading state на data card
+- `onToolEnd` — показывает error если был
+- `onDataBlock` — заменяет loading на данные
+- `onDone` — финализирует сообщение
+- `onPersist` — обновляет message ID
+- `onTitleUpdate` — обновляет title в sidebar
 
 ## Деплой
 

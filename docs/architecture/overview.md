@@ -9,9 +9,9 @@
     ↓
 Frontend (React + Supabase)     — UI, авторизация, история чатов
     ↓ JWT
-API (FastAPI)                   — валидация токена, маршрутизация
+API (FastAPI + Supabase)        — валидация токена, CRUD, SSE streaming
     ↓
-Assistant (Gemini + tools)      — LLM думает, вызывает инструменты
+Assistant (Claude + run_query)  — LLM думает, вызывает инструмент
     ↓
 Query Engine (barb/)            — детерминированное выполнение запросов
     ↓
@@ -21,15 +21,16 @@ Data (Parquet)                  — минутные OHLCV данные
 ## Принципы
 
 - **LLM — мозг, Query Engine — руки.** LLM решает что считать, Query Engine считает. Никакого произвольного кода — только JSON-запросы через фиксированный пайплайн.
-- **Stateless API.** Клиент шлёт полную историю каждый запрос. Сервер ничего не хранит между запросами.
-- **Конфиг, не код.** Инструменты, сессии, праздники, модели — всё в config/. Промпт строится из конфига, не захардкожен.
-- **Frontend хранит данные.** Чаты и сообщения живут в Supabase. API только обрабатывает запросы.
+- **Stateless API.** Сервер не хранит состояние между запросами. История загружается из Supabase.
+- **Конфиг, не код.** Инструменты, сессии, праздники — всё в config/. Промпт строится из конфига, не захардкожен.
+- **SSE streaming.** Ответы модели стримятся через Server-Sent Events — пользователь видит текст по мере генерации.
 
 ## Модули
 
 - [Query Engine (barb/)](./query-engine.md) — пайплайн обработки запросов
 - [Assistant (assistant/)](./assistant.md) — LLM + tool calling
 - [API (api/)](./api.md) — HTTP слой
-- [Config (config/)](./config.md) — конфигурация инструментов, моделей, рынка
+- [Config (config/)](./config.md) — конфигурация инструментов, рынка
 - [Frontend (front/)](./frontend.md) — React приложение
 - [Инфраструктура](./infrastructure.md) — деплой, CI, Docker
+- [Result Format](./result-format.md) — формат данных для модели и UI

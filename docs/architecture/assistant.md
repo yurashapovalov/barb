@@ -1,42 +1,60 @@
 # Assistant (assistant/)
 
-LLM-слой. Google Gemini с tool calling. Переводит естественный язык в JSON-запросы Query Engine.
+LLM-слой. Anthropic Claude с tool calling. Переводит естественный язык в JSON-запросы Query Engine.
 
 ## Как работает
 
 ```
 Пользователь: "Какой средний дневной диапазон NQ за 2024?"
     ↓
-Gemini получает system prompt + историю + сообщение
+Claude получает system prompt + историю + сообщение
     ↓
-Gemini вызывает understand_question → узнаёт возможности движка
+Claude пишет acknowledgment: "Считаю средний диапазон..."
     ↓
-Gemini вызывает get_query_reference → узнаёт синтаксис запросов
+Claude вызывает run_query({session: "RTH", from: "daily", ...})
     ↓
-Gemini вызывает execute_query({...}) → получает результат
+Query Engine возвращает summary + table
     ↓
-Gemini формулирует ответ на человеческом языке
+Claude формулирует ответ на основе summary
 ```
 
-Максимум 5 раундов tool calling за один запрос. Обычно 1-3.
+Максимум 5 раундов tool calling за один запрос. Обычно 1-2.
 
 ## Модули
 
 ### chat.py
-Класс `Assistant`. Stateless — клиент передаёт полную историю каждый запрос. Считает токены, собирает tool_calls (имя, input, output, error, duration_ms), собирает data blocks для UI.
+Класс `Assistant`. Использует `anthropic.Anthropic` клиент с prompt caching. Стримит ответ через generator, yielding SSE events: `text_delta`, `tool_start`, `tool_end`, `data_block`, `done`.
+
+Параметры модели:
+- model: `claude-sonnet-4-5-20250929`
+- max_tokens: 4096
+- temperature: 0 (детерминистичные ответы)
 
 ### prompt.py
-Строит system prompt из конфига инструмента. Включает: роль, контекст (символ, биржа, диапазон данных, сессии), инструкции по воркфлоу. Промпт маленький — детали LLM получает через тулы по запросу.
+Строит system prompt из конфига инструмента. Включает:
+- Роль и контекст (символ, биржа, диапазон данных, сессии)
+- Инструкции по workflow
+- Секцию `<acknowledgment>` — модель пишет 15-20 слов перед tool call
+- Секцию `<data_titles>` — модель даёт название каждому результату
+- Примеры использования
 
 ### tools/
-Три инструмента:
+Один инструмент: **run_query**
 
-- **understand_question** — возвращает описание возможностей движка (таймфреймы, сессии, функции, ограничения). LLM вызывает первым чтобы понять что можно считать.
-- **get_query_reference** — возвращает полную спецификацию формата запросов (все поля, функции, порядок выполнения, примеры). LLM использует чтобы составить правильный JSON.
-- **execute_query** — принимает JSON-запрос, валидирует, выполняет через interpreter, возвращает результат + метаданные.
+Принимает JSON-запрос Barb Script, выполняет через interpreter, возвращает:
+- `model_response` — компактный summary для модели
+- `table` — полные данные для UI
+- `source_rows` — исходные строки (для агрегаций)
 
-## Дизайн
+Tool description включает полную спецификацию Barb Script + expressions.md.
 
-**Промпт маленький.** Всё что LLM нужно знать "по запросу" — в тулах. Промпт содержит только то что нужно для каждого ответа. Это снижает latency и стоимость.
+## Prompt Caching
 
-**Tool calls логируются.** Каждый вызов записывается с duration_ms и error — для анализа качества ответов и дебага.
+System prompt кэшируется через `cache_control: {"type": "ephemeral"}`. После первого запроса ~90% токенов читаются из кэша (0.30$/MTok вместо 3$/MTok).
+
+## Tool Calls
+
+Каждый вызов логируется в Supabase (таблица `tool_calls`):
+- tool_name, input, output
+- error (если был)
+- duration_ms
