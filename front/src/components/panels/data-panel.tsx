@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   type ColumnDef,
   type SortingState,
@@ -24,8 +24,54 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatLabel } from "@/components/ai/data-card";
+import { BarChart } from "@/components/charts/bar-chart";
 import type { DataBlock } from "@/types";
 import { PanelHeader } from "./panel-header";
+
+type ChartInfo = {
+  type: "bar" | "line" | null;
+  categoryKey: string;
+  valueKey: string;
+} | null;
+
+function detectChart(rows: Record<string, unknown>[]): ChartInfo {
+  // Need 2-20 rows for a meaningful bar chart
+  if (rows.length < 2 || rows.length > 20) return null;
+
+  const firstRow = rows[0];
+  const keys = Object.keys(firstRow);
+
+  // Need at least 2 columns (category + value)
+  if (keys.length < 2) return null;
+
+  // Find category column (first non-numeric or small integer like weekday 0-6)
+  // Find value column (numeric)
+  let categoryKey: string | null = null;
+  let valueKey: string | null = null;
+
+  for (const key of keys) {
+    const value = firstRow[key];
+    const isNumeric = typeof value === "number";
+
+    if (!categoryKey && !isNumeric) {
+      categoryKey = key;
+    } else if (!categoryKey && isNumeric && Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 12) {
+      // Small integers (0-12) could be weekday/month - treat as category
+      categoryKey = key;
+    } else if (!valueKey && isNumeric) {
+      valueKey = key;
+    }
+  }
+
+  // If no category found, use first column
+  if (!categoryKey && keys.length >= 2) {
+    categoryKey = keys[0];
+  }
+
+  if (!categoryKey || !valueKey) return null;
+
+  return { type: "bar", categoryKey, valueKey };
+}
 
 type Row = Record<string, unknown>;
 
@@ -79,8 +125,9 @@ export function DataPanel({ data, onClose }: DataPanelProps) {
     setSorting([]);
   }, [data]);
 
-  const rows = useMemo(() => normalizeResult(data.source_rows ?? data.result), [data.source_rows, data.result]);
-  const columns = useMemo(() => buildColumns(rows), [rows]);
+  const rows = normalizeResult(data.source_rows ?? data.result);
+  const columns = buildColumns(rows);
+  const chartInfo = detectChart(rows);
 
   const table = useReactTable({
     data: rows,
@@ -101,6 +148,15 @@ export function DataPanel({ data, onClose }: DataPanelProps) {
       </PanelHeader>
       <div className="flex-1 overflow-y-auto">
         <h2 className="px-6 py-4 text-lg font-medium">{formatLabel(data)}</h2>
+        {chartInfo?.type === "bar" && (
+          <div className="px-6 pb-4">
+            <BarChart
+              data={rows}
+              categoryKey={chartInfo.categoryKey}
+              valueKey={chartInfo.valueKey}
+            />
+          </div>
+        )}
         <Table className="w-auto mx-6">
           <TableHeader>
             {table.getHeaderGroups().map((group) => (

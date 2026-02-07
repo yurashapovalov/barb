@@ -202,46 +202,44 @@ Frontend receives data once, decides how to render (table, chart, or both).
 
 ## Architecture
 
+### Decision: Frontend decides chart type
+
+Модель НЕ указывает тип графика. Фронт решает автоматически по структуре данных.
+
+**Почему:**
+- Модель может ошибиться с выбором
+- Пользователь хочет переключить → нужен повторный API call
+- Усложняет промпт
+- Данные уже есть на фронте — перерисовка мгновенная
+
 ### Backend Changes
 
-**Option A: Model decides chart type**
-
-Model includes chart specification in tool output:
+Никаких изменений в tool schema. Backend возвращает данные как обычно:
 ```python
-# In run_query result
 {
+  "summary": {"type": "grouped", "by": "dow", ...},
   "table": [...],
-  "chart": {
-    "type": "histogram",
-    "values": [...],
-    "config": {...}
-  }
 }
 ```
 
-**Option B: Frontend decides based on data**
+### Frontend Logic
 
-Query returns data, frontend auto-detects appropriate chart:
-- Single column of numbers → histogram
-- Group by + aggregate → bar chart
-- Temporal grouping → line chart
+Автовыбор графика по `summary.type` и структуре данных:
 
-**Recommendation:** Option A — model has context about user intent.
+| Условие | График |
+|---------|--------|
+| `type: "grouped"` + категории (dow, dayname) | Bar |
+| `type: "grouped"` + время (month, year) | Line |
+| `type: "table"` + числовая колонка | Histogram (опционально) |
+| `type: "scalar"` или `type: "dict"` | Нет графика |
 
-### Tool Schema Update
+### User Override
 
-Add optional `visualization` parameter to `run_query`:
-```json
-{
-  "visualization": {
-    "type": "string",
-    "enum": ["histogram", "bar", "line", "scatter", "none"],
-    "description": "Chart type to show with results"
-  }
-}
+Пользователь может переключить тип графика кнопками:
 ```
-
-Or model can specify in response metadata.
+[Bar] [Line] [Table only]
+```
+Данные не перезапрашиваются — мгновенная перерисовка.
 
 ### Frontend Components
 
@@ -277,36 +275,25 @@ front/src/components/ai/
 
 ## Prompt Updates
 
-Add to system prompt:
-```
-<visualizations>
-When results benefit from visual representation, include a chart:
-- Distribution of values → histogram
-- Comparison by category → bar chart
-- Trend over time → line chart
-- Backtest results → always include equity curve
-
-Specify visualization in your response when appropriate.
-</visualizations>
-```
+Не требуется. Модель не знает о графиках — фронт решает сам.
 
 ## Implementation Plan
 
-### Phase 1: Setup
+### Step 1: Basic Charts (auto-selected)
 - [ ] Add Shadcn chart components (`npx shadcn@latest add chart`)
-- [ ] Create wrapper components in `components/ai/charts/`
-- [ ] Update DataCard to support chart + table layout
+- [ ] Create chart components in `components/ai/charts/`
+- [ ] Update DataCard: detect data type → show default chart
+- [ ] Bar chart for grouped categorical data
+- [ ] Line chart for grouped temporal data
 
-### Phase 2: Bar Chart (histogram + categories)
-- [ ] Histogram for distributions (change_pct, gaps, ranges)
-- [ ] Category bars for group_by results (weekday, month)
+### Step 2: Chart Switcher
+- [ ] Add chart type buttons to DataCard header
+- [ ] Store selected chart type in component state
+- [ ] Instant re-render on switch (no API call)
 
-### Phase 3: Area Chart (equity curve)
-- [ ] Equity curve for backtest results
-- [ ] Highlight drawdown periods (optional)
-
-### Phase 4: Line Chart
-- [ ] Trends over time (monthly stats, yearly comparisons)
+### Step 3: Additional Charts
+- [ ] Histogram for distributions
+- [ ] Area chart (equity curve) for backtests
 
 ## Deferred (v2+)
 
@@ -318,5 +305,4 @@ Specify visualization in your response when appropriate.
 ## Open Questions
 
 1. **Chart height:** Fixed 200px or responsive?
-2. **Tooltips:** Show on hover?
-3. **Mobile:** Stack chart above table?
+2. **Mobile:** Stack chart above table?

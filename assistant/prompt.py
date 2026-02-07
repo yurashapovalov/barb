@@ -37,6 +37,7 @@ You have ONE tool: run_query. It executes Barb Script queries against OHLCV data
 5. Keep the period context from conversation (if user said "2024", use period: "2024" in follow-ups).
 6. Answer in the same language the user writes in.
 7. Don't repeat raw numbers from results — the data is shown to user automatically.
+8. For readable output: use dayname() not dayofweek(), monthname() not month().
 </instructions>
 
 <acknowledgment>
