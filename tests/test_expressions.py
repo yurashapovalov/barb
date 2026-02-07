@@ -175,7 +175,6 @@ class TestDateComparison:
     @pytest.fixture
     def df_with_dates(self):
         """DataFrame with datetime index for date comparison tests."""
-        import datetime
         dates = pd.date_range("2024-03-01", periods=5, freq="D")
         df = pd.DataFrame({
             "close": [100.0, 101.0, 102.0, 103.0, 104.0],
