@@ -36,6 +36,12 @@ RESAMPLE_RULES = {
     "yearly": "YE",
 }
 
+# Timeframes that need both date and time columns
+_INTRADAY_TIMEFRAMES = {"1m", "5m", "15m", "30m", "1h", "2h", "4h"}
+
+# Standard OHLC column order
+_OHLC_COLUMNS = ["open", "high", "low", "close"]
+
 # Fields allowed in a query
 _VALID_FIELDS = {
     "session", "from", "period", "map",
@@ -415,6 +421,71 @@ def sort_df(df: pd.DataFrame, sort: str) -> pd.DataFrame:
     )
 
 
+def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
+    """Prepare DataFrame for JSON output: split timestamp, order columns.
+
+    Column order priority:
+      1. date (always first)
+      2. time (only for intraday timeframes)
+      3. group_by keys (if grouped)
+      4. OHLC columns (open, high, low, close)
+      5. volume
+      6. calculated columns (from map, in declaration order)
+      7. any remaining columns
+    """
+    df = df.reset_index()
+
+    # Split timestamp into date + time based on timeframe
+    timeframe = query.get("from", "1m")
+    if "timestamp" in df.columns:
+        ts = pd.to_datetime(df["timestamp"])
+        df["date"] = ts.dt.strftime("%Y-%m-%d")
+        if timeframe in _INTRADAY_TIMEFRAMES:
+            df["time"] = ts.dt.strftime("%H:%M")
+        df = df.drop(columns=["timestamp"])
+
+    # Build ordered column list
+    map_columns = list(query.get("map", {}).keys())
+    group_by = query.get("group_by")
+    group_cols = [group_by] if isinstance(group_by, str) else (group_by or [])
+
+    ordered = []
+
+    # 1. date
+    if "date" in df.columns:
+        ordered.append("date")
+
+    # 2. time (if intraday)
+    if "time" in df.columns:
+        ordered.append("time")
+
+    # 3. group keys
+    for col in group_cols:
+        if col in df.columns and col not in ordered:
+            ordered.append(col)
+
+    # 4. OHLC
+    for col in _OHLC_COLUMNS:
+        if col in df.columns:
+            ordered.append(col)
+
+    # 5. volume
+    if "volume" in df.columns:
+        ordered.append("volume")
+
+    # 6. calculated columns (from map)
+    for col in map_columns:
+        if col in df.columns and col not in ordered:
+            ordered.append(col)
+
+    # 7. remaining columns
+    for col in df.columns:
+        if col not in ordered:
+            ordered.append(col)
+
+    return df[ordered]
+
+
 def _serialize_records(records: list[dict]) -> list[dict]:
     """Convert DataFrame records to JSON-serializable format."""
     result = []
@@ -457,11 +528,13 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
     is_valid_source = source_df is not None and isinstance(source_df, pd.DataFrame)
     if has_aggregation and is_valid_source and not source_df.empty:
         source_row_count = len(source_df)
-        source_rows = _serialize_records(source_df.reset_index().to_dict("records"))
+        prepared = _prepare_for_output(source_df, query)
+        source_rows = _serialize_records(prepared.to_dict("records"))
 
     # DataFrame result (table or grouped)
     if isinstance(result, pd.DataFrame):
-        table = _serialize_records(result.reset_index().to_dict("records"))
+        prepared = _prepare_for_output(result, query)
+        table = _serialize_records(prepared.to_dict("records"))
         is_grouped = query.get("group_by") is not None
 
         summary = _build_summary_for_table(
