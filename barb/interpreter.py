@@ -507,9 +507,15 @@ def _serialize_records(records: list[dict]) -> list[dict]:
                 row[key] = value.isoformat()
             elif hasattr(value, "item"):  # numpy types
                 v = value.item()
-                row[key] = v if key in _PRESERVE_PRECISION or not isinstance(v, float) else round(v, CALCULATED_PRECISION)
+                if key in _PRESERVE_PRECISION or not isinstance(v, float):
+                    row[key] = v
+                else:
+                    row[key] = round(v, CALCULATED_PRECISION)
             elif isinstance(value, float):
-                row[key] = value if key in _PRESERVE_PRECISION else round(value, CALCULATED_PRECISION)
+                if key in _PRESERVE_PRECISION:
+                    row[key] = value
+                else:
+                    row[key] = round(value, CALCULATED_PRECISION)
             else:
                 row[key] = value
         result.append(row)
