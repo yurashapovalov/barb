@@ -7,6 +7,7 @@ New functions are added to category modules — they appear in Barb Script autom
 from barb.functions.aggregate import AGGREGATE_FUNCS, AGGREGATE_FUNCTIONS
 from barb.functions.convenience import CONVENIENCE_FUNCTIONS
 from barb.functions.core import CORE_FUNCTIONS
+from barb.functions.oscillators import OSCILLATOR_FUNCTIONS
 from barb.functions.cumulative import CUMULATIVE_FUNCTIONS
 from barb.functions.lag import LAG_FUNCTIONS
 from barb.functions.pattern import PATTERN_FUNCTIONS
@@ -22,6 +23,7 @@ FUNCTIONS = {
     **AGGREGATE_FUNCTIONS,
     **TIME_FUNCTIONS,
     **CONVENIENCE_FUNCTIONS,
+    **OSCILLATOR_FUNCTIONS,
 }
 
 __all__ = ["FUNCTIONS", "AGGREGATE_FUNCS"]
