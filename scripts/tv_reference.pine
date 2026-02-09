@@ -1,0 +1,8 @@
+//@version=5
+indicator("Barb Ref", overlay=false)
+plot(ta.rsi(close, 14), "RSI")
+plot(ta.atr(14), "ATR")
+plot(ta.cci(hlc3, 20), "CCI")
+plot(ta.stoch(close, high, low, 14), "StochK")
+plot(ta.wpr(14), "WilliamsR")
+plot(ta.mfi(hlc3, 14), "MFI")
