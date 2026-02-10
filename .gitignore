@@ -25,12 +25,8 @@ build/
 *.swo
 .DS_Store
 
-# Data (large files)
-data/*.txt
-data/*.csv
-
-# Keep parquet files tracked (they're smaller and binary)
-!data/*.parquet
+# Data (large files, not tracked)
+data/
 
 # Docker
 .docker/

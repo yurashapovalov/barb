@@ -98,14 +98,89 @@ technical indicators or query syntax.
 
 ---
 
+## Instruments Data Architecture
+
+Инструменты живут в Supabase, exchange-level данные — в коде.
+
+### Supabase: таблица `instruments`
+
+```
+Колонки (queryable, universal):
+  symbol          text PK         -- NQ, ES, CL, FDAX
+  name            text             -- Nasdaq 100 E-mini
+  exchange        text             -- CME, EUREX, ICE
+  category        text             -- index, energy, metals, grains, softs, livestock, currency, bonds, crypto, volatility
+  currency        text             -- USD, EUR
+  data_timezone   text             -- ET (все времена в sessions — в этом TZ)
+  default_session text             -- RTH
+  data_start      date             -- 2008-01-02
+  data_end        date             -- 2026-02-06
+  events          text[]           -- {macro, options}
+  image_url       text             -- Supabase Storage URL
+  active          boolean          -- true
+
+Config jsonb (per-instrument, structured):
+  tick_size       numeric          -- 0.25 (фьючерсы; акции — нет)
+  tick_value      numeric          -- 5.0
+  point_value     numeric          -- 20.0
+  maintenance     [start, end]     -- ["17:00", "18:00"]
+  sessions        {name: [s, e]}   -- {"RTH": ["09:30", "17:00"], ...}
+```
+
+Все времена в sessions и maintenance — в `data_timezone` (ET для CME).
+Инструменты на CME работают в CT, но мы руками сдвигаем +1h при записи.
+
+### Код: exchange-level данные
+
+**`holidays.py`** — holiday rules keyed by exchange + вся логика вычисления дат:
+```python
+EXCHANGE_HOLIDAYS = {
+    "cme": {
+        "full_close": ["new_year", "mlk_day", "presidents_day", ...],
+        "early_close": {"christmas_eve": "13:15", ...}
+    },
+    "eurex": {"full_close": ["new_year", "good_friday", ...], ...},
+}
+```
+
+Инструмент → `exchange` → holiday rules. Все CME закрыты на одни праздники.
+
+### Data flow
+
+```
+Supabase instruments          holidays.py              get_instrument("NQ")
+┌──────────────────┐         ┌──────────────────┐     ┌──────────────────────┐
+│ NQ: name, exchange│         │ EXCHANGE_HOLIDAYS│     │ merged dict:         │
+│   category, ticks │────┐    │   cme: [rules]   │──┐  │   sessions, ticks,   │
+│   sessions, etc.  │    │    │   eurex: [rules]  │  │  │   holidays, events,  │
+└──────────────────┘    │    └──────────────────┘  │  │   name, exchange...  │
+                         └──────────────┬───────────┘  └──────────┬───────────┘
+                                        │                          │
+                              get_instrument("NQ")       используют все:
+                              мержит Supabase +           prompt.py
+                              holidays по exchange        holidays.py
+                                                          interpreter.py
+```
+
+API `get_instrument()` не меняется — возвращает тот же dict shape.
+Потребители (prompt.py, holidays.py, interpreter.py) не знают откуда данные.
+
+### Масштаб
+
+- 132 фьючерса сейчас, 10K+ потом
+- Новый инструмент = INSERT в Supabase, без деплоя кода
+- Exchange holidays добавляются раз в жизнь (CME, EUREX, ICE, NYSE — ~5 бирж)
+
+---
+
 ## Слой 2: Market Context
 
-Три источника данных, три блока в промпте. Все генерируются динамически из `config/market/`.
+Три источника данных, три блока в промпте. Генерируются динамически: instrument из Supabase, holidays из holidays.py, events из events.py.
 
-### 2a. Instrument — из instruments.py
+### 2a. Instrument — из Supabase через get_instrument()
 
 ```python
-config = get_instrument("NQ")
+config = get_instrument("NQ")  # Supabase + exchange holidays merged
 ```
 
 ```xml
@@ -902,21 +977,21 @@ Added function → appeared in SIGNATURES → appeared in prompt → Claude know
 ### Market Context → Промпт
 
 ```
-config/market/instruments.py      barb/prompt/context.py      Claude sees:
+Supabase instruments             barb/prompt/context.py      Claude sees:
 ┌────────────────────────┐       ┌──────────────────┐       ┌────────────────┐
-│ INSTRUMENTS = {        │       │ build_instrument │       │ <instrument>   │
-│   "NQ": {              │ ───── │  _context()      │ ───── │  NQ, CME       │
-│     sessions: {...},   │       │ build_holiday    │       │  sessions...   │
-│     holidays: {...},   │       │  _context()      │       │ </instrument>  │
-│   }                    │       │ build_event      │       │ <holidays>     │
-│ }                      │       │  _context()      │       │  closed...     │
-└────────────────────────┘       └──────────────────┘       │ </holidays>    │
-                                                             │ <events>       │
-config/market/events.py  ────────────────────────────────── │  FOMC, NFP...  │
-config/market/holidays.py ─────────────────────────────────  │ </events>      │
+│ NQ: sessions, ticks,   │       │ build_instrument │       │ <instrument>   │
+│     exchange="CME",    │ ───── │  _context()      │ ───── │  NQ, CME       │
+│     events=[macro,opt] │       │ build_holiday    │       │  sessions...   │
+└────────────────────────┘       │  _context()      │       │ </instrument>  │
+                                 │ build_event      │       │ <holidays>     │
+config/market/holidays.py        │  _context()      │       │  closed...     │
+┌────────────────────────┐       └──────────────────┘       │ </holidays>    │
+│ EXCHANGE_HOLIDAYS =    │ ──────────────────────────────── │ <events>       │
+│   cme: [rules...]      │                                  │  FOMC, NFP...  │
+└────────────────────────┘                                  │ </events>      │
                                                              └────────────────┘
 
-Added instrument → context auto-generated → Claude knows sessions, holidays, events
+INSERT instrument in Supabase → context auto-generated → Claude knows it
 ```
 
 ---
@@ -939,8 +1014,8 @@ barb/
 ### Зависимости
 
 ```
-prompt/system.py  ← prompt/context.py  ← config/market/instruments.py
-                                        ← config/market/holidays.py
+prompt/system.py  ← prompt/context.py  ← config/market/instruments.py (reads Supabase)
+                                        ← config/market/holidays.py    (EXCHANGE_HOLIDAYS + logic)
                                         ← config/market/events.py
 
 prompt/tools.py   ← barb/functions/*_SIGNATURES  (auto-generated function list)
@@ -992,7 +1067,7 @@ System prompt вырос с ~800 до ~1,500 за счёт holidays, events, tra
 | Компонент | Что | Где | Источник |
 |-----------|-----|-----|----------|
 | Identity | Кто я, как себя вести | System prompt | Статический |
-| Market Context | Инструмент, сессии, праздники, ивенты | System prompt | instruments.py, holidays.py, events.py |
+| Market Context | Инструмент, сессии, праздники, ивенты | System prompt | Supabase instruments + holidays.py + events.py |
 | Trading Knowledge | "перепродан" → RSI < 30 | System prompt | Экспертный маппинг |
 | Tool: run_query | Синтаксис, функции, примеры | Tool description | Автогенерация из FUNCTIONS |
 | Annotations | Праздники/ивенты в результатах | Tool results | check_dates_for_holidays/events() |
@@ -1004,7 +1079,7 @@ System prompt вырос с ~800 до ~1,500 за счёт holidays, events, tra
 |---------|-----------|
 | Знание рядом с инструментом | Syntax/functions в tool description |
 | Автогенерация | Функции → SIGNATURES → промпт |
-| Динамический контекст | Instrument/holidays/events из config/ |
+| Динамический контекст | Instrument из Supabase, holidays/events из кода |
 | Контекстная осведомлённость | Аннотации holidays/events в tool results — Claude не нужно помнить календарь |
 | Эксперт, не транслятор | Trading knowledge маппит концепции на индикаторы |
 | Масштабируемость | Новый tool = новый блок знаний |
