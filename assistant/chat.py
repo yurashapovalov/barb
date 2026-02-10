@@ -10,6 +10,7 @@ import pandas as pd
 
 from assistant.prompt import build_system_prompt
 from assistant.tools import BARB_TOOL, run_query
+from barb.interpreter import _INTRADAY_TIMEFRAMES as _INTRADAY
 
 log = logging.getLogger(__name__)
 
@@ -22,10 +23,18 @@ class Assistant:
 
     model = MODEL  # expose for summarization
 
-    def __init__(self, api_key: str, instrument: str, df: pd.DataFrame, sessions: dict):
+    def __init__(
+        self,
+        api_key: str,
+        instrument: str,
+        df_daily: pd.DataFrame,
+        df_minute: pd.DataFrame,
+        sessions: dict,
+    ):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.instrument = instrument
-        self.df = df
+        self.df_daily = df_daily
+        self.df_minute = df_minute
         self.sessions = sessions
         self.system_prompt = build_system_prompt(instrument)
 
@@ -51,11 +60,13 @@ class Assistant:
                 model=MODEL,
                 max_tokens=4096,
                 temperature=0,
-                system=[{
-                    "type": "text",
-                    "text": self.system_prompt,
-                    "cache_control": {"type": "ephemeral"},
-                }],
+                system=[
+                    {
+                        "type": "text",
+                        "text": self.system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
                 tools=[BARB_TOOL],
                 messages=messages,
             ) as stream:
@@ -66,11 +77,13 @@ class Assistant:
                 for event in stream:
                     if event.type == "content_block_start":
                         if event.content_block.type == "tool_use":
-                            tool_uses.append({
-                                "id": event.content_block.id,
-                                "name": event.content_block.name,
-                                "input": "",
-                            })
+                            tool_uses.append(
+                                {
+                                    "id": event.content_block.id,
+                                    "name": event.content_block.name,
+                                    "input": "",
+                                }
+                            )
                     elif event.type == "content_block_delta":
                         if event.delta.type == "text_delta":
                             text_parts.append(event.delta.text)
@@ -102,10 +115,12 @@ class Assistant:
                     tu["input"] = {}
 
             # Add assistant message with tool uses
-            messages.append({
-                "role": "assistant",
-                "content": response.content,
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.content,
+                }
+            )
 
             # Execute tools and collect results
             tool_results = []
@@ -113,10 +128,13 @@ class Assistant:
                 query = tu["input"].get("query", {})
                 log.info("Tool call: %s(%s)", tu["name"], query)
 
-                yield {"event": "tool_start", "data": {
-                    "tool_name": tu["name"],
-                    "input": {"query": query},
-                }}
+                yield {
+                    "event": "tool_start",
+                    "data": {
+                        "tool_name": tu["name"],
+                        "input": {"query": query},
+                    },
+                }
 
                 call_start = time.time()
                 call_error = None
@@ -125,7 +143,9 @@ class Assistant:
                 source_rows = None
 
                 try:
-                    result = run_query(query, self.df, self.sessions)
+                    timeframe = query.get("from", "daily")
+                    df = self.df_minute if timeframe in _INTRADAY else self.df_daily
+                    result = run_query(query, df, self.sessions)
                     model_response = result.get("model_response", "")
                     table_data = result.get("table")
                     source_rows = result.get("source_rows")
@@ -139,19 +159,24 @@ class Assistant:
 
                 duration_ms = int((time.time() - call_start) * 1000)
 
-                yield {"event": "tool_end", "data": {
-                    "tool_name": tu["name"],
-                    "duration_ms": duration_ms,
-                    "error": call_error,
-                }}
+                yield {
+                    "event": "tool_end",
+                    "data": {
+                        "tool_name": tu["name"],
+                        "duration_ms": duration_ms,
+                        "error": call_error,
+                    },
+                }
 
-                tool_call_log.append({
-                    "tool_name": tu["name"],
-                    "input": {"query": query},
-                    "output": model_response,
-                    "error": call_error,
-                    "duration_ms": duration_ms,
-                })
+                tool_call_log.append(
+                    {
+                        "tool_name": tu["name"],
+                        "input": {"query": query},
+                        "output": model_response,
+                        "error": call_error,
+                        "duration_ms": duration_ms,
+                    }
+                )
 
                 # Send data block to UI (table or source_rows as evidence)
                 ui_data = table_data or source_rows
@@ -172,18 +197,22 @@ class Assistant:
                     data_blocks.append(block)
                     yield {"event": "data_block", "data": block}
 
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tu["id"],
-                    "content": model_response,
-                    "is_error": bool(call_error),
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tu["id"],
+                        "content": model_response,
+                        "is_error": bool(call_error),
+                    }
+                )
 
             # Add tool results (must be in user message)
-            messages.append({
-                "role": "user",
-                "content": tool_results,
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": tool_results,
+                }
+            )
 
         # Calculate costs
         # Sonnet 4.5: $3/MTok input, $0.30/MTok cached read, $3.75/MTok cache write, $15/MTok output
@@ -208,12 +237,15 @@ class Assistant:
             "total_cost": total_cost,
         }
 
-        yield {"event": "done", "data": {
-            "answer": answer,
-            "usage": usage,
-            "tool_calls": tool_call_log,
-            "data": data_blocks,
-        }}
+        yield {
+            "event": "done",
+            "data": {
+                "answer": answer,
+                "usage": usage,
+                "tool_calls": tool_call_log,
+                "data": data_blocks,
+            },
+        }
 
 
 def _build_messages(history: list[dict], message: str) -> list[dict]:
@@ -231,12 +263,14 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
             for i, tc in enumerate(tool_calls):
                 # Generate consistent ID for both tool_use and tool_result
                 tool_id = tc.get("id", f"toolu_hist_{i}")
-                content.append({
-                    "type": "tool_use",
-                    "id": tool_id,
-                    "name": tc["tool_name"],
-                    "input": tc.get("input", {}),
-                })
+                content.append(
+                    {
+                        "type": "tool_use",
+                        "id": tool_id,
+                        "name": tc["tool_name"],
+                        "input": tc.get("input", {}),
+                    }
+                )
             if text:
                 content.insert(0, {"type": "text", "text": text})
             messages.append({"role": "assistant", "content": content})
@@ -245,11 +279,13 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
             tool_results = []
             for i, tc in enumerate(tool_calls):
                 tool_id = tc.get("id", f"toolu_hist_{i}")
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": _compact_output(tc.get("output", "done")),
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": _compact_output(tc.get("output", "done")),
+                    }
+                )
             messages.append({"role": "user", "content": tool_results})
         else:
             messages.append({"role": role, "content": text})

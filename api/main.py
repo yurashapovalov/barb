@@ -27,15 +27,18 @@ from barb.data import DATA_DIR, load_data
 from config.market.instruments import get_instrument
 
 if os.getenv("ENV") == "production":
+
     class _JSONFormatter(logging.Formatter):
         def format(self, record):
-            return json.dumps({
-                "ts": self.formatTime(record),
-                "level": record.levelname,
-                "logger": record.name,
-                "msg": record.getMessage(),
-                "request_id": getattr(record, "request_id", ""),
-            })
+            return json.dumps(
+                {
+                    "ts": self.formatTime(record),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "msg": record.getMessage(),
+                    "request_id": getattr(record, "request_id", ""),
+                }
+            )
 
     handler = logging.StreamHandler()
     handler.setFormatter(_JSONFormatter())
@@ -68,6 +71,7 @@ register_error_handlers(app)
 
 # --- Request/Response models ---
 
+
 class CreateConversationRequest(BaseModel):
     instrument: str = "NQ"
 
@@ -98,6 +102,7 @@ class ChatRequest(BaseModel):
 
 # --- Assistant cache ---
 
+
 @lru_cache
 def _get_assistant(instrument: str) -> Assistant:
     """One Assistant per instrument, reused across requests."""
@@ -112,7 +117,8 @@ def _get_assistant(instrument: str) -> Assistant:
     return Assistant(
         api_key=settings.anthropic_api_key,
         instrument=instrument,
-        df=load_data(instrument),
+        df_daily=load_data(instrument, "1d"),
+        df_minute=load_data(instrument, "1m"),
         sessions=instrument_config["sessions"],
     )
 
@@ -130,7 +136,10 @@ def _parse_tool_output(output):
 
 
 def _persist_chat(
-    db, conversation: dict, user_message: str, result: dict,
+    db,
+    conversation: dict,
+    user_message: str,
+    result: dict,
 ) -> tuple[str, bool]:
     """Persist user message, model response, tool calls, and update usage.
 
@@ -141,26 +150,36 @@ def _persist_chat(
     try:
         log.info("Persisting chat: conv=%s, user_msg_len=%d", conv_id, len(user_message))
 
-        db.table("messages").insert({
-            "conversation_id": conv_id,
-            "role": "user",
-            "content": user_message,
-        }).execute()
+        db.table("messages").insert(
+            {
+                "conversation_id": conv_id,
+                "role": "user",
+                "content": user_message,
+            }
+        ).execute()
         log.info("User message saved: conv=%s", conv_id)
 
         data_to_save = result["data"] or None
         log.info(
             "Saving model message: conv=%s, answer_len=%d, data_blocks=%d",
-            conv_id, len(result["answer"]), len(result["data"]) if result["data"] else 0,
+            conv_id,
+            len(result["answer"]),
+            len(result["data"]) if result["data"] else 0,
         )
 
-        model_msg = db.table("messages").insert({
-            "conversation_id": conv_id,
-            "role": "assistant",
-            "content": result["answer"],
-            "data": data_to_save,
-            "usage": result["usage"],
-        }).execute()
+        model_msg = (
+            db.table("messages")
+            .insert(
+                {
+                    "conversation_id": conv_id,
+                    "role": "assistant",
+                    "content": result["answer"],
+                    "data": data_to_save,
+                    "usage": result["usage"],
+                }
+            )
+            .execute()
+        )
         message_id = model_msg.data[0]["id"]
         log.info("Model message saved: conv=%s, msg_id=%s", conv_id, message_id)
 
@@ -200,7 +219,8 @@ def _persist_chat(
         }
 
         db.table("conversations").update({"usage": accumulated}).eq(
-            "id", conv_id,
+            "id",
+            conv_id,
         ).execute()
 
         log.info("Chat persisted successfully: conv=%s, msg_id=%s", conv_id, message_id)
@@ -213,7 +233,11 @@ def _persist_chat(
 
 
 def _maybe_summarize(
-    db, assistant, conversation: dict, raw_history: list[dict], msg_count: int,
+    db,
+    assistant,
+    conversation: dict,
+    raw_history: list[dict],
+    msg_count: int,
 ):
     """Summarize context if threshold reached. Best effort, never raises."""
     if not should_summarize(msg_count, conversation.get("context")):
@@ -227,22 +251,29 @@ def _maybe_summarize(
         msgs_to_summarize = raw_history[summary_up_to * 2 : cutoff * 2]
 
         summary_text = summarize(
-            assistant.client, assistant.model,
-            old_summary, msgs_to_summarize,
+            assistant.client,
+            assistant.model,
+            old_summary,
+            msgs_to_summarize,
         )
-        db.table("conversations").update({
-            "context": {"summary": summary_text, "summary_up_to": cutoff},
-        }).eq("id", conversation["id"]).execute()
+        db.table("conversations").update(
+            {
+                "context": {"summary": summary_text, "summary_up_to": cutoff},
+            }
+        ).eq("id", conversation["id"]).execute()
 
         log.info(
             "Summarized conv=%s: %d exchanges -> summary_up_to=%d",
-            conversation["id"], msg_count, cutoff,
+            conversation["id"],
+            msg_count,
+            cutoff,
         )
     except Exception:
         log.exception("Failed to summarize: conv=%s", conversation["id"])
 
 
 # --- Endpoints ---
+
 
 @app.get("/health")
 def health():
@@ -259,7 +290,7 @@ def health():
     checks["anthropic"] = "ok" if get_settings().anthropic_api_key else "fail"
 
     # Data file
-    checks["data"] = "ok" if (DATA_DIR / "NQ.parquet").exists() else "fail"
+    checks["data"] = "ok" if (DATA_DIR / "1d" / "NQ.parquet").exists() else "fail"
 
     failed = any(v == "fail" for v in checks.values())
     status = "fail" if failed else "ok"
@@ -280,10 +311,16 @@ def create_conversation(
 
     db = get_db()
     try:
-        result = db.table("conversations").insert({
-            "user_id": user["sub"],
-            "instrument": request.instrument,
-        }).execute()
+        result = (
+            db.table("conversations")
+            .insert(
+                {
+                    "user_id": user["sub"],
+                    "instrument": request.instrument,
+                }
+            )
+            .execute()
+        )
     except Exception:
         log.exception("Failed to create conversation")
         raise HTTPException(503, "Failed to create conversation")
@@ -487,7 +524,8 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
                 title += "..."
             try:
                 db.table("conversations").update({"title": title}).eq(
-                    "id", conversation["id"],
+                    "id",
+                    conversation["id"],
                 ).execute()
                 conversation["title"] = title
                 yield _sse("title_update", {"title": title})
@@ -515,12 +553,17 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
 
         log.info(
             "Chat stream user=%s conv=%s: %.2fs, $%.6f",
-            user["sub"], request.conversation_id, latency,
+            user["sub"],
+            request.conversation_id,
+            latency,
             done_data["usage"]["total_cost"],
         )
 
         message_id, persisted = _persist_chat(
-            db, conversation, request.message, done_data,
+            db,
+            conversation,
+            request.message,
+            done_data,
         )
 
         yield _sse("persist", {"message_id": message_id, "persisted": persisted})
@@ -529,7 +572,11 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
         if persisted:
             msg_count = conversation["usage"]["message_count"] + 1
             _maybe_summarize(
-                db, assistant, conversation, raw_history, msg_count,
+                db,
+                assistant,
+                conversation,
+                raw_history,
+                msg_count,
             )
 
     return StreamingResponse(

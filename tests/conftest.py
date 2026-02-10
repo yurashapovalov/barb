@@ -7,9 +7,15 @@ from config.market.instruments import get_instrument
 
 
 @pytest.fixture(scope="session")
+def nq_daily():
+    """Full daily NQ data (settlement close, matches TradingView)."""
+    return load_data("NQ", "1d")
+
+
+@pytest.fixture(scope="session")
 def nq_minute():
     """Full minute-level NQ data as pandas DataFrame with DatetimeIndex."""
-    return load_data("NQ")
+    return load_data("NQ", "1m")
 
 
 @pytest.fixture(scope="session")

@@ -9,9 +9,14 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 @lru_cache
-def load_data(instrument: str) -> pd.DataFrame:
-    """Load instrument minute data as pandas DataFrame with DatetimeIndex."""
-    path = DATA_DIR / f"{instrument.upper()}.parquet"
+def load_data(instrument: str, timeframe: str = "1d") -> pd.DataFrame:
+    """Load instrument data as pandas DataFrame with DatetimeIndex.
+
+    Args:
+        instrument: Symbol name (e.g. "NQ", "ES")
+        timeframe: "1d" for daily bars, "1m" for minute bars
+    """
+    path = DATA_DIR / timeframe / f"{instrument.upper()}.parquet"
     if not path.exists():
         raise FileNotFoundError(f"Data file not found: {path}")
 

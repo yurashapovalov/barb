@@ -1,43 +1,30 @@
 """TradingView match tests for oscillator indicators.
 
-Compares our indicator calculations on NQ daily data against
+Compares our indicator calculations on NQ 1d (settlement) data against
 reference values collected from TradingView (NQ1!, daily chart).
 
-Close prices differ slightly because TradingView uses CME settlement
-prices while we aggregate from minute bars (close at 16:59 ET).
-This causes ~0.04% price difference that accumulates through indicators.
+Reference dates are chosen away from contract rolls (mid-quarter)
+where our data provider and TradingView agree on OHLCV.
 
-Tolerances:
-- RSI, StochK: 2% — use only close/high/low, minimal accumulation
-- CCI, WilliamsR: 5% or ±5 absolute — sensitive to close differences
-- MFI: 10% — uses volume which aggregates differently
+RSI uses Wilder's smoothing (exponential), so contract roll differences
+propagate through history causing ~0.5% divergence. Window-based
+indicators (CCI, StochK, WilliamsR, MFI) match exactly when the
+lookback window contains no roll bars.
 """
 
 import pandas as pd
 import pytest
 
+from barb.data import load_data
 from barb.functions import FUNCTIONS
 
-DATA_PATH = "data/NQ.parquet"
 REF_PATH = "tests/functions/reference_data/nq_oscillators_tv.csv"
 
 
 @pytest.fixture(scope="module")
 def daily_df():
-    """NQ daily bars aggregated by CME session (18:00 ET → 16:59 ET)."""
-    df = pd.read_parquet(DATA_PATH)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    df = df.set_index("timestamp").sort_index()
-
-    # Shift +6h so 18:00 ET → 00:00 next day (session start = day boundary)
-    shifted = df.copy()
-    shifted.index = shifted.index + pd.Timedelta(hours=6)
-    daily = (
-        shifted.resample("D")
-        .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
-        .dropna()
-    )
-    return daily
+    """NQ daily bars (settlement close, matches TradingView)."""
+    return load_data("NQ", "1d")
 
 
 @pytest.fixture(scope="module")
@@ -71,52 +58,50 @@ def _assert_close(our_val, tv_val, rel_tol, abs_tol=0):
 
 
 class TestRSIMatch:
-    """RSI(14) — Wilder's smoothing, close only. Tight tolerance."""
+    """RSI(14) — Wilder's smoothing, exponential history. Roll propagates."""
 
     def test_rsi_matches_tradingview(self, indicators, ref_data):
         for date, row in ref_data.iterrows():
             date_str = date.strftime("%Y-%m-%d")
             our = indicators["rsi_14"].loc[date_str]
-            _assert_close(our, row["rsi_14"], rel_tol=0.05)
+            _assert_close(our, row["rsi_14"], rel_tol=0.01, abs_tol=0.5)
 
 
 class TestStochKMatch:
-    """Stochastic %K(14) — uses high/low/close rolling window."""
+    """Stochastic %K(14) — 14-bar window, no history dependence."""
 
     def test_stoch_k_matches_tradingview(self, indicators, ref_data):
         for date, row in ref_data.iterrows():
             date_str = date.strftime("%Y-%m-%d")
             our = indicators["stoch_k_14"].loc[date_str]
-            _assert_close(our, row["stoch_k_14"], rel_tol=0.05, abs_tol=6)
+            _assert_close(our, row["stoch_k_14"], rel_tol=0.01, abs_tol=0.5)
 
 
 class TestCCIMatch:
-    """CCI(20) — mean deviation, sensitive to close. Wider tolerance."""
+    """CCI(20) — 20-bar window, no history dependence."""
 
     def test_cci_matches_tradingview(self, indicators, ref_data):
         for date, row in ref_data.iterrows():
             date_str = date.strftime("%Y-%m-%d")
             our = indicators["cci_20"].loc[date_str]
-            # CCI ranges ~±300, absolute tolerance ±15 handles near-zero values
-            _assert_close(our, row["cci_20"], rel_tol=0.10, abs_tol=15)
+            _assert_close(our, row["cci_20"], rel_tol=0.01, abs_tol=0.5)
 
 
 class TestWilliamsRMatch:
-    """Williams %R(14) — range -100..0, related to StochK."""
+    """Williams %R(14) — 14-bar window, no history dependence."""
 
     def test_williams_r_matches_tradingview(self, indicators, ref_data):
         for date, row in ref_data.iterrows():
             date_str = date.strftime("%Y-%m-%d")
             our = indicators["williams_r_14"].loc[date_str]
-            _assert_close(our, row["williams_r_14"], rel_tol=0.10, abs_tol=6)
+            _assert_close(our, row["williams_r_14"], rel_tol=0.01, abs_tol=0.5)
 
 
 class TestMFIMatch:
-    """MFI(14) — uses volume, largest expected divergence."""
+    """MFI(14) — 14-bar window, uses volume."""
 
     def test_mfi_matches_tradingview(self, indicators, ref_data):
         for date, row in ref_data.iterrows():
             date_str = date.strftime("%Y-%m-%d")
             our = indicators["mfi_14"].loc[date_str]
-            # MFI diverges most because minute volume sum != exchange daily volume
-            _assert_close(our, row["mfi_14"], rel_tol=0.16)
+            _assert_close(our, row["mfi_14"], rel_tol=0.01, abs_tol=0.5)

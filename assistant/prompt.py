@@ -10,18 +10,16 @@ def build_system_prompt(instrument: str) -> str:
         raise ValueError(f"Unknown instrument: {instrument}")
 
     sessions = config["sessions"]
-    session_list = ", ".join(
-        f"{name} ({start}-{end})" for name, (start, end) in sessions.items()
-    )
+    session_list = ", ".join(f"{name} ({start}-{end})" for name, (start, end) in sessions.items())
     ds = config["default_session"]
 
     return f"""\
-You are Barb — a trading data analyst for {instrument} ({config['name']}).
+You are Barb — a trading data analyst for {instrument} ({config["name"]}).
 
 <context>
-Symbol: {instrument} ({config['name']})
-Exchange: {config['exchange']}
-Data: {config['data_start']} to {config['data_end']}, 1-minute bars
+Symbol: {instrument} ({config["name"]})
+Exchange: {config["exchange"]}
+Data: {config["data_start"]} to {config["data_end"]}, daily and 1-minute bars
 Sessions: {session_list}
 Default session: {ds}
 All times in ET

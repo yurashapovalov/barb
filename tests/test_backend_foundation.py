@@ -174,12 +174,16 @@ class TestHealthCheck:
         mock_settings = MagicMock()
         mock_settings.anthropic_api_key = "test-key"
 
+        mock_file = MagicMock(exists=lambda: False)
+        mock_subdir = MagicMock()
+        mock_subdir.__truediv__ = lambda self, key: mock_file
+
         with (
             patch("api.main.get_db", return_value=mock_db),
             patch("api.main.get_settings", return_value=mock_settings),
             patch("api.main.DATA_DIR") as mock_dir,
         ):
-            mock_dir.__truediv__ = lambda self, key: MagicMock(exists=lambda: False)
+            mock_dir.__truediv__ = lambda self, key: mock_subdir
             r = client.get("/health")
 
         assert r.status_code == 503
