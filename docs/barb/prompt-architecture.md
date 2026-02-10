@@ -100,7 +100,20 @@ technical indicators or query syntax.
 
 ## Instruments Data Architecture
 
-Инструменты живут в Supabase, exchange-level данные — в коде.
+Две таблицы в Supabase + view для удобного доступа. Все времена в ET.
+
+### Supabase: таблица `exchanges`
+
+```
+  code        text PK         -- CME, COMEX, CBOT, NYMEX, ICEEUR
+  name        text             -- Chicago Mercantile Exchange
+  timezone    text             -- CT, ET, GMT (native timezone биржи)
+  eth         jsonb            -- ["18:00", "17:00"] — в ET
+  maintenance jsonb            -- ["17:00", "18:00"] — в ET
+  image_url   text             -- Supabase Storage (exchange-images bucket)
+```
+
+ETH и maintenance — свойство платформы (Globex, ICE), одинаковые для всех инструментов на бирже.
 
 ### Supabase: таблица `instruments`
 
@@ -108,68 +121,84 @@ technical indicators or query syntax.
 Колонки (queryable, universal):
   symbol          text PK         -- NQ, ES, CL, FDAX
   name            text             -- Nasdaq 100 E-mini
-  exchange        text             -- CME, EUREX, ICE
-  category        text             -- index, energy, metals, grains, softs, livestock, currency, bonds, crypto, volatility
+  exchange        text FK          -- → exchanges.code
+  type            text             -- futures, stock, etf
+  category        text             -- index, energy, metals, currency, ...
   currency        text             -- USD, EUR
-  data_timezone   text             -- ET (все времена в sessions — в этом TZ)
-  default_session text             -- RTH
+  default_session text             -- ETH
   data_start      date             -- 2008-01-02
   data_end        date             -- 2026-02-06
   events          text[]           -- {macro, options}
-  image_url       text             -- Supabase Storage URL
+  image_url       text             -- Supabase Storage (instrument-images bucket)
   active          boolean          -- true
 
-Config jsonb (per-instrument, structured):
-  tick_size       numeric          -- 0.25 (фьючерсы; акции — нет)
+Config jsonb (per-instrument only):
+  tick_size       numeric          -- 0.25
   tick_value      numeric          -- 5.0
   point_value     numeric          -- 20.0
-  maintenance     [start, end]     -- ["17:00", "18:00"]
   sessions        {name: [s, e]}   -- {"RTH": ["09:30", "17:00"], ...}
 ```
 
-Все времена в sessions и maintenance — в `data_timezone` (ET для CME).
-Инструменты на CME работают в CT, но мы руками сдвигаем +1h при записи.
+Config содержит только per-instrument данные. ETH, maintenance — наследуются от exchange.
+RTH в sessions варьируется по продуктовой группе (CME index ≠ CME FX).
+
+### Supabase: view `instrument_full`
+
+```sql
+select i.*, e.eth, e.maintenance, e.timezone, e.name as exchange_name
+from instruments i join exchanges e on i.exchange = e.code
+```
+
+Один запрос — все данные. `get_instrument()` читает из view.
+
+### Data: два датасета per instrument
+
+```
+data/1d/{symbol}.parquet   — дневные бары (settlement close, совпадает с TradingView)
+data/1m/{symbol}.parquet   — минутные бары (для интрадей анализа)
+```
+
+`data.py` выбирает датасет по таймфрейму: daily+ → 1d/, intraday → 1m/.
 
 ### Код: exchange-level данные
 
-**`holidays.py`** — holiday rules keyed by exchange + вся логика вычисления дат:
+**`holidays.py`** — holiday rules keyed by exchange code:
 ```python
 EXCHANGE_HOLIDAYS = {
-    "cme": {
+    "CME": {
         "full_close": ["new_year", "mlk_day", "presidents_day", ...],
         "early_close": {"christmas_eve": "13:15", ...}
     },
-    "eurex": {"full_close": ["new_year", "good_friday", ...], ...},
+    "ICEEUR": {"full_close": ["new_year", "good_friday", ...], ...},
 }
 ```
 
-Инструмент → `exchange` → holiday rules. Все CME закрыты на одни праздники.
+Инструмент → `exchange` → holiday rules. Все CME/CBOT/NYMEX/COMEX закрыты на одни праздники (все на Globex).
 
 ### Data flow
 
 ```
-Supabase instruments          holidays.py              get_instrument("NQ")
-┌──────────────────┐         ┌──────────────────┐     ┌──────────────────────┐
-│ NQ: name, exchange│         │ EXCHANGE_HOLIDAYS│     │ merged dict:         │
-│   category, ticks │────┐    │   cme: [rules]   │──┐  │   sessions, ticks,   │
-│   sessions, etc.  │    │    │   eurex: [rules]  │  │  │   holidays, events,  │
-└──────────────────┘    │    └──────────────────┘  │  │   name, exchange...  │
-                         └──────────────┬───────────┘  └──────────┬───────────┘
-                                        │                          │
-                              get_instrument("NQ")       используют все:
-                              мержит Supabase +           prompt.py
-                              holidays по exchange        holidays.py
-                                                          interpreter.py
+Supabase                          holidays.py              get_instrument("NQ")
+┌─────────────────────┐          ┌──────────────────┐     ┌──────────────────────┐
+│ instrument_full     │          │ EXCHANGE_HOLIDAYS│     │ merged dict:         │
+│  NQ: ticks, RTH,    │────┐     │   CME: [rules]   │──┐  │   eth, maintenance,  │
+│  eth, maintenance   │    │     │   ICEEUR: [rules] │  │  │   sessions, ticks,   │
+│  (from view)        │    │     └──────────────────┘  │  │   holidays, events   │
+└─────────────────────┘    └──────────────┬───────────┘  └──────────┬───────────┘
+                                          │                          │
+                                get_instrument("NQ")       используют все:
+                                view + holidays merge       prompt.py
+                                                            interpreter.py
 ```
 
 API `get_instrument()` не меняется — возвращает тот же dict shape.
-Потребители (prompt.py, holidays.py, interpreter.py) не знают откуда данные.
 
 ### Масштаб
 
 - 132 фьючерса сейчас, 10K+ потом
-- Новый инструмент = INSERT в Supabase, без деплоя кода
-- Exchange holidays добавляются раз в жизнь (CME, EUREX, ICE, NYSE — ~5 бирж)
+- Новый инструмент = INSERT в Supabase (exchange FK уже задаёт ETH/maintenance)
+- Новая биржа = INSERT в exchanges (раз в жизнь, ~5-10 бирж)
+- Holiday rules в коде, keyed by exchange code
 
 ---
 
