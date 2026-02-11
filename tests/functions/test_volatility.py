@@ -181,3 +181,55 @@ class TestKeltnerChannel:
         expected_upper = middle + 1.5 * atr
         valid = expected_upper.dropna().index
         pd.testing.assert_series_equal(upper[valid], expected_upper[valid], check_names=False)
+
+
+# --- TradingView match tests ---
+# NQ1! daily, SET mode, 2025-12-22
+# Tolerances account for contract roll divergence (~4 bars/quarter).
+# TR is single-bar so exact. ATR/BB/KC use lookback windows that may
+# cross roll dates, causing small divergence via smoothing memory.
+
+
+class TestTVMatch:
+    """Compare against TradingView Barb Ref indicator values."""
+
+    def test_tr(self, df):
+        assert _tr(df).loc["2025-12-22"] == pytest.approx(220.00, abs=0.5)
+
+    def test_atr(self, df):
+        # TV: 426.17, ours: 426.61 — Wilder's smoothing amplifies roll diff
+        assert _atr(df, 14).loc["2025-12-22"] == pytest.approx(426.17, rel=0.005)
+
+    def test_natr(self, df):
+        assert _natr(df, 14).loc["2025-12-22"] == pytest.approx(1.66, abs=0.02)
+
+    def test_bbands_middle(self, df):
+        # TV: 25440.86 — SMA(20) captures roll bars in window
+        col = df["close"]
+        assert _bbands_middle(df, col, 20).loc["2025-12-22"] == pytest.approx(25440.86, rel=0.002)
+
+    def test_bbands_upper(self, df):
+        col = df["close"]
+        assert _bbands_upper(df, col, 20, 2.0).loc["2025-12-22"] == pytest.approx(
+            25986.09, rel=0.002
+        )
+
+    def test_bbands_lower(self, df):
+        col = df["close"]
+        assert _bbands_lower(df, col, 20, 2.0).loc["2025-12-22"] == pytest.approx(
+            24895.64, rel=0.003
+        )
+
+    def test_bbands_pctb(self, df):
+        col = df["close"]
+        assert _bbands_pctb(df, col, 20, 2.0).loc["2025-12-22"] == pytest.approx(0.73, abs=0.02)
+
+    def test_kc_middle(self, df):
+        # TV: 25392.02 — EMA(20) has longer memory than SMA
+        assert _kc_middle(df, 20).loc["2025-12-22"] == pytest.approx(25392.02, rel=0.002)
+
+    def test_kc_upper(self, df):
+        assert _kc_upper(df, 20, 10, 1.5).loc["2025-12-22"] == pytest.approx(26017.86, rel=0.002)
+
+    def test_kc_lower(self, df):
+        assert _kc_lower(df, 20, 10, 1.5).loc["2025-12-22"] == pytest.approx(24766.18, rel=0.002)
