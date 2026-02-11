@@ -16,7 +16,7 @@ Usage:
 import argparse
 from pathlib import Path
 
-import polars as pl
+import pandas as pd
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
@@ -33,89 +33,56 @@ SYMBOL_MAP = {
 
 # 31 target tickers (provider names)
 TARGET_TICKERS = {
-    # Indices
     "ES",
     "NQ",
     "YM",
     "RTY",
     "FDAX",
     "FESX",
-    # Energy
     "CL",
     "B",
     "NG",
     "RB",
     "HO",
-    # Metals
     "GC",
     "SI",
     "HG",
     "PL",
-    # Currencies
     "E6",
     "B6",
     "J1",
     "A6",
     "AD",
     "E1",
-    # Treasuries
     "ZN",
     "ZF",
     "ZT",
     "US",
-    # Agriculture
     "ZC",
     "ZW",
     "ZS",
     "KC",
     "CC",
-    # Crypto
     "BTC",
 }
 
+DAILY_COLS = ["timestamp", "open", "high", "low", "close", "volume", "oi"]
+MINUTE_COLS = ["timestamp", "open", "high", "low", "close", "volume"]
+KEEP_COLS = ["timestamp", "open", "high", "low", "close", "volume"]
+
 
 def convert_daily(input_path: Path, output_path: Path) -> int:
-    df = pl.read_csv(
-        input_path,
-        has_header=False,
-        new_columns=["timestamp", "open", "high", "low", "close", "volume", "oi"],
-        schema={
-            "timestamp": pl.Utf8,
-            "open": pl.Float64,
-            "high": pl.Float64,
-            "low": pl.Float64,
-            "close": pl.Float64,
-            "volume": pl.Int64,
-            "oi": pl.Int64,
-        },
-    )
-    df = df.with_columns(
-        pl.col("timestamp").str.to_datetime("%Y-%m-%d").alias("timestamp"),
-    ).select(["timestamp", "open", "high", "low", "close", "volume"])
-
-    df.write_parquet(output_path, compression="zstd")
+    df = pd.read_csv(input_path, header=None, names=DAILY_COLS)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df[KEEP_COLS]
+    df.to_parquet(output_path, compression="zstd", index=False)
     return len(df)
 
 
 def convert_minute(input_path: Path, output_path: Path) -> int:
-    df = pl.read_csv(
-        input_path,
-        has_header=False,
-        new_columns=["timestamp", "open", "high", "low", "close", "volume"],
-        schema={
-            "timestamp": pl.Utf8,
-            "open": pl.Float64,
-            "high": pl.Float64,
-            "low": pl.Float64,
-            "close": pl.Float64,
-            "volume": pl.Int64,
-        },
-    )
-    df = df.with_columns(
-        pl.col("timestamp").str.to_datetime("%Y-%m-%d %H:%M:%S").alias("timestamp"),
-    )
-
-    df.write_parquet(output_path, compression="zstd")
+    df = pd.read_csv(input_path, header=None, names=MINUTE_COLS)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df.to_parquet(output_path, compression="zstd", index=False)
     return len(df)
 
 
