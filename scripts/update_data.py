@@ -12,16 +12,23 @@ Usage:
 import argparse
 import io
 import logging
+import os
 import sys
 import zipfile
 from pathlib import Path
 
 import httpx
 import polars as pl
+from dotenv import load_dotenv
 
 DATA_DIR = Path(__file__).parent.parent / "data"
+load_dotenv(DATA_DIR.parent / ".env")
+
 API_BASE = "https://firstratedata.com/api"
 API_USERID = "XMbX1O2zD0--j0RfUK-W9A"
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 log = logging.getLogger("update_data")
 
@@ -129,6 +136,26 @@ def parse_minute_txt(data: bytes) -> pl.DataFrame:
     ).with_columns(
         pl.col("timestamp").str.to_datetime("%Y-%m-%d %H:%M:%S"),
     )
+
+
+def update_supabase_data_end(client: httpx.Client, asset_type: str, date: str) -> None:
+    """Update data_end for all instruments of this asset type in Supabase."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        log.warning("SUPABASE_URL/SUPABASE_SERVICE_KEY not set, skipping data_end update")
+        return
+
+    resp = client.patch(
+        f"{SUPABASE_URL}/rest/v1/instruments?type=eq.{asset_type}",
+        headers={
+            "apikey": SUPABASE_KEY,
+            "Authorization": f"Bearer {SUPABASE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        },
+        json={"data_end": date},
+    )
+    resp.raise_for_status()
+    log.info("Supabase: data_end → %s for type=%s", date, asset_type)
 
 
 def check_last_update(client: httpx.Client, asset_type: str) -> str:
@@ -291,6 +318,9 @@ def main():
             results = process_zip(zip_data, api_tf, asset_type, target_tickers)
             total_updated += len(results)
             log.info("%s %s: updated %d tickers", asset_type, api_tf, len(results))
+
+        # Update Supabase metadata
+        update_supabase_data_end(client, asset_type, remote_date)
 
         # Save state
         write_state(state_path, remote_date)
