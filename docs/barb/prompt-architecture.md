@@ -105,15 +105,11 @@ technical indicators or query syntax.
 ### Supabase: таблица `exchanges`
 
 ```
-  code        text PK         -- CME, COMEX, CBOT, NYMEX, ICEEUR
+  code        text PK         -- CME, COMEX, CBOT, NYMEX, ICEEUR, ICEUS, EUREX
   name        text             -- Chicago Mercantile Exchange
   timezone    text             -- CT, ET, GMT (native timezone биржи)
-  eth         jsonb            -- ["18:00", "17:00"] — в ET
-  maintenance jsonb            -- ["17:00", "18:00"] — в ET
   image_url   text             -- Supabase Storage (exchange-images bucket)
 ```
-
-ETH и maintenance — свойство платформы (Globex, ICE), одинаковые для всех инструментов на бирже.
 
 ### Supabase: таблица `instruments`
 
@@ -129,6 +125,7 @@ ETH и maintenance — свойство платформы (Globex, ICE), оди
   data_start      date             -- 2008-01-02
   data_end        date             -- 2026-02-06
   events          text[]           -- {macro, options}
+  notes           text             -- AI context (e.g. rollover offset warning)
   image_url       text             -- Supabase Storage (instrument-images bucket)
   active          boolean          -- true
 
@@ -139,22 +136,24 @@ Config jsonb (per-instrument only):
   sessions        {name: [s, e]}   -- {"RTH": ["09:30", "17:00"], ...}
 ```
 
-Config содержит только per-instrument данные. ETH, maintenance — наследуются от exchange.
-RTH в sessions варьируется по продуктовой группе (CME index ≠ CME FX).
+Config содержит только per-instrument данные. Sessions (ETH, RTH) варьируются по продуктовой группе.
 
 ### Supabase: view `instrument_full`
 
 ```sql
-select i.*, e.eth, e.maintenance, e.timezone, e.name as exchange_name
+select
+  i.symbol, i.name, i.exchange, i.type, i.category, i.currency,
+  i.default_session, i.data_start, i.data_end, i.events, i.notes, i.config,
+  e.timezone as exchange_timezone, e.name as exchange_name
 from instruments i join exchanges e on i.exchange = e.code
 ```
 
-Один запрос — все данные. `get_instrument()` читает из view.
+Один запрос — все данные для AI. Без image_url, active (не нужны модели).
 
 ### Data: два датасета per instrument
 
 ```
-data/1d/{symbol}.parquet   — дневные бары (settlement close, совпадает с TradingView)
+data/1d/{symbol}.parquet   — дневные бары (settlement close, official exchange price)
 data/1m/{symbol}.parquet   — минутные бары (для интрадей анализа)
 ```
 
@@ -181,9 +180,9 @@ EXCHANGE_HOLIDAYS = {
 Supabase                          holidays.py              get_instrument("NQ")
 ┌─────────────────────┐          ┌──────────────────┐     ┌──────────────────────┐
 │ instrument_full     │          │ EXCHANGE_HOLIDAYS│     │ merged dict:         │
-│  NQ: ticks, RTH,    │────┐     │   CME: [rules]   │──┐  │   eth, maintenance,  │
-│  eth, maintenance   │    │     │   ICEEUR: [rules] │  │  │   sessions, ticks,   │
-│  (from view)        │    │     └──────────────────┘  │  │   holidays, events   │
+│  NQ: sessions,      │────┐     │   CME: [rules]   │──┐  │   sessions, ticks,   │
+│  ticks, notes,      │    │     │   ICEEUR: [rules] │  │  │   notes, holidays,   │
+│  events             │    │     └──────────────────┘  │  │   events              │
 └─────────────────────┘    └──────────────┬───────────┘  └──────────┬───────────┘
                                           │                          │
                                 get_instrument("NQ")       используют все:
@@ -195,8 +194,8 @@ API `get_instrument()` не меняется — возвращает тот ж�
 
 ### Масштаб
 
-- 132 фьючерса сейчас, 10K+ потом
-- Новый инструмент = INSERT в Supabase (exchange FK уже задаёт ETH/maintenance)
+- 31 фьючерс сейчас, 10K+ потом
+- Новый инструмент = INSERT в Supabase (exchange FK задаёт timezone)
 - Новая биржа = INSERT в exchanges (раз в жизнь, ~5-10 бирж)
 - Holiday rules в коде, keyed by exchange code
 
