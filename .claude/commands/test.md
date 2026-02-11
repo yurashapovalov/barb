@@ -1,12 +1,17 @@
 ---
-description: Check Barb project health — function count, test coverage, lint errors, TODOs
-allowed-tools: Read, Bash, Grep, Glob
+description: Write or improve tests for a file or function. Uses test-writer agent.
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob
+agent: test-writer
 ---
 
-Check the current state of the Barb project. Report concisely as a dashboard.
+Write or improve tests for "$ARGUMENTS".
 
-1. **Functions:** Count functions in barb/functions/ vs target (107)
-2. **Tests:** Find source files in barb/ without corresponding test files
-3. **Lint:** Run `ruff check barb/ tests/ api/ assistant/`
-4. **Git:** `git status --short`
-5. **TODOs:** `grep -rn "TODO\|FIXME\|HACK\|XXX" barb/ assistant/ api/ --include="*.py"`
+If a specific file or function is given:
+1. Read the source file
+2. Read docs/barb/functions-architecture.md if it's a trading function
+3. Check if test file exists — if yes, read it and improve; if no, create it
+4. Write comprehensive tests following the patterns in existing test files
+
+If no argument given:
+1. Find Python files in barb/ and assistant/ without corresponding test files
+2. Show the list and ask which one to cover first
