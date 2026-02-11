@@ -4,8 +4,8 @@
 - Provider: FirstRateData (futures dataset)
 - Type: `contin_UNadj` — unadjusted continuous contracts (front-month stitched)
 - Two datasets per instrument:
-  - `data/1d/{SYMBOL}.parquet` — daily bars (7 cols: date, O, H, L, C, volume, OI → we drop OI)
-  - `data/1m/{SYMBOL}.parquet` — 1-minute bars (6 cols: datetime, O, H, L, C, volume)
+  - `data/1d/futures/{SYMBOL}.parquet` — daily bars (7 cols: date, O, H, L, C, volume, OI → we drop OI)
+  - `data/1m/futures/{SYMBOL}.parquet` — 1-minute bars (6 cols: datetime, O, H, L, C, volume)
 - 31 instruments, range ~2008 to 2026-02
 - Timestamps in US/Eastern (naive, no tz info)
 
@@ -16,24 +16,22 @@
 Daily bars use **exchange settlement close** (official CME/COMEX/NYMEX/ICE price).
 Minute bars use **last trade close** per minute.
 
-## Settlement vs Last Trade
+## Settlement Close
 
-Provider daily bars use **settlement price** as close. This is the official exchange price:
+Both our data and TradingView (SET mode) use **settlement price** as daily close.
+
+Settlement price:
 - Calculated by the exchange (VWAP-based, sometimes committee-determined)
 - Used for margin, mark-to-market, P&L calculations
 - What traders see in professional terminals (CQG, Bloomberg, Interactive Brokers)
-- Smoothed, not susceptible to last-second noise
 
-TradingView shows **last trade** as close — the price of the last transaction before session end.
+TradingView has a "SET" toggle (bottom-right) to switch between settlement and last trade.
+In SET mode, our data matches TradingView within ~1 tick.
 
-**Our daily close is more accurate than TradingView's.** Settlement is the professional standard.
-
-### Measured differences (NQ, Dec 2025)
-- O/H/L: exact match between provider 1d and 1m→ETH aggregation (and TradingView)
-- Close: differs by 0.03–0.2% between settlement (ours) and last trade (TV)
-- NQ Dec 22: settlement=25692.25, last trade=25700.25 (Δ=8 pts, 0.03%)
-- NQ Dec 17: settlement=24898.75, last trade=24951.75 (Δ=53 pts, 0.21%)
-- For indicator tests: use ±1% tolerance on final values to account for this
+### Verified (NQ, Dec 22 2025)
+- O/H/L: exact match
+- Close: 25,692.25 (ours) vs 25,692.50 (TV SET) — Δ=0.25, one tick (0.001%)
+- Indicator impact: negligible
 
 ## CME Session Structure
 - Globex: 18:00 ET (prev day) → 17:00 ET (current day)

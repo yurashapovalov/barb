@@ -59,7 +59,7 @@ Zip archive containing one txt per ticker:
 We use **unadjusted continuous** (`contin_UNadj`) — raw traded prices, matches TradingView NQ1! style.
 
 Two timeframes:
-- **1day** — settlement close, matches TradingView exactly (except ~4 bars per roll)
+- **1day** — settlement close, matches TradingView SET mode within ~1 tick
 - **1min** — for intraday queries, aggregated to 5m/15m/30m/1h on the fly
 
 ## Local storage
@@ -113,18 +113,27 @@ The provider API has a `futures_contract` endpoint that returns individual contr
 Priority: after functions + prompt + server are done. Current 93% match is acceptable for launch.
 
 ### Settlement vs last-trade close
-- 1d data: settlement close (matches TradingView)
-- 1m aggregated to daily: last-trade close (differs ~0.04%)
+- 1d data: settlement close (matches TradingView SET mode within ~1 tick)
+- 1m aggregated to daily: last-trade close (differs ~0.04% from settlement)
 - This is why we need both 1d and 1m — can't derive daily from minutes
 
-## Auto-update plan
+## Auto-update (implemented)
 
-Cron on server (01:15 ET daily):
-1. Check `last_update` — skip if no new data
-2. Download `period=day` for 1day and 1min
-3. Unzip, extract ticker from filename
-4. Append new bars to existing parquet files
-5. Restart API container to clear lru_cache
+`scripts/update_data.py` — cron on server, daily at 1:15 AM ET (6:15 UTC), Mon-Fri.
+
+```
+1. GET last_update → check if new data available
+2. GET period=day for 1day + 1min → zip archives
+3. Extract our 31 tickers, apply symbol mapping
+4. Validate new data (timestamps, OHLC > 0)
+5. Append to parquet with dedup (atomic write: .tmp → rename)
+6. PATCH Supabase instruments.data_end
+7. Save state to .last_update
+```
+
+Server: `root@37.27.204.135:/opt/barb`, venv at `.venv-scripts/`, log at `/var/log/barb-update.log`.
+
+See `docs/barb/data-update.md` for full architecture.
 
 ## Target tickers (31)
 
