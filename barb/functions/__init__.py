@@ -12,6 +12,7 @@ from barb.functions.lag import LAG_FUNCTIONS
 from barb.functions.oscillators import OSCILLATOR_FUNCTIONS
 from barb.functions.pattern import PATTERN_FUNCTIONS
 from barb.functions.time import TIME_FUNCTIONS
+from barb.functions.volatility import VOLATILITY_FUNCTIONS
 from barb.functions.window import WINDOW_FUNCTIONS
 
 FUNCTIONS = {
@@ -24,6 +25,7 @@ FUNCTIONS = {
     **TIME_FUNCTIONS,
     **CONVENIENCE_FUNCTIONS,
     **OSCILLATOR_FUNCTIONS,
+    **VOLATILITY_FUNCTIONS,
 }
 
 __all__ = ["FUNCTIONS", "AGGREGATE_FUNCS"]
