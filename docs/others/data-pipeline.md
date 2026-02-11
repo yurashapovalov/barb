@@ -66,8 +66,10 @@ Two timeframes:
 
 ```
 data/
-  1d/{TICKER}.parquet    — daily bars (from 1day txt)
-  1m/{TICKER}.parquet    — minute bars (from 1min txt)
+  1d/futures/{SYMBOL}.parquet    — daily bars (from 1day txt)
+  1m/futures/{SYMBOL}.parquet    — minute bars (from 1min txt)
+  1d/stocks/{SYMBOL}.parquet     — (future)
+  1m/stocks/{SYMBOL}.parquet     — (future)
 ```
 
 Parquet format: `[timestamp, open, high, low, close, volume]`, compression=zstd.

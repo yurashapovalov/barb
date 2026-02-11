@@ -136,6 +136,11 @@ def main():
         choices=["1d", "1m"],
         help="Target timeframe directory (default: 1d)",
     )
+    parser.add_argument(
+        "--type",
+        default="futures",
+        help="Asset type subdirectory (default: futures)",
+    )
     args = parser.parse_args()
 
     src_dir = Path(args.source_dir)
@@ -143,7 +148,7 @@ def main():
         print(f"Source directory not found: {src_dir}")
         return
 
-    out_dir = DATA_DIR / args.timeframe
+    out_dir = DATA_DIR / args.timeframe / args.type
     out_dir.mkdir(parents=True, exist_ok=True)
 
     converter = convert_daily if args.timeframe == "1d" else convert_minute
