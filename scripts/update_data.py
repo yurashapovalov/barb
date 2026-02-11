@@ -18,7 +18,7 @@ import zipfile
 from pathlib import Path
 
 import httpx
-import polars as pl
+import pandas as pd
 from dotenv import load_dotenv
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -80,11 +80,15 @@ TARGET_TICKERS = {
     },
 }
 
-# API timeframe → our directory + provider filename pattern
+# API timeframe → our directory
 TIMEFRAMES = {
     "1day": "1d",
     "1min": "1m",
 }
+
+DAILY_COLS = ["timestamp", "open", "high", "low", "close", "volume", "oi"]
+MINUTE_COLS = ["timestamp", "open", "high", "low", "close", "volume"]
+KEEP_COLS = ["timestamp", "open", "high", "low", "close", "volume"]
 
 
 def extract_ticker(filename: str) -> str | None:
@@ -95,47 +99,18 @@ def extract_ticker(filename: str) -> str | None:
     return None
 
 
-def parse_daily_txt(data: bytes) -> pl.DataFrame:
+def parse_daily_txt(data: bytes) -> pd.DataFrame:
     """Parse daily txt: date,O,H,L,C,volume,OI → DataFrame."""
-    return (
-        pl.read_csv(
-            io.BytesIO(data),
-            has_header=False,
-            new_columns=["timestamp", "open", "high", "low", "close", "volume", "oi"],
-            schema={
-                "timestamp": pl.Utf8,
-                "open": pl.Float64,
-                "high": pl.Float64,
-                "low": pl.Float64,
-                "close": pl.Float64,
-                "volume": pl.Int64,
-                "oi": pl.Int64,
-            },
-        )
-        .with_columns(
-            pl.col("timestamp").str.to_datetime("%Y-%m-%d"),
-        )
-        .select(["timestamp", "open", "high", "low", "close", "volume"])
-    )
+    df = pd.read_csv(io.BytesIO(data), header=None, names=DAILY_COLS)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df[KEEP_COLS]
 
 
-def parse_minute_txt(data: bytes) -> pl.DataFrame:
+def parse_minute_txt(data: bytes) -> pd.DataFrame:
     """Parse minute txt: datetime,O,H,L,C,volume → DataFrame."""
-    return pl.read_csv(
-        io.BytesIO(data),
-        has_header=False,
-        new_columns=["timestamp", "open", "high", "low", "close", "volume"],
-        schema={
-            "timestamp": pl.Utf8,
-            "open": pl.Float64,
-            "high": pl.Float64,
-            "low": pl.Float64,
-            "close": pl.Float64,
-            "volume": pl.Int64,
-        },
-    ).with_columns(
-        pl.col("timestamp").str.to_datetime("%Y-%m-%d %H:%M:%S"),
-    )
+    df = pd.read_csv(io.BytesIO(data), header=None, names=MINUTE_COLS)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df
 
 
 def update_supabase_data_end(client: httpx.Client, asset_type: str, date: str) -> None:
@@ -197,22 +172,23 @@ def download_zip(client: httpx.Client, asset_type: str, period: str, timeframe: 
     return resp.content
 
 
-def append_bars(existing_path: Path, new_df: pl.DataFrame) -> int:
+def append_bars(existing_path: Path, new_df: pd.DataFrame) -> int:
     """Append new bars to existing parquet, deduplicate by timestamp.
 
     Returns total row count after append.
     """
     if existing_path.exists():
-        existing = pl.read_parquet(existing_path)
+        existing = pd.read_parquet(existing_path)
         combined = (
-            pl.concat([existing, new_df])
-            .unique(subset=["timestamp"], keep="last")
-            .sort("timestamp")
+            pd.concat([existing, new_df])
+            .drop_duplicates(subset=["timestamp"], keep="last")
+            .sort_values("timestamp")
+            .reset_index(drop=True)
         )
     else:
-        combined = new_df.sort("timestamp")
+        combined = new_df.sort_values("timestamp").reset_index(drop=True)
 
-    combined.write_parquet(existing_path, compression="zstd")
+    combined.to_parquet(existing_path, compression="zstd", index=False)
     return len(combined)
 
 
