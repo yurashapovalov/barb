@@ -175,6 +175,9 @@ def download_zip(client: httpx.Client, asset_type: str, period: str, timeframe: 
 def append_bars(existing_path: Path, new_df: pd.DataFrame) -> int:
     """Append new bars to existing parquet, deduplicate by timestamp.
 
+    Atomic write: writes to .tmp then renames. If crash mid-write,
+    original file stays intact.
+
     Returns total row count after append.
     """
     if existing_path.exists():
@@ -188,7 +191,9 @@ def append_bars(existing_path: Path, new_df: pd.DataFrame) -> int:
     else:
         combined = new_df.sort_values("timestamp").reset_index(drop=True)
 
-    combined.to_parquet(existing_path, compression="zstd", index=False)
+    tmp_path = existing_path.with_suffix(".parquet.tmp")
+    combined.to_parquet(tmp_path, compression="zstd", index=False)
+    tmp_path.rename(existing_path)
     return len(combined)
 
 
