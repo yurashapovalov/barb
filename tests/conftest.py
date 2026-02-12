@@ -3,7 +3,39 @@
 import pytest
 
 from barb.data import load_data
-from config.market.instruments import get_instrument
+from config.market.instruments import get_instrument, register_instrument
+
+# NQ config matching Supabase instrument_full format
+_NQ_ROW = {
+    "symbol": "NQ",
+    "name": "Nasdaq 100 E-mini",
+    "exchange": "CME",
+    "type": "futures",
+    "category": "index",
+    "currency": "USD",
+    "default_session": "RTH",
+    "data_start": "2008-01-02",
+    "data_end": "2026-02-11",
+    "events": ["macro", "options"],
+    "notes": None,
+    "config": {
+        "sessions": {
+            "ETH": ["18:00", "17:00"],
+            "RTH": ["09:30", "16:15"],
+        },
+        "tick_size": 0.25,
+        "tick_value": 5.0,
+        "point_value": 20.0,
+    },
+    "exchange_timezone": "CT",
+    "exchange_name": "Chicago Mercantile Exchange",
+}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _register_instruments():
+    """Register test instruments before the test session."""
+    register_instrument(_NQ_ROW)
 
 
 @pytest.fixture(scope="session")

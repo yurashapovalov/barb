@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from functools import lru_cache
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -24,7 +25,7 @@ from assistant.context import (
     summarize,
 )
 from barb.data import DATA_DIR, load_data
-from config.market.instruments import get_instrument
+from config.market.instruments import get_instrument, register_instrument
 
 if os.getenv("ENV") == "production":
 
@@ -54,7 +55,23 @@ logging.root.addFilter(RequestIdFilter())
 
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="Barb", version="0.1.0")
+
+def _load_instruments():
+    """Load all instruments from Supabase instrument_full view into cache."""
+    db = get_db()
+    result = db.table("instrument_full").select("*").execute()
+    for row in result.data:
+        register_instrument(row)
+    log.info("Loaded %d instruments from Supabase", len(result.data))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _load_instruments()
+    yield
+
+
+app = FastAPI(title="Barb", version="0.1.0", lifespan=lifespan)
 
 _cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(

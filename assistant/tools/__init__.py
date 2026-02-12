@@ -12,7 +12,7 @@ BARB_TOOL = {
     "description": f"""Execute a Barb Script query against market data.
 
 Query is a flat JSON object with these fields (all optional):
-- session: "RTH" or "ETH" — filter by trading session (REQUIRED for daily+ timeframes)
+- session: trading session name from the instrument's available sessions (REQUIRED for daily+ timeframes)
 - from: "1m", "5m", "15m", "30m", "1h", "daily", "weekly" — timeframe (default: "1m")
 - period: "2024", "2024-03", "2024-01:2024-06", "2023:", "last_year" — date filter
 - map: {{"col_name": "expression"}} — compute derived columns
@@ -26,7 +26,7 @@ Execution order is FIXED: session → period → from → map → where → grou
 
 IMPORTANT:
 - group_by requires a COLUMN NAME, not an expression. Create column in map first.
-- select only supports: count(), sum(col), mean(col), min(col), max(col), std(col), median(col)
+- select only supports aggregate functions: count(), sum(col), mean(col), min(col), max(col), std(col), median(col), percentile(col, p), correlation(col1, col2), last(col)
 - For percentage calculations, run TWO queries: total count and filtered count.
 
 {_EXPRESSIONS_MD}
@@ -38,7 +38,7 @@ IMPORTANT:
                 "type": "object",
                 "description": "Barb Script query object",
                 "properties": {
-                    "session": {"type": "string", "enum": ["RTH", "ETH"]},
+                    "session": {"type": "string"},
                     "from": {"type": "string"},
                     "period": {"type": "string"},
                     "map": {"type": "object"},

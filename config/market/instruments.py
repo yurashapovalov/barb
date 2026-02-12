@@ -1,82 +1,64 @@
 """
-Instrument configurations.
+Instrument registry.
 
-All times in ET (data timezone). CME native times are CT (+1h to get ET).
+Instruments are loaded from Supabase at API startup via register_instrument().
+The registry provides a normalized dict for each instrument, with holidays
+merged from EXCHANGE_HOLIDAYS by exchange code.
 
-Session hierarchy (NQ/ES/CME futures):
-
-    ETH (full trading day)     18:00 — 17:00
-    ├── OVERNIGHT              18:00 — 09:30
-    │   ├── ASIAN              18:00 — 03:00
-    │   └── EUROPEAN           03:00 — 09:30
-    └── RTH                    09:30 — 17:00
-        ├── RTH_OPEN           09:30 — 10:30
-        ├── MORNING            09:30 — 12:30
-        ├── AFTERNOON          12:30 — 17:00
-        └── RTH_CLOSE          16:00 — 17:00
-
-    Maintenance break: 17:00 — 18:00 (no trading)
-
-ETH = full trading day. All other sessions are subsets of ETH.
-Each instrument defines its own sessions — the hierarchy above is for CME futures.
+All session times in ET.
 """
 
-INSTRUMENTS = {
-    "NQ": {
-        "name": "Nasdaq 100 E-mini",
-        "exchange": "CME",
-        "tick_size": 0.25,
-        "tick_value": 5.0,
-        "native_timezone": "CT",
-        "data_timezone": "ET",
+import json
 
-        # Available data (update when loading new data)
-        "data_start": "2008-01-02",
-        "data_end": "2026-01-07",
+from config.market.holidays import get_holidays_for_exchange
 
-        "default_session": "RTH",
+# Cache: symbol -> normalized dict
+_CACHE: dict[str, dict] = {}
 
-        "sessions": {
-            # Full trading day
-            "ETH": ("18:00", "17:00"),
 
-            # Overnight (pre-RTH)
-            "OVERNIGHT": ("18:00", "09:30"),
-            "ASIAN":     ("18:00", "03:00"),
-            "EUROPEAN":  ("03:00", "09:30"),
+def register_instrument(row: dict) -> None:
+    """Normalize a Supabase instrument_full row and store in cache.
 
-            # Regular trading hours
-            "RTH":       ("09:30", "17:00"),
-            "RTH_OPEN":  ("09:30", "10:30"),
-            "MORNING":   ("09:30", "12:30"),
-            "AFTERNOON": ("12:30", "17:00"),
-            "RTH_CLOSE": ("16:00", "17:00"),
-        },
+    Expected row keys (from instrument_full view):
+        symbol, name, exchange, type, category, currency,
+        default_session, data_start, data_end, events, notes,
+        config (JSON string or dict), exchange_timezone, exchange_name
+    """
+    config = row.get("config", {})
+    if isinstance(config, str):
+        config = json.loads(config)
 
-        "maintenance": ("17:00", "18:00"),
+    sessions = {name: tuple(times) for name, times in config.get("sessions", {}).items()}
 
-        "holidays": {
-            "full_close": [
-                "new_year", "mlk_day", "presidents_day", "good_friday",
-                "memorial_day", "juneteenth", "independence_day",
-                "labor_day", "thanksgiving", "christmas",
-            ],
-            "early_close": {
-                "independence_day_eve": "13:15",
-                "black_friday": "13:15",
-                "christmas_eve": "13:15",
-                "new_year_eve": "13:15",
-            },
-        },
+    holidays = get_holidays_for_exchange(row.get("exchange", ""))
 
-        "events": ["macro", "options"],
-    },
-}
+    normalized = {
+        "symbol": row["symbol"],
+        "name": row["name"],
+        "exchange": row.get("exchange", ""),
+        "type": row.get("type", "futures"),
+        "category": row.get("category", ""),
+        "currency": row.get("currency", "USD"),
+        "default_session": row.get("default_session", "RTH"),
+        "data_start": row.get("data_start", ""),
+        "data_end": row.get("data_end", ""),
+        "events": row.get("events") or ["macro"],
+        "notes": row.get("notes"),
+        "exchange_timezone": row.get("exchange_timezone", ""),
+        "exchange_name": row.get("exchange_name", ""),
+        "tick_size": config.get("tick_size"),
+        "tick_value": config.get("tick_value"),
+        "point_value": config.get("point_value"),
+        "sessions": sessions,
+        "holidays": holidays,
+    }
+
+    _CACHE[row["symbol"].upper()] = normalized
 
 
 def get_instrument(symbol: str) -> dict | None:
-    """Get instrument configuration."""
-    return INSTRUMENTS.get(symbol.upper())
+    """Get instrument configuration from cache."""
+    return _CACHE.get(symbol.upper())
 
 
 def get_session_times(symbol: str, session: str) -> tuple[str, str] | None:
@@ -92,21 +74,12 @@ def get_trading_day_boundaries(symbol: str) -> tuple[str, str] | None:
     return get_session_times(symbol, "ETH")
 
 
-def is_calendar_day(symbol: str) -> bool:
-    """Check if trading day equals calendar day for this instrument."""
-    bounds = get_trading_day_boundaries(symbol)
-    if not bounds:
-        return True  # Default to calendar if not configured
-    start, end = bounds
-    return start == "00:00" and end in ("23:59", "24:00")
-
-
-def get_maintenance_window(symbol: str) -> tuple[str, str] | None:
-    """Get maintenance break window."""
+def get_default_session(symbol: str) -> str:
+    """Get default session for instrument."""
     instrument = get_instrument(symbol)
     if not instrument:
-        return None
-    return instrument.get("maintenance")
+        return "RTH"
+    return instrument.get("default_session", "RTH")
 
 
 def list_sessions(symbol: str) -> list[str]:
@@ -117,71 +90,6 @@ def list_sessions(symbol: str) -> list[str]:
     return list(instrument.get("sessions", {}).keys())
 
 
-def get_default_session(symbol: str) -> str:
-    """Get default session for instrument."""
-    instrument = get_instrument(symbol)
-    if not instrument:
-        return "RTH"
-    return instrument.get("default_session", "RTH")
-
-
-def get_trading_day_options(symbol: str, date_str: str = "") -> list[str]:
-    """
-    Get session options for clarification with holiday awareness.
-
-    Returns user-facing strings like "RTH (09:30-17:00 ET)".
-    Adjusts times for early close days.
-
-    Args:
-        symbol: Instrument symbol
-        date_str: Date in YYYY-MM-DD format (for holiday check)
-    """
-    from datetime import datetime
-
-    from config.market.holidays import get_close_time, get_day_type
-
-    # Check if it's a weekend
-    if date_str:
-        try:
-            dt = datetime.strptime(date_str, "%Y-%m-%d")
-            weekday = dt.weekday()
-            days = ["Monday", "Tuesday", "Wednesday", "Thursday",
-                    "Friday", "Saturday", "Sunday"]
-            weekday_name = days[weekday]
-            if weekday >= 5:
-                return [f"Market closed on {date_str} ({weekday_name})"]
-        except ValueError:
-            pass
-
-    # Check if it's a holiday
-    if date_str:
-        day_type = get_day_type(symbol, date_str)
-        if day_type == "closed":
-            return [f"Market closed on {date_str}"]
-        close_time = get_close_time(symbol, date_str) or "17:00"
-    else:
-        day_type = "regular"
-        close_time = "17:00"
-
-    result = []
-
-    # RTH option
-    rth = get_session_times(symbol, "RTH")
-    if rth:
-        rth_start = rth[0]
-        rth_end = min(rth[1], close_time) if day_type == "early_close" else rth[1]
-        suffix = " — early close" if day_type == "early_close" else ""
-        result.append(f"RTH ({rth_start}-{rth_end} ET){suffix}")
-
-    # ETH option (full trading day)
-    eth = get_session_times(symbol, "ETH")
-    if eth:
-        eth_start = eth[0]
-        eth_end = close_time
-        suffix = " — early close" if day_type == "early_close" else ""
-        result.append(f"ETH ({eth_start} prev - {eth_end} ET){suffix}")
-
-    # Calendar day option
-    result.append("Calendar day (00:00-23:59 ET)")
-
-    return result or ["RTH", "ETH", "Calendar day"]
+def clear_cache() -> None:
+    """Clear the instrument cache. For testing."""
+    _CACHE.clear()

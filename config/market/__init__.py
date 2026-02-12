@@ -16,16 +16,18 @@ from config.market.holidays import (
     is_trading_day,
 )
 from config.market.instruments import (
-    INSTRUMENTS,
+    clear_cache,
     get_default_session,
     get_instrument,
     get_session_times,
     get_trading_day_boundaries,
     list_sessions,
+    register_instrument,
 )
 
 __all__ = [
-    "INSTRUMENTS",
+    "register_instrument",
+    "clear_cache",
     "get_instrument",
     "get_session_times",
     "get_trading_day_boundaries",

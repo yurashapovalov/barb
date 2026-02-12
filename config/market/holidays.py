@@ -16,11 +16,68 @@ Usage:
 from datetime import date, timedelta
 from typing import Literal
 
-from config.market.instruments import get_instrument
+# =============================================================================
+# Exchange Holidays — keyed by exchange code
+# =============================================================================
+
+# US holidays: CME, CBOT, NYMEX, COMEX are all on Globex — same holidays.
+# ICEUS follows the same US schedule.
+_US_HOLIDAYS = {
+    "full_close": [
+        "new_year",
+        "mlk_day",
+        "presidents_day",
+        "good_friday",
+        "memorial_day",
+        "juneteenth",
+        "independence_day",
+        "labor_day",
+        "thanksgiving",
+        "christmas",
+    ],
+    "early_close": {
+        "independence_day_eve": "13:15",
+        "black_friday": "13:15",
+        "christmas_eve": "13:15",
+        "new_year_eve": "13:15",
+    },
+}
+
+# European holidays (ICEEUR, EUREX): Good Friday + Christmas.
+# These exchanges have fewer universal closures — most holidays
+# vary by product. We list the guaranteed closures.
+_EU_HOLIDAYS = {
+    "full_close": [
+        "new_year",
+        "good_friday",
+        "christmas",
+    ],
+    "early_close": {
+        "christmas_eve": "12:30",
+        "new_year_eve": "12:30",
+    },
+}
+
+EXCHANGE_HOLIDAYS: dict[str, dict] = {
+    "CME": _US_HOLIDAYS,
+    "CBOT": _US_HOLIDAYS,
+    "NYMEX": _US_HOLIDAYS,
+    "COMEX": _US_HOLIDAYS,
+    "ICEUS": _US_HOLIDAYS,
+    "ICEEUR": _EU_HOLIDAYS,
+    "EUREX": _EU_HOLIDAYS,
+}
+
+
+def get_holidays_for_exchange(exchange: str) -> dict:
+    """Get holiday rules for an exchange code. Returns empty dict if unknown."""
+    return EXCHANGE_HOLIDAYS.get(exchange, {})
+
 
 # =============================================================================
 # Holiday Date Calculations
 # =============================================================================
+
 
 def _nth_weekday_of_month(year: int, month: int, weekday: int, n: int) -> date:
     """
@@ -181,6 +238,8 @@ def get_holidays_for_year(symbol: str, year: int) -> dict[str, list[date]]:
             "early_close": [date, date, ...]
         }
     """
+    from config.market.instruments import get_instrument
+
     instrument = get_instrument(symbol)
     if not instrument:
         return {"full_close": [], "early_close": []}
@@ -224,6 +283,8 @@ def get_day_type(symbol: str, check_date: str | date) -> DayType:
     if isinstance(check_date, str):
         check_date = date.fromisoformat(check_date)
 
+    from config.market.instruments import get_instrument
+
     instrument = get_instrument(symbol)
     if not instrument:
         return "regular"
@@ -265,6 +326,8 @@ def get_close_time(symbol: str, check_date: str | date) -> str | None:
 
     if day_type == "closed":
         return None
+
+    from config.market.instruments import get_instrument
 
     instrument = get_instrument(symbol)
     if not instrument:
@@ -331,6 +394,8 @@ def check_dates_for_holidays(
     """
     if not dates:
         return None
+
+    from config.market.instruments import get_instrument
 
     instrument = get_instrument(symbol)
     if not instrument:
