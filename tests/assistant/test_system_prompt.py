@@ -38,13 +38,13 @@ class TestBuildSystemPrompt:
         assert "FOMC" in result
         assert "NFP" in result
 
-    def test_trading_knowledge(self):
+    def test_recipes(self):
         result = build_system_prompt("NQ")
-        assert "<trading_knowledge>" in result
-        assert "rsi(close, 14)" in result
-        assert "atr(14)" in result
-        assert "adx(14)" in result
+        assert "<recipes>" in result
+        assert "MACD cross" in result
         assert "crossover" in result
+        assert "breakout" in result
+        assert "NFP" in result
 
     def test_instructions(self):
         result = build_system_prompt("NQ")
@@ -66,6 +66,11 @@ class TestBuildSystemPrompt:
         # Holiday example
         assert "Christmas" in result
 
+    def test_transparency(self):
+        result = build_system_prompt("NQ")
+        assert "<transparency>" in result
+        assert "alternative" in result
+
     def test_acknowledgment(self):
         result = build_system_prompt("NQ")
         assert "<acknowledgment>" in result
@@ -85,8 +90,9 @@ class TestBuildSystemPrompt:
             "<instrument>",
             "<holidays>",
             "<events>",
-            "<trading_knowledge>",
+            "<recipes>",
             "<instructions>",
+            "<transparency>",
             "<acknowledgment>",
             "<data_titles>",
             "<examples>",

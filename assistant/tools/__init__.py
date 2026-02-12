@@ -1,10 +1,9 @@
 """Single Barb Script tool for Anthropic Claude."""
 
-from pathlib import Path
-
+from assistant.tools.reference import build_function_reference
 from barb.interpreter import QueryError, execute
 
-_EXPRESSIONS_MD = (Path(__file__).parent / "reference" / "expressions.md").read_text()
+_EXPRESSIONS_MD = build_function_reference()
 
 # Anthropic tool definition
 BARB_TOOL = {

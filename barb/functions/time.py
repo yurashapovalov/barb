@@ -27,3 +27,16 @@ TIME_SIGNATURES = {
     "day": "day()",
     "quarter": "quarter()",
 }
+
+TIME_DESCRIPTIONS = {
+    "dayofweek": "0=Mon, 1=Tue, ..., 4=Fri",
+    "dayname": "Monday, Tuesday, ...",
+    "hour": "0-23",
+    "minute": "0-59",
+    "month": "1-12",
+    "monthname": "January, February, ...",
+    "year": "e.g. 2024",
+    "date": "date object",
+    "day": "day of month (1-31)",
+    "quarter": "1-4",
+}

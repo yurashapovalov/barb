@@ -11,3 +11,9 @@ CUMULATIVE_SIGNATURES = {
     "cummin": "cummin(col)",
     "cumsum": "cumsum(col)",
 }
+
+CUMULATIVE_DESCRIPTIONS = {
+    "cummax": "running maximum",
+    "cummin": "running minimum",
+    "cumsum": "running total",
+}

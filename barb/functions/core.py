@@ -16,9 +16,7 @@ CORE_FUNCTIONS = {
     "log": lambda df, x: np.log(x),
     "sqrt": lambda df, x: np.sqrt(x),
     "sign": lambda df, x: np.sign(x),
-    "round": lambda df, x, n=0: (
-        x.round(int(n)) if isinstance(x, pd.Series) else round(x, int(n))
-    ),
+    "round": lambda df, x, n=0: (x.round(int(n)) if isinstance(x, pd.Series) else round(x, int(n))),
     "if": _if,
 }
 
@@ -29,4 +27,13 @@ CORE_SIGNATURES = {
     "sign": "sign(x)",
     "round": "round(x, n=0)",
     "if": "if(cond, then, else)",
+}
+
+CORE_DESCRIPTIONS = {
+    "abs": "absolute value",
+    "log": "natural logarithm",
+    "sqrt": "square root",
+    "sign": "-1, 0, or 1",
+    "round": "round to n decimals",
+    "if": "conditional: if(cond, then, else)",
 }

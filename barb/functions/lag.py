@@ -9,3 +9,8 @@ LAG_SIGNATURES = {
     "prev": "prev(col, n=1)",
     "next": "next(col, n=1)",
 }
+
+LAG_DESCRIPTIONS = {
+    "prev": "value n bars ago",
+    "next": "value n bars ahead",
+}

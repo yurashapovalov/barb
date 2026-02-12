@@ -4,18 +4,51 @@ All functions receive (df, *args) where df is the current DataFrame.
 New functions are added to category modules — they appear in Barb Script automatically.
 """
 
-from barb.functions.aggregate import AGGREGATE_FUNCS, AGGREGATE_FUNCTIONS
-from barb.functions.convenience import CONVENIENCE_FUNCTIONS
-from barb.functions.core import CORE_FUNCTIONS
-from barb.functions.cumulative import CUMULATIVE_FUNCTIONS
-from barb.functions.lag import LAG_FUNCTIONS
-from barb.functions.oscillators import OSCILLATOR_FUNCTIONS
-from barb.functions.pattern import PATTERN_FUNCTIONS
-from barb.functions.time import TIME_FUNCTIONS
-from barb.functions.trend import TREND_FUNCTIONS
-from barb.functions.volatility import VOLATILITY_FUNCTIONS
-from barb.functions.volume import VOLUME_FUNCTIONS
-from barb.functions.window import WINDOW_FUNCTIONS
+from barb.functions.aggregate import (
+    AGGREGATE_DESCRIPTIONS,
+    AGGREGATE_FUNCS,
+    AGGREGATE_FUNCTIONS,
+    AGGREGATE_SIGNATURES,
+)
+from barb.functions.convenience import (
+    CONVENIENCE_DESCRIPTIONS,
+    CONVENIENCE_FUNCTIONS,
+    CONVENIENCE_SIGNATURES,
+)
+from barb.functions.core import CORE_DESCRIPTIONS, CORE_FUNCTIONS, CORE_SIGNATURES
+from barb.functions.cumulative import (
+    CUMULATIVE_DESCRIPTIONS,
+    CUMULATIVE_FUNCTIONS,
+    CUMULATIVE_SIGNATURES,
+)
+from barb.functions.lag import LAG_DESCRIPTIONS, LAG_FUNCTIONS, LAG_SIGNATURES
+from barb.functions.oscillators import (
+    OSCILLATOR_DESCRIPTIONS,
+    OSCILLATOR_FUNCTIONS,
+    OSCILLATOR_SIGNATURES,
+)
+from barb.functions.pattern import (
+    PATTERN_DESCRIPTIONS,
+    PATTERN_FUNCTIONS,
+    PATTERN_SIGNATURES,
+)
+from barb.functions.time import TIME_DESCRIPTIONS, TIME_FUNCTIONS, TIME_SIGNATURES
+from barb.functions.trend import TREND_DESCRIPTIONS, TREND_FUNCTIONS, TREND_SIGNATURES
+from barb.functions.volatility import (
+    VOLATILITY_DESCRIPTIONS,
+    VOLATILITY_FUNCTIONS,
+    VOLATILITY_SIGNATURES,
+)
+from barb.functions.volume import (
+    VOLUME_DESCRIPTIONS,
+    VOLUME_FUNCTIONS,
+    VOLUME_SIGNATURES,
+)
+from barb.functions.window import (
+    WINDOW_DESCRIPTIONS,
+    WINDOW_FUNCTIONS,
+    WINDOW_SIGNATURES,
+)
 
 FUNCTIONS = {
     **CORE_FUNCTIONS,
@@ -32,4 +65,34 @@ FUNCTIONS = {
     **VOLUME_FUNCTIONS,
 }
 
-__all__ = ["FUNCTIONS", "AGGREGATE_FUNCS"]
+SIGNATURES = {
+    **CORE_SIGNATURES,
+    **LAG_SIGNATURES,
+    **WINDOW_SIGNATURES,
+    **CUMULATIVE_SIGNATURES,
+    **PATTERN_SIGNATURES,
+    **AGGREGATE_SIGNATURES,
+    **TIME_SIGNATURES,
+    **CONVENIENCE_SIGNATURES,
+    **OSCILLATOR_SIGNATURES,
+    **VOLATILITY_SIGNATURES,
+    **TREND_SIGNATURES,
+    **VOLUME_SIGNATURES,
+}
+
+DESCRIPTIONS = {
+    **CORE_DESCRIPTIONS,
+    **LAG_DESCRIPTIONS,
+    **WINDOW_DESCRIPTIONS,
+    **CUMULATIVE_DESCRIPTIONS,
+    **PATTERN_DESCRIPTIONS,
+    **AGGREGATE_DESCRIPTIONS,
+    **TIME_DESCRIPTIONS,
+    **CONVENIENCE_DESCRIPTIONS,
+    **OSCILLATOR_DESCRIPTIONS,
+    **VOLATILITY_DESCRIPTIONS,
+    **TREND_DESCRIPTIONS,
+    **VOLUME_DESCRIPTIONS,
+}
+
+__all__ = ["FUNCTIONS", "AGGREGATE_FUNCS", "SIGNATURES", "DESCRIPTIONS"]

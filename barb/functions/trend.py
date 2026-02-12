@@ -239,3 +239,15 @@ TREND_SIGNATURES = {
     "supertrend_dir": "supertrend_dir(n=10, mult=3.0)",
     "sar": "sar(accel=0.02, max_accel=0.2)",
 }
+
+TREND_DESCRIPTIONS = {
+    "macd": "MACD line = EMA(fast) - EMA(slow). Positive = bullish momentum",
+    "macd_signal": "MACD signal line = EMA of MACD. Crossovers = trade signals",
+    "macd_hist": "MACD histogram = MACD - Signal. Momentum direction and strength",
+    "adx": "Average Directional Index (0-100). Above 25 = trending, below 20 = ranging",
+    "plus_di": "+DI — bullish directional strength. Compare with -DI for trend direction",
+    "minus_di": "-DI — bearish directional strength. Compare with +DI for trend direction",
+    "supertrend": "SuperTrend value — ATR-based trend-following line",
+    "supertrend_dir": "SuperTrend direction: 1 = uptrend, -1 = downtrend",
+    "sar": "Parabolic SAR — trailing stop that flips on reversal",
+}

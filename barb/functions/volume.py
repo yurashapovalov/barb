@@ -65,3 +65,11 @@ VOLUME_SIGNATURES = {
     "volume_ratio": "volume_ratio(n=20)",
     "volume_sma": "volume_sma(n=20)",
 }
+
+VOLUME_DESCRIPTIONS = {
+    "obv": "On Balance Volume — cumulative volume in direction of price change",
+    "vwap_day": "VWAP with daily reset — volume-weighted average price",
+    "ad_line": "Accumulation/Distribution Line — volume-weighted buying/selling pressure",
+    "volume_ratio": "current volume / SMA(volume). Above 2 = volume spike",
+    "volume_sma": "moving average of volume",
+}

@@ -117,3 +117,14 @@ PATTERN_SIGNATURES = {
     "pivothigh": "pivothigh(n_left=5, n_right=5)",
     "pivotlow": "pivotlow(n_left=5, n_right=5)",
 }
+
+PATTERN_DESCRIPTIONS = {
+    "streak": "consecutive bars where condition is true, resets on false",
+    "bars_since": "number of bars since condition was last true",
+    "rank": "percentile rank (0-1) within the column",
+    "rising": "true if value increased for n bars straight",
+    "falling": "true if value decreased for n bars straight",
+    "valuewhen": "value of col when condition was true, n-th occurrence back",
+    "pivothigh": "pivot high: local high confirmed after n_right bars",
+    "pivotlow": "pivot low: local low confirmed after n_right bars",
+}

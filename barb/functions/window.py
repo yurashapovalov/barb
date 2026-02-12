@@ -78,3 +78,18 @@ WINDOW_SIGNATURES = {
     "vwma": "vwma(n=20)",
     "rma": "rma(col, n)",
 }
+
+WINDOW_DESCRIPTIONS = {
+    "rolling_mean": "rolling average over n bars",
+    "rolling_sum": "rolling sum over n bars",
+    "rolling_max": "highest value in last n bars",
+    "rolling_min": "lowest value in last n bars",
+    "rolling_std": "rolling standard deviation",
+    "rolling_count": "count of true values in last n bars",
+    "ema": "Exponential Moving Average — more weight on recent bars",
+    "sma": "Simple Moving Average — equal weight on all bars",
+    "wma": "Weighted Moving Average — linear weights, recent bars weigh more",
+    "hma": "Hull Moving Average — fast MA with minimal lag",
+    "vwma": "Volume Weighted Moving Average",
+    "rma": "Wilder's smoothing (RMA). Used internally by RSI, ATR",
+}

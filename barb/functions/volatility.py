@@ -144,3 +144,20 @@ VOLATILITY_SIGNATURES = {
     "donchian_upper": "donchian_upper(n=20)",
     "donchian_lower": "donchian_lower(n=20)",
 }
+
+VOLATILITY_DESCRIPTIONS = {
+    "tr": "True Range — single-bar volatility measure",
+    "atr": "Average True Range. Higher = more volatile. Compare to SMA for relative",
+    "natr": "Normalized ATR — ATR as percentage of close. Comparable across instruments",
+    "bbands_upper": "Bollinger upper band = SMA + mult * stdev",
+    "bbands_middle": "Bollinger middle band = SMA",
+    "bbands_lower": "Bollinger lower band = SMA - mult * stdev",
+    "bbands_width": "Bollinger bandwidth (%). Low values = squeeze/compression, high = expansion",
+    "bbands_pctb": "Bollinger %B — position within bands (0 = lower, 1 = upper, >1 = above upper)",
+    "kc_upper": "Keltner upper = EMA + mult * ATR",
+    "kc_middle": "Keltner middle = EMA of close",
+    "kc_lower": "Keltner lower = EMA - mult * ATR",
+    "kc_width": "Keltner Channel width — ATR-based alternative to Bollinger width",
+    "donchian_upper": "Donchian upper = highest high over n bars (breakout level)",
+    "donchian_lower": "Donchian lower = lowest low over n bars (breakdown level)",
+}

@@ -18,8 +18,12 @@ AGGREGATE_FUNCTIONS = {
 # Aggregate functions allowed in group_by context.
 # Keys = Barb names, values = pandas agg method names.
 AGGREGATE_FUNCS: dict[str, str] = {
-    "mean": "mean", "sum": "sum", "max": "max", "min": "min",
-    "std": "std", "median": "median",
+    "mean": "mean",
+    "sum": "sum",
+    "max": "max",
+    "min": "min",
+    "std": "std",
+    "median": "median",
 }
 
 AGGREGATE_SIGNATURES = {
@@ -33,4 +37,17 @@ AGGREGATE_SIGNATURES = {
     "percentile": "percentile(col, p)",
     "correlation": "correlation(col1, col2)",
     "last": "last(col)",
+}
+
+AGGREGATE_DESCRIPTIONS = {
+    "mean": "arithmetic average",
+    "sum": "total sum",
+    "max": "maximum value",
+    "min": "minimum value",
+    "std": "standard deviation",
+    "median": "middle value",
+    "count": "number of bars",
+    "percentile": "value at p-th percentile",
+    "correlation": "Pearson correlation (-1 to 1)",
+    "last": "most recent value",
 }

@@ -103,3 +103,14 @@ OSCILLATOR_SIGNATURES = {
     "roc": "roc(col, n=1)",
     "momentum": "momentum(col, n=10)",
 }
+
+OSCILLATOR_DESCRIPTIONS = {
+    "rsi": "Relative Strength Index (0-100). Below 30 = oversold, above 70 = overbought",
+    "stoch_k": "Stochastic %K (0-100). Below 20 = oversold, above 80 = overbought",
+    "stoch_d": "Stochastic %D = SMA of %K. Smoother signal for crossovers",
+    "cci": "Commodity Channel Index. Above +100 = overbought, below -100 = oversold",
+    "williams_r": "Williams %R (-100 to 0). Above -20 = overbought, below -80 = oversold",
+    "mfi": "Money Flow Index (0-100) — RSI with volume. Below 20 = oversold, above 80 = overbought",
+    "roc": "Rate of Change — percentage change over n bars",
+    "momentum": "absolute price change over n bars",
+}

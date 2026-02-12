@@ -8,6 +8,7 @@ import pandas as pd
 
 # -- Price helpers --
 
+
 def _gap(df):
     return df["open"] - df["close"].shift(1)
 
@@ -45,6 +46,7 @@ def _typical_price(df):
 
 
 # -- Candle helpers --
+
 
 def _body(df):
     return df["close"] - df["open"]
@@ -85,6 +87,7 @@ def _outside_bar(df):
 
 
 # -- Signal helpers --
+
 
 def _crossover(df, a, b):
     return (a.shift(1) <= b.shift(1)) & (a > b)
@@ -142,4 +145,29 @@ CONVENIENCE_SIGNATURES = {
     # Signal
     "crossover": "crossover(a, b)",
     "crossunder": "crossunder(a, b)",
+}
+
+CONVENIENCE_DESCRIPTIONS = {
+    # Price
+    "gap": "open - previous close (gap in points)",
+    "gap_pct": "gap as percentage of previous close",
+    "change": "difference: current - n bars ago",
+    "change_pct": "percentage change over n bars",
+    "range": "high - low (bar range in points)",
+    "range_pct": "bar range as percentage of low",
+    "midpoint": "(high + low) / 2",
+    "typical_price": "(high + low + close) / 3",
+    # Candle
+    "body": "close - open (positive = green, negative = red)",
+    "body_pct": "body as percentage of open",
+    "upper_wick": "high minus max(open, close)",
+    "lower_wick": "min(open, close) minus low",
+    "green": "true if close > open (bullish candle)",
+    "red": "true if close < open (bearish candle)",
+    "doji": "true if body < threshold * range (indecision candle)",
+    "inside_bar": "true if bar is inside previous bar's range",
+    "outside_bar": "true if bar engulfs previous bar's range",
+    # Signal
+    "crossover": "true when a crosses above b",
+    "crossunder": "true when a crosses below b",
 }
