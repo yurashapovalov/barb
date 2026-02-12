@@ -53,11 +53,11 @@ def _bbands_lower(df, col, n=20, mult=2.0):
 
 
 def _bbands_width(df, col, n=20, mult=2.0):
-    """Bollinger bandwidth = (upper - lower) / middle."""
+    """Bollinger bandwidth = (upper - lower) / middle * 100. Matches TV ta.bbw()."""
     n = int(n)
     sma = col.rolling(n).mean()
     std = col.rolling(n).std(ddof=0)
-    return (2 * float(mult) * std) / sma
+    return (2 * float(mult) * std) / sma * 100
 
 
 def _bbands_pctb(df, col, n=20, mult=2.0):
