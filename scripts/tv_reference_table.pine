@@ -1,0 +1,41 @@
+//@version=5
+indicator("Barb Ref Table", overlay=true)
+
+// === Compute all indicators ===
+_rsi = ta.rsi(close, 14)
+_atr = ta.atr(14)
+_cci = ta.cci(hlc3, 20)
+_stochK = ta.stoch(close, high, low, 14)
+_wpr = ta.wpr(14)
+_mfi = ta.mfi(hlc3, 14)
+_tr = ta.tr
+_natr = _atr / close * 100
+[bbMid, bbUp, bbLow] = ta.bb(close, 20, 2)
+_bbw = ta.bbw(close, 20, 2)
+_bbPctB = (close - bbLow) / (bbUp - bbLow)
+[kcMid, kcUp, kcLow] = ta.kc(close, 20, 1.5, true)
+_kcw = (kcUp - kcLow) / kcMid
+[macdLine, signalLine, histLine] = ta.macd(close, 12, 26, 9)
+[diPlus, diMinus, adxVal] = ta.dmi(14, 14)
+[stVal, stDir] = ta.supertrend(3, 10)
+_sar = ta.sar(0.02, 0.02, 0.2)
+
+// === Format helper ===
+f2(v) => str.tostring(v, "#.##")
+f4(v) => str.tostring(v, "#.####")
+
+// === Build CSV line for each bar ===
+line_csv = str.tostring(year) + "-" + str.format("{0,number,00}", month) + "-" + str.format("{0,number,00}", dayofmonth) + "," + f2(_rsi) + "," + f2(_atr) + "," + f2(_cci) + "," + f2(_stochK) + "," + f2(_wpr) + "," + f2(_mfi) + "," + f2(_tr) + "," + f2(_natr) + "," + f2(bbUp) + "," + f2(bbMid) + "," + f2(bbLow) + "," + f2(_bbw) + "," + f4(_bbPctB) + "," + f2(kcUp) + "," + f2(kcMid) + "," + f2(kcLow) + "," + f4(_kcw) + "," + f2(macdLine) + "," + f2(signalLine) + "," + f4(histLine) + "," + f2(diPlus) + "," + f2(diMinus) + "," + f2(adxVal) + "," + f2(stVal) + "," + f4(stDir) + "," + f2(_sar)
+
+// === Table: last 11 bars ===
+var t = table.new(position.top_right, 2, 13, bgcolor=color.white, border_width=1)
+
+if barstate.islast
+    table.cell(t, 0, 0, "Date", text_color=color.black, text_size=size.tiny)
+    table.cell(t, 1, 0, "RSI,ATR,CCI,StK,WR,MFI,TR,NATR,BBU,BBM,BBL,BBW,BBP,KCU,KCM,KCL,KCW,MACD,Sig,Hist,+DI,-DI,ADX,ST,STD,SAR", text_color=color.black, text_size=size.tiny)
+    for i = 0 to 10
+        idx = 10 - i
+        d = str.tostring(year[idx]) + "-" + str.format("{0,number,00}", month[idx]) + "-" + str.format("{0,number,00}", dayofmonth[idx])
+        row = f2(_rsi[idx]) + "," + f2(_atr[idx]) + "," + f2(_cci[idx]) + "," + f2(_stochK[idx]) + "," + f2(_wpr[idx]) + "," + f2(_mfi[idx]) + "," + f2(_tr[idx]) + "," + f2(_natr[idx]) + "," + f2(bbUp[idx]) + "," + f2(bbMid[idx]) + "," + f2(bbLow[idx]) + "," + f2(_bbw[idx]) + "," + f4(_bbPctB[idx]) + "," + f2(kcUp[idx]) + "," + f2(kcMid[idx]) + "," + f2(kcLow[idx]) + "," + f4(_kcw[idx]) + "," + f2(macdLine[idx]) + "," + f2(signalLine[idx]) + "," + f4(histLine[idx]) + "," + f2(diPlus[idx]) + "," + f2(diMinus[idx]) + "," + f2(adxVal[idx]) + "," + f2(stVal[idx]) + "," + f4(stDir[idx]) + "," + f2(_sar[idx])
+        table.cell(t, 0, i + 1, d, text_color=color.black, text_size=size.tiny)
+        table.cell(t, 1, i + 1, row, text_color=color.black, text_size=size.tiny)
