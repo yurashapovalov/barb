@@ -29,9 +29,11 @@ if _env_file.exists():
 
 from assistant.chat import Assistant
 from barb.data import load_data
-from config.market.instruments import get_instrument
+from config.market.instruments import get_instrument, register_instrument
+from supabase import create_client
 
 # --- ANSI colors ---
+
 
 class C:
     BOLD = "\033[1m"
@@ -43,6 +45,20 @@ class C:
     RED = "\033[91m"
     MAGENTA = "\033[95m"
     END = "\033[0m"
+
+
+def _load_instruments():
+    """Load instruments from Supabase (same as api/main.py lifespan)."""
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    if not url or not key:
+        print(f"{C.RED}ERROR: SUPABASE_URL/SUPABASE_SERVICE_KEY not set.{C.END}")
+        sys.exit(1)
+    db = create_client(url, key)
+    result = db.table("instrument_full").select("*").execute()
+    for row in result.data:
+        register_instrument(row)
+    return len(result.data)
 
 
 # --- Test scenarios ---
@@ -118,6 +134,16 @@ SCENARIOS = [
         "expect_tool": False,
         "expect_data": False,
     },
+    {
+        "name": "Затишье перед бурей — squeeze detection",
+        "messages": [
+            "бывает что рынок затихает а потом резко двигается? как часто это происходит?",
+            "за последние 2 года покажи",
+            "какие самые сильные движения были после затишья?",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
 ]
 
 
@@ -127,10 +153,22 @@ def create_assistant():
         print(f"{C.RED}ERROR: ANTHROPIC_API_KEY not set. Add to .env or export.{C.END}")
         sys.exit(1)
 
+    count = _load_instruments()
+    print(f"{C.DIM}Loaded {count} instruments from Supabase{C.END}")
+
     instrument = "NQ"
     config = get_instrument(instrument)
-    df = load_data(instrument)
-    return Assistant(api_key=api_key, instrument=instrument, df=df, sessions=config["sessions"])
+    if not config:
+        print(f"{C.RED}ERROR: Instrument {instrument} not found in Supabase{C.END}")
+        sys.exit(1)
+
+    return Assistant(
+        api_key=api_key,
+        instrument=instrument,
+        df_daily=load_data(instrument, "1d"),
+        df_minute=load_data(instrument, "1m"),
+        sessions=config["sessions"],
+    )
 
 
 def chat_sync(assistant, message, history=None):
@@ -238,9 +276,9 @@ def run_scenario(assistant, scenario, quiet=False):
     name = scenario["name"]
     messages = scenario["messages"]
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"{C.BOLD}{C.MAGENTA}  {name}{C.END}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     history = []
     last_result = None
@@ -257,8 +295,11 @@ def run_scenario(assistant, scenario, quiet=False):
             print(f"{C.RED}    CRASH: {e}{C.END}")
             turns.append({"user": msg, "error": str(e)})
             return {
-                "name": name, "passed": False, "cost": None,
-                "turns": turns, "warnings": ["CRASH: " + str(e)],
+                "name": name,
+                "passed": False,
+                "cost": None,
+                "turns": turns,
+                "warnings": ["CRASH: " + str(e)],
             }
 
         elapsed = time.time() - start
@@ -291,13 +332,17 @@ def run_scenario(assistant, scenario, quiet=False):
             extras += f" cache_read:{cache_read}"
         if cache_write:
             extras += f" cache_write:{cache_write}"
-        print(f"{C.DIM}    ${cost['total_cost']:.6f} "
-              f"({cost['input_tokens']}in/{cost['output_tokens']}out{extras}) "
-              f"{elapsed:.1f}s{C.END}")
+        print(
+            f"{C.DIM}    ${cost['total_cost']:.6f} "
+            f"({cost['input_tokens']}in/{cost['output_tokens']}out{extras}) "
+            f"{elapsed:.1f}s{C.END}"
+        )
 
         # Run checks after last message
         if i == len(messages) - 1:
-            all_warnings = run_checks(turns + [{"answer": result["answer"], "steps": result.get("steps", [])}], scenario)
+            all_warnings = run_checks(
+                turns + [{"answer": result["answer"], "steps": result.get("steps", [])}], scenario
+            )
             # Check data across all turns
             all_data = []
             for t in turns:
@@ -311,14 +356,16 @@ def run_scenario(assistant, scenario, quiet=False):
                     all_warnings.append(f"Expected no data, got {len(all_data)} blocks")
 
         # Save turn for log
-        turns.append({
-            "user": msg,
-            "answer": result["answer"],
-            "steps": result.get("steps", []),
-            "data": result.get("data", []),
-            "cost": result["cost"],
-            "elapsed_s": round(elapsed, 2),
-        })
+        turns.append(
+            {
+                "user": msg,
+                "answer": result["answer"],
+                "steps": result.get("steps", []),
+                "data": result.get("data", []),
+                "cost": result["cost"],
+                "elapsed_s": round(elapsed, 2),
+            }
+        )
 
         # Accumulate history with tool calls for model context
         history.append({"role": "user", "text": msg})
@@ -341,9 +388,13 @@ def run_scenario(assistant, scenario, quiet=False):
 
     # Sum cost across all turns
     total_cost = {
-        "input_tokens": 0, "output_tokens": 0,
-        "cache_read_tokens": 0, "cache_write_tokens": 0,
-        "input_cost": 0.0, "output_cost": 0.0, "total_cost": 0.0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "total_cost": 0.0,
     }
     for t in turns:
         if t.get("cost"):
@@ -384,9 +435,9 @@ def main():
         results.append(r)
 
     # Summary
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"{C.BOLD}  SUMMARY{C.END}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
     total_cost = 0.0
     passed = 0

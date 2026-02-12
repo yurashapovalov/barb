@@ -351,3 +351,22 @@ Expression вычисляется на баре входа и фиксирует
 ```
 
 Каждый инструмент (tool) — это фасад над тем же Barb Script. Один язык expressions, один набор функций, один пайплайн. Разница только в том, как tool организует данные на входе и результат на выходе.
+
+---
+
+## TODO: Charts & Data Visualization
+
+### Source rows visualization
+При скалярных запросах (select: mean/count/...) пользователь получает число + source_rows (evidence таблица, может быть 600+ строк). Таблицу тяжело читать. Нужна автоматическая визуализация:
+
+- **Histogram** — распределение значений ключевой колонки из source_rows. Показывает разброс: "среднее 386, но как оно распределено?" Если плотно — можно доверять, если от 100 до 1000 — среднее менее надёжно.
+- Recharts на фронте уже есть, bar chart уже работает. Histogram = bar chart с бакетами.
+- Реализация: фронт автоматически определяет числовые колонки из map и строит histogram. Не нужен второй API call, не тратит токены.
+
+### Chart type expansion
+Текущее: только bar chart для group_by результатов.
+Запланировано (из docs/architecture/charts.md):
+- Line chart — для временных группировок (month, year)
+- Histogram — для распределений (source_rows, table)
+- Area chart — для equity curves (backtest)
+- Scatter — для корреляций (compare, v2+)
