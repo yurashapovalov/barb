@@ -128,11 +128,13 @@ class Assistant:
                 query = tu["input"].get("query", {})
                 log.info("Tool call: %s(%s)", tu["name"], query)
 
+                title = tu["input"].get("title", "")
+
                 yield {
                     "event": "tool_start",
                     "data": {
                         "tool_name": tu["name"],
-                        "input": {"query": query},
+                        "input": {"query": query, "title": title},
                     },
                 }
 
@@ -144,7 +146,19 @@ class Assistant:
 
                 try:
                     timeframe = query.get("from", "daily")
-                    df = self.df_minute if timeframe in _INTRADAY else self.df_daily
+                    session_name = query.get("session")
+                    if timeframe in _INTRADAY:
+                        df = self.df_minute
+                    elif session_name:
+                        # RTH-like sessions (within one day) need minute data
+                        # ETH-like sessions (wrap midnight) ≈ settlement, use daily
+                        times = self.sessions.get(session_name.upper())
+                        if times and pd.Timestamp(times[0]).time() < pd.Timestamp(times[1]).time():
+                            df = self.df_minute
+                        else:
+                            df = self.df_daily
+                    else:
+                        df = self.df_daily
                     result = run_query(query, df, self.sessions)
                     model_response = result.get("model_response", "")
                     table_data = result.get("table")
@@ -171,7 +185,7 @@ class Assistant:
                 tool_call_log.append(
                     {
                         "tool_name": tu["name"],
-                        "input": {"query": query},
+                        "input": {"query": query, "title": title},
                         "output": model_response,
                         "error": call_error,
                         "duration_ms": duration_ms,
@@ -182,7 +196,6 @@ class Assistant:
                 ui_data = table_data or source_rows
                 chart_hint = result.get("chart")
                 if not call_error and ui_data:
-                    title = tu["input"].get("title", "")
                     block = {
                         "tool": tu["name"],
                         "input": {"query": query},

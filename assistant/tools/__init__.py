@@ -12,7 +12,7 @@ BARB_TOOL = {
     "description": f"""Execute a Barb Script query against market data.
 
 Query is a flat JSON object with these fields (all optional):
-- session: trading session name from the instrument's available sessions (REQUIRED for daily+ timeframes)
+- session: trading session name (RTH, ETH). Omit for settlement data. Use with any timeframe including daily.
 - from: "1m", "5m", "15m", "30m", "1h", "daily", "weekly" — timeframe (default: "1m")
 - period: "2024", "2024-03", "2024-01:2024-06", "2023:", "last_year" — date filter
 - map: {{"col_name": "expression"}} — compute derived columns

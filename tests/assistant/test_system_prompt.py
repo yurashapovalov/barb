@@ -52,10 +52,10 @@ class TestBuildSystemPrompt:
         assert "built-in functions" in result
         assert "holiday" in result
 
-    def test_default_session_in_instructions(self):
+    def test_session_instruction(self):
         result = build_system_prompt("NQ")
-        # NQ default session is RTH — should appear in instruction #4
-        assert 'session: "RTH"' in result
+        assert "settlement" in result
+        assert "session" in result.lower()
 
     def test_examples(self):
         result = build_system_prompt("NQ")
