@@ -11,6 +11,8 @@ from barb.functions.volatility import (
     _bbands_pctb,
     _bbands_upper,
     _bbands_width,
+    _donchian_lower,
+    _donchian_upper,
     _kc_lower,
     _kc_middle,
     _kc_upper,
@@ -233,3 +235,29 @@ class TestTVMatch:
 
     def test_kc_lower(self, df):
         assert _kc_lower(df, 20, 10, 1.5).loc["2025-12-22"] == pytest.approx(24766.18, rel=0.002)
+
+
+# --- Donchian Channel ---
+
+
+class TestDonchianChannel:
+    def test_upper_is_highest_high(self, df):
+        upper = _donchian_upper(df, 20)
+        expected = df["high"].rolling(20).max()
+        pd.testing.assert_series_equal(upper, expected, check_names=False)
+
+    def test_lower_is_lowest_low(self, df):
+        lower = _donchian_lower(df, 20)
+        expected = df["low"].rolling(20).min()
+        pd.testing.assert_series_equal(lower, expected, check_names=False)
+
+    def test_upper_above_lower(self, df):
+        upper = _donchian_upper(df, 20)
+        lower = _donchian_lower(df, 20)
+        valid = upper.dropna().index
+        assert (upper[valid] >= lower[valid]).all()
+
+    def test_nan_warmup(self, df):
+        upper = _donchian_upper(df, 20)
+        assert upper.iloc[:19].isna().all()
+        assert not pd.isna(upper.iloc[19])

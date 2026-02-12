@@ -98,6 +98,19 @@ def _kc_width(df, n=20, atr_n=10, mult=1.5):
     return (2 * float(mult) * atr) / ema
 
 
+# --- Donchian Channel ---
+
+
+def _donchian_upper(df, n=20):
+    """Donchian upper = highest high over n bars."""
+    return df["high"].rolling(int(n)).max()
+
+
+def _donchian_lower(df, n=20):
+    """Donchian lower = lowest low over n bars."""
+    return df["low"].rolling(int(n)).min()
+
+
 VOLATILITY_FUNCTIONS = {
     "tr": _tr,
     "atr": _atr,
@@ -111,6 +124,8 @@ VOLATILITY_FUNCTIONS = {
     "kc_middle": _kc_middle,
     "kc_lower": _kc_lower,
     "kc_width": _kc_width,
+    "donchian_upper": _donchian_upper,
+    "donchian_lower": _donchian_lower,
 }
 
 VOLATILITY_SIGNATURES = {
@@ -126,4 +141,6 @@ VOLATILITY_SIGNATURES = {
     "kc_middle": "kc_middle(n=20)",
     "kc_lower": "kc_lower(n=20, atr_n=10, mult=1.5)",
     "kc_width": "kc_width(n=20, atr_n=10, mult=1.5)",
+    "donchian_upper": "donchian_upper(n=20)",
+    "donchian_lower": "donchian_lower(n=20)",
 }

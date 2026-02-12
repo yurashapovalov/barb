@@ -14,6 +14,7 @@ from barb.functions.pattern import PATTERN_FUNCTIONS
 from barb.functions.time import TIME_FUNCTIONS
 from barb.functions.trend import TREND_FUNCTIONS
 from barb.functions.volatility import VOLATILITY_FUNCTIONS
+from barb.functions.volume import VOLUME_FUNCTIONS
 from barb.functions.window import WINDOW_FUNCTIONS
 
 FUNCTIONS = {
@@ -28,6 +29,7 @@ FUNCTIONS = {
     **OSCILLATOR_FUNCTIONS,
     **VOLATILITY_FUNCTIONS,
     **TREND_FUNCTIONS,
+    **VOLUME_FUNCTIONS,
 }
 
 __all__ = ["FUNCTIONS", "AGGREGATE_FUNCS"]
