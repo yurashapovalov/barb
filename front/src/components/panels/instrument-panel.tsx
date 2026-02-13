@@ -8,10 +8,12 @@ import {
   PromptInputSubmit,
   usePromptInputController,
 } from "@/components/ai/prompt-input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Conversation } from "@/types";
 
 interface InstrumentPanelProps {
   header: ReactNode;
+  symbol: string;
   name?: string;
   exchange?: string;
   imageUrl?: string;
@@ -29,7 +31,7 @@ export function InstrumentPanel(props: InstrumentPanelProps) {
   );
 }
 
-function InstrumentPanelInner({ header, name, exchange, imageUrl, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
+function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -38,13 +40,14 @@ function InstrumentPanelInner({ header, name, exchange, imageUrl, conversations,
       {header}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="mb-6 flex items-center gap-3">
-          {imageUrl && (
-            <img src={imageUrl} alt="" className="size-12 rounded-full" />
-          )}
-          <div>
-            <h1 className="text-lg font-semibold">{name}</h1>
-            {exchange && <p className="text-sm text-muted-foreground">{exchange}</p>}
-          </div>
+          <Avatar size="lg">
+            <AvatarImage src={imageUrl} alt={symbol} />
+            <AvatarFallback>{symbol.slice(0, 2)}</AvatarFallback>
+          </Avatar>
+          <h1 className="text-2xl font-semibold">
+            {name}
+            {exchange && <span> {exchange}</span>}
+          </h1>
         </div>
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>

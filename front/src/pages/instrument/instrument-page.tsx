@@ -35,6 +35,7 @@ export function InstrumentPage() {
   return (
     <InstrumentPanel
       header={header}
+      symbol={symbol ?? ""}
       name={instrument?.name}
       exchange={instrument?.exchange}
       imageUrl={instrument?.image_url ?? undefined}

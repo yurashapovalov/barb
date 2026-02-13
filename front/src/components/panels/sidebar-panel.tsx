@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { ChevronsLeftIcon, LogOutIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AddInstrumentModal } from "@/components/instruments/add-instrument-modal";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -42,13 +43,10 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm">
-              {avatar && (
-                <img
-                  src={avatar}
-                  alt=""
-                  className="size-5 rounded-full"
-                />
-              )}
+              <Avatar size="xs">
+                <AvatarImage src={avatar} alt={displayName} />
+                <AvatarFallback>{displayName.slice(0, 2)}</AvatarFallback>
+              </Avatar>
               {displayName}
             </Button>
           </DropdownMenuTrigger>
@@ -118,9 +116,10 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
               className={cn("justify-start gap-2", inst.instrument === symbol && !id && "bg-accent")}
               onClick={() => navigate(`/i/${inst.instrument}`)}
             >
-              {inst.image_url && (
-                <img src={inst.image_url} alt="" className="size-5 rounded-full" />
-              )}
+              <Avatar size="xs">
+                <AvatarImage src={inst.image_url ?? undefined} alt={inst.instrument} />
+                <AvatarFallback>{inst.instrument.slice(0, 2)}</AvatarFallback>
+              </Avatar>
               <span className="font-medium">{inst.instrument}</span>
               <span className="text-muted-foreground">·</span>
               <span className="truncate text-muted-foreground">{inst.name}</span>
@@ -140,11 +139,10 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
                   className={cn("justify-start gap-2", conv.id === id && "bg-accent")}
                   onClick={() => navigate(`/i/${conv.instrument}/c/${conv.id}`)}
                 >
-                  {img ? (
-                    <img src={img} alt="" className="size-5 rounded-full" />
-                  ) : (
-                    <MessageCircleIcon className="size-5" />
-                  )}
+                  <Avatar size="xs">
+                    <AvatarImage src={img ?? undefined} alt={conv.instrument} />
+                    <AvatarFallback>{conv.instrument.slice(0, 2)}</AvatarFallback>
+                  </Avatar>
                   <span className="truncate">{conv.title}</span>
                 </Button>
               );

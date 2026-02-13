@@ -15,13 +15,19 @@ export function InstrumentsProvider() {
   const token = session?.access_token ?? "";
   const userId = session?.user?.id ?? "";
 
-  const [instruments, setInstruments] = useState<UserInstrument[]>(
-    () => (userId ? readCache<UserInstrument[]>(cacheKey(userId)) : null) ?? [],
-  );
-  const [loading, setLoading] = useState(() => !userId || readCache(cacheKey(userId)) === null);
+  const [instruments, setInstruments] = useState<UserInstrument[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token || !userId) return;
+
+    // Restore from cache immediately (avoids flash on reload)
+    const cached = readCache<UserInstrument[]>(cacheKey(userId));
+    if (cached) {
+      setInstruments(cached);
+      setLoading(false);
+    }
+
     let cancelled = false;
     listUserInstruments(token)
       .then((data) => {
@@ -43,6 +49,7 @@ export function InstrumentsProvider() {
       const next = [...prev, {
         instrument: inst.symbol,
         name: inst.name,
+        exchange: inst.exchange,
         image_url: inst.image_url,
         added_at: new Date().toISOString(),
       }];
