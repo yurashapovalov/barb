@@ -16,9 +16,9 @@ export function InstrumentsProvider() {
   const userId = session?.user?.id ?? "";
 
   const [instruments, setInstruments] = useState<UserInstrument[]>(
-    () => readCache<UserInstrument[]>(cacheKey(userId)) ?? [],
+    () => (userId ? readCache<UserInstrument[]>(cacheKey(userId)) : null) ?? [],
   );
-  const [loading, setLoading] = useState(() => readCache(cacheKey(userId)) === null);
+  const [loading, setLoading] = useState(() => !userId || readCache(cacheKey(userId)) === null);
 
   useEffect(() => {
     if (!token || !userId) return;
@@ -39,6 +39,7 @@ export function InstrumentsProvider() {
     if (!token) throw new Error("Not authenticated");
     await addUserInstrument(inst.symbol, token);
     setInstruments((prev) => {
+      if (prev.some((i) => i.instrument === inst.symbol)) return prev;
       const next = [...prev, {
         instrument: inst.symbol,
         name: inst.name,

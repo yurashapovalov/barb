@@ -17,6 +17,14 @@ export function writeCache<T>(key: string, data: T): void {
   }
 }
 
+export function removeCache(key: string): void {
+  try {
+    localStorage.removeItem(PREFIX + key);
+  } catch {
+    // ignore
+  }
+}
+
 export function clearCacheForUser(): void {
   try {
     for (const key of Object.keys(localStorage)) {

@@ -41,6 +41,7 @@ export function ChatPageContainer() {
   const { messages, isLoading, error, send } = useChat({
     conversationId: id,
     token,
+    instrument: symbol ?? "",
     onConversationCreated,
     onTitleUpdate: updateTitle,
   });
@@ -70,7 +71,17 @@ export function ChatPageContainer() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => { if (id) remove(id).then(() => navigate(`/i/${symbol}`, { replace: true })); }}>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    if (!id) return;
+                    try {
+                      await remove(id);
+                      navigate(`/i/${symbol}`, { replace: true });
+                    } catch (err) {
+                      console.error("Failed to remove chat:", err instanceof Error ? err.message : err);
+                    }
+                  }}
+                >
                   <Trash2Icon />
                   Remove chat
                 </DropdownMenuItem>

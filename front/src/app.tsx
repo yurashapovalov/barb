@@ -18,12 +18,14 @@ export function App() {
           <Routes>
             <Route path="/login" element={<LoginPageContainer />} />
             <Route element={<AuthGuard />}>
-              <Route element={<InstrumentsProvider />}>
-                <Route element={<RootLayout />}>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/i/:symbol" element={<ConversationsProvider />}>
-                    <Route index element={<InstrumentPage />} />
-                    <Route path="c/:id" element={<ChatPageContainer />} />
+              <Route element={<ErrorBoundary />}>
+                <Route element={<InstrumentsProvider />}>
+                  <Route element={<RootLayout />}>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/i/:symbol" element={<ConversationsProvider />}>
+                      <Route index element={<InstrumentPage />} />
+                      <Route path="c/:id" element={<ChatPageContainer />} />
+                    </Route>
                   </Route>
                 </Route>
               </Route>

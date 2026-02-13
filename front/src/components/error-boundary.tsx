@@ -1,8 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Outlet } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
@@ -21,7 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   render() {
-    if (!this.state.error) return this.props.children;
+    if (!this.state.error) return this.props.children ?? <Outlet />;
 
     return (
       <div className="flex min-h-screen items-center justify-center">

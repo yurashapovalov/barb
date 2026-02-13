@@ -35,9 +35,8 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   const navigate = useNavigate();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const userId = session?.user?.id ?? "";
-  const chatsCacheKey = `chats:${userId}`;
   const [allChats, setAllChats] = useState<Conversation[]>(
-    () => readCache<Conversation[]>(chatsCacheKey) ?? [],
+    () => (userId ? readCache<Conversation[]>(`chats:${userId}`) : null) ?? [],
   );
   const token = session?.access_token ?? "";
   const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
@@ -46,13 +45,14 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   // Fetch all conversations for quick navigation
   useEffect(() => {
     if (!token || !userId) return;
+    const key = `chats:${userId}`;
     listConversations(token)
       .then((data) => {
         setAllChats(data);
-        writeCache(chatsCacheKey, data);
+        writeCache(key, data);
       })
       .catch((err) => console.error("Failed to load chats:", err));
-  }, [token, userId, chatsCacheKey]);
+  }, [token, userId]);
 
   return (
     <div className="flex h-full flex-col bg-sidebar">

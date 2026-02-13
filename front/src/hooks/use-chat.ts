@@ -5,14 +5,14 @@ import type { DataBlock, Message } from "@/types";
 interface UseChatParams {
   conversationId: string | undefined;
   token: string;
-  instrument?: string;
+  instrument: string;
   onConversationCreated?: (id: string) => void;
   onTitleUpdate?: (id: string, title: string) => void;
 }
 
 export type ChatState = ReturnType<typeof useChat>;
 
-export function useChat({ conversationId, token, instrument = "NQ", onConversationCreated, onTitleUpdate }: UseChatParams) {
+export function useChat({ conversationId, token, instrument, onConversationCreated, onTitleUpdate }: UseChatParams) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -44,7 +44,7 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
   const [search, setSearch] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Load all instruments once on open
+  // Load all instruments once on open, clear debounce on close
   useEffect(() => {
     if (open) {
       setSearch("");
@@ -54,6 +54,8 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
         .then(setAllInstruments)
         .catch((err) => console.error("Failed to load instruments:", err))
         .finally(() => setLoading(false));
+    } else {
+      clearTimeout(debounceRef.current);
     }
   }, [open]);
 
@@ -96,6 +98,7 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
     if (addedSymbols.has(inst.symbol)) return;
     try {
       await add(inst);
+      onOpenChange(false);
     } catch (err) {
       console.error("Failed to add instrument:", err);
     }

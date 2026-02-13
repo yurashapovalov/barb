@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { createConversation, listConversations, removeConversation } from "@/lib/api";
-import { readCache, writeCache } from "@/lib/cache";
+import { readCache, removeCache, writeCache } from "@/lib/cache";
 import type { Conversation } from "@/types";
 import { ConversationsContext } from "./conversations-context";
 
@@ -13,13 +13,20 @@ function cacheKey(symbol: string) {
 export function ConversationsProvider() {
   const { session } = useAuth();
   const token = session?.access_token ?? "";
+  const userId = session?.user?.id ?? "";
   const { symbol } = useParams<{ symbol: string }>();
+
+  // Refs so callbacks always see the latest values
+  const symbolRef = useRef(symbol);
+  symbolRef.current = symbol;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
 
   const [conversations, setConversations] = useState<Conversation[]>(
     () => (symbol ? readCache<Conversation[]>(cacheKey(symbol)) : null) ?? [],
   );
   const [loading, setLoading] = useState(
-    () => symbol ? readCache(cacheKey(symbol)) === null : true,
+    () => !symbol || readCache(cacheKey(symbol)) === null,
   );
 
   useEffect(() => {
@@ -37,17 +44,27 @@ export function ConversationsProvider() {
     return () => { cancelled = true; };
   }, [token, symbol]);
 
+  const writeConversationsCache = (next: Conversation[]) => {
+    if (symbolRef.current) writeCache(cacheKey(symbolRef.current), next);
+    if (userIdRef.current) removeCache(`chats:${userIdRef.current}`);
+  };
+
   const refresh = () => {
-    if (!token || !symbol) return;
-    listConversations(token, symbol)
-      .then(setConversations)
+    if (!token || !symbolRef.current) return;
+    listConversations(token, symbolRef.current)
+      .then((data) => {
+        setConversations(data);
+        writeConversationsCache(data);
+      })
       .catch((err) => console.error("Failed to refresh conversations:", err));
   };
 
   const updateTitle = (id: string, title: string) => {
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, title } : c)),
-    );
+    setConversations((prev) => {
+      const next = prev.map((c) => (c.id === id ? { ...c, title } : c));
+      writeConversationsCache(next);
+      return next;
+    });
   };
 
   const create = async (instrument: string) => {
@@ -55,7 +72,7 @@ export function ConversationsProvider() {
     const conv = await createConversation(instrument, token);
     setConversations((prev) => {
       const next = [conv, ...prev];
-      if (symbol) writeCache(cacheKey(symbol), next);
+      writeConversationsCache(next);
       return next;
     });
     return conv;
@@ -66,7 +83,7 @@ export function ConversationsProvider() {
     await removeConversation(id, token);
     setConversations((prev) => {
       const next = prev.filter((c) => c.id !== id);
-      if (symbol) writeCache(cacheKey(symbol), next);
+      writeConversationsCache(next);
       return next;
     });
   };

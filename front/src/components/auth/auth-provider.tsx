@@ -29,7 +29,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, newSession) => {
-        setSession(newSession);
+        setSession((prev) => {
+          // Clear cache when switching accounts (different user ID)
+          if (prev?.user?.id && newSession?.user?.id && prev.user.id !== newSession.user.id) {
+            clearCacheForUser();
+          }
+          return newSession;
+        });
       },
     );
 
