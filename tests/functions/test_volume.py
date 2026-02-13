@@ -10,7 +10,10 @@ from barb.functions.volume import _ad_line, _obv, _volume_ratio, _volume_sma, _v
 def df():
     from barb.data import load_data
 
-    return load_data("NQ", "1d")
+    try:
+        return load_data("NQ", "1d")
+    except FileNotFoundError:
+        pytest.skip("NQ daily data not available")
 
 
 # --- OBV ---

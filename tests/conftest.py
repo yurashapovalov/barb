@@ -41,13 +41,19 @@ def _register_instruments():
 @pytest.fixture(scope="session")
 def nq_daily():
     """Full daily NQ data (settlement close, matches TradingView)."""
-    return load_data("NQ", "1d")
+    try:
+        return load_data("NQ", "1d")
+    except FileNotFoundError:
+        pytest.skip("NQ daily data not available")
 
 
 @pytest.fixture(scope="session")
 def nq_minute():
     """Full minute-level NQ data as pandas DataFrame with DatetimeIndex."""
-    return load_data("NQ", "1m")
+    try:
+        return load_data("NQ", "1m")
+    except FileNotFoundError:
+        pytest.skip("NQ minute data not available")
 
 
 @pytest.fixture(scope="session")

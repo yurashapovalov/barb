@@ -21,7 +21,10 @@ from barb.functions.trend import (
 def df():
     from barb.data import load_data
 
-    return load_data("NQ", "1d")
+    try:
+        return load_data("NQ", "1d")
+    except FileNotFoundError:
+        pytest.skip("NQ daily data not available")
 
 
 # --- MACD ---

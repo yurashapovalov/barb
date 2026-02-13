@@ -24,7 +24,10 @@ REF_PATH = "tests/functions/reference_data/nq_oscillators_tv.csv"
 @pytest.fixture(scope="module")
 def daily_df():
     """NQ daily bars (settlement close, matches TradingView)."""
-    return load_data("NQ", "1d")
+    try:
+        return load_data("NQ", "1d")
+    except FileNotFoundError:
+        pytest.skip("NQ daily data not available")
 
 
 @pytest.fixture(scope="module")
