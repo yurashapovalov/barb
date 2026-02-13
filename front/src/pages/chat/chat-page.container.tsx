@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { EllipsisIcon, PanelLeftIcon, Trash2Icon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
@@ -24,17 +24,12 @@ export function ChatPageContainer() {
   const navigate = useNavigate();
   const token = session?.access_token ?? "";
 
-  const location = useLocation();
   const { dataPct, onDataResize } = usePanelLayout();
   const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar();
   const [selectedData, setSelectedData] = useState<DataBlock | null>(null);
 
-  // Capture initial message from instrument page (sent via router state)
-  const [initialMessage] = useState(() => {
-    const msg = (location.state as { initialMessage?: string } | null)?.initialMessage ?? null;
-    if (msg) window.history.replaceState({}, "", location.pathname);
-    return msg;
-  });
+  // Read initial message from sessionStorage (survives StrictMode remount)
+  const initialMessage = id === "new" ? sessionStorage.getItem("barb:initial-msg") : null;
 
   // Pre-render user message so it's visible from the first frame
   const [previewMessage] = useState<Message | null>(() => {
@@ -77,6 +72,7 @@ export function ChatPageContainer() {
   useEffect(() => {
     if (initialMessage && !sentRef.current) {
       sentRef.current = true;
+      sessionStorage.removeItem("barb:initial-msg");
       send(initialMessage);
     }
   }, [initialMessage, send]);

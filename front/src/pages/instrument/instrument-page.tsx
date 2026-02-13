@@ -19,7 +19,8 @@ export function InstrumentPage() {
 
   const handleSend = (text: string) => {
     if (!symbol) return;
-    navigate(`/i/${symbol}/c/new`, { state: { initialMessage: text } });
+    sessionStorage.setItem("barb:initial-msg", text);
+    navigate(`/i/${symbol}/c/new`);
   };
 
   const header = (
