@@ -1,8 +1,12 @@
 import { useContext } from "react";
-import { ConversationsContext } from "@/components/conversations/conversations-context";
+import { ConversationsContext, type ConversationsContextValue } from "@/components/conversations/conversations-context";
 
-export function useConversations() {
+export function useConversations(): ConversationsContextValue {
   const ctx = useContext(ConversationsContext);
   if (!ctx) throw new Error("useConversations must be used within ConversationsProvider");
   return ctx;
+}
+
+export function useOptionalConversations(): ConversationsContextValue | null {
+  return useContext(ConversationsContext);
 }

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronsLeftIcon, LogOutIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AddInstrumentModal } from "@/components/instruments/add-instrument-modal";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,10 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useInstruments } from "@/hooks/use-instruments";
 import { useTheme } from "@/hooks/use-theme";
+import { listConversations } from "@/lib/api";
+import { readCache, writeCache } from "@/lib/cache";
 import { cn } from "@/lib/utils";
+import type { Conversation } from "@/types";
 import { PanelHeader } from "./panel-header";
 
 interface SidebarPanelProps {
@@ -25,14 +28,31 @@ interface SidebarPanelProps {
 }
 
 export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
   const { preference, set: setTheme } = useTheme();
   const { instruments } = useInstruments();
-  const { symbol } = useParams<{ symbol: string }>();
+  const { symbol, id } = useParams<{ symbol: string; id: string }>();
   const navigate = useNavigate();
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const userId = session?.user?.id ?? "";
+  const chatsCacheKey = `chats:${userId}`;
+  const [allChats, setAllChats] = useState<Conversation[]>(
+    () => readCache<Conversation[]>(chatsCacheKey) ?? [],
+  );
+  const token = session?.access_token ?? "";
   const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
   const avatar = user?.user_metadata?.avatar_url as string | undefined;
+
+  // Fetch all conversations for quick navigation
+  useEffect(() => {
+    if (!token || !userId) return;
+    listConversations(token)
+      .then((data) => {
+        setAllChats(data);
+        writeCache(chatsCacheKey, data);
+      })
+      .catch((err) => console.error("Failed to load chats:", err));
+  }, [token, userId, chatsCacheKey]);
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -125,6 +145,23 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
             </Button>
           ))}
         </div>
+        {allChats.length > 0 && (
+          <div className="mt-4 flex flex-col gap-1">
+            <span className="px-2 text-xs text-muted-foreground">Chats</span>
+            {allChats.map((conv) => (
+              <Button
+                key={conv.id}
+                variant="ghost"
+                size="sm"
+                className={cn("justify-start", conv.id === id && "bg-accent")}
+                onClick={() => navigate(`/i/${conv.instrument}/c/${conv.id}`)}
+              >
+                <MessageCircleIcon />
+                <span className="truncate">{conv.title}</span>
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
       <AddInstrumentModal open={addModalOpen} onOpenChange={setAddModalOpen} />
     </div>

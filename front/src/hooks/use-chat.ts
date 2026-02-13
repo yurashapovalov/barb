@@ -54,7 +54,6 @@ export function useChat({ conversationId, token, instrument = "NQ", onConversati
     }
 
     let cancelled = false;
-    setMessages([]);
     setIsLoading(true);
     setError(null);
 

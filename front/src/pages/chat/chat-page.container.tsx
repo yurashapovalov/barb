@@ -20,7 +20,7 @@ import { ChatPage } from "./chat-page";
 export function ChatPageContainer() {
   const { symbol, id } = useParams<{ symbol: string; id: string }>();
   const { session } = useAuth();
-  const { conversations, loading, refresh, updateTitle, remove } = useConversations();
+  const { conversations, refresh, updateTitle, remove } = useConversations();
   const navigate = useNavigate();
   const token = session?.access_token ?? "";
 
@@ -48,8 +48,6 @@ export function ChatPageContainer() {
   const handleSelectData = useCallback((data: DataBlock) => {
     setSelectedData((prev) => (prev === data ? null : data));
   }, []);
-
-  if (loading) return null;
 
   const conversation = conversations.find((c) => c.id === id);
   const title = conversation?.title;
