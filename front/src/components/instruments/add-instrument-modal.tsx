@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
 import {
   Command,
@@ -38,35 +38,53 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
   const { instruments: userInstruments, add } = useInstruments();
   const addedSymbols = new Set(userInstruments.map((i) => i.instrument));
 
-  const [results, setResults] = useState<Instrument[]>([]);
+  const [allInstruments, setAllInstruments] = useState<Instrument[]>([]);
+  const [serverResults, setServerResults] = useState<Instrument[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const fetchInstruments = useCallback((query: string) => {
-    setLoading(true);
-    listInstruments(query || undefined)
-      .then(setResults)
-      .catch((err) => console.error("Failed to search instruments:", err))
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Load all on open
+  // Load all instruments once on open
   useEffect(() => {
     if (open) {
       setSearch("");
-      fetchInstruments("");
+      setServerResults(null);
+      setLoading(true);
+      listInstruments()
+        .then(setAllInstruments)
+        .catch((err) => console.error("Failed to load instruments:", err))
+        .finally(() => setLoading(false));
     }
-  }, [open, fetchInstruments]);
+  }, [open]);
 
-  // Debounced search
+  // Client-side filter — instant feedback from already loaded data
+  const clientFiltered = search
+    ? allInstruments.filter((inst) => {
+        const q = search.toLowerCase();
+        return (
+          inst.symbol.toLowerCase().includes(q) ||
+          inst.name.toLowerCase().includes(q)
+        );
+      })
+    : allInstruments;
+
+  // Server results take priority when available, otherwise client filter
+  const results = serverResults ?? clientFiltered;
+
   const handleSearch = (value: string) => {
     setSearch(value);
+    setServerResults(null); // immediately fall back to client filter
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchInstruments(value), 200);
+    if (value) {
+      debounceRef.current = setTimeout(() => {
+        listInstruments(value)
+          .then(setServerResults)
+          .catch((err) => console.error("Failed to search instruments:", err));
+      }, 300);
+    }
   };
 
-  // Group results by category
+  // Group by category
   const grouped = new Map<string, Instrument[]>();
   for (const inst of results) {
     const group = grouped.get(inst.category) ?? [];
@@ -96,8 +114,8 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
             value={search}
             onValueChange={handleSearch}
           />
-          <CommandList>
-            {loading && results.length === 0 && (
+          <CommandList className="h-[300px]">
+            {loading && allInstruments.length === 0 && (
               <div className="py-6 text-center text-sm text-muted-foreground">Loading...</div>
             )}
             <CommandEmpty>No instruments found.</CommandEmpty>
