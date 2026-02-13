@@ -323,18 +323,20 @@ def health():
 
 
 @app.get("/api/instruments")
-def list_instruments():
-    """List all available instruments (public, no auth)."""
+def list_instruments(search: str | None = None, category: str | None = None):
+    """List available instruments with optional search and category filter."""
     db = get_db()
     try:
-        result = (
+        query = (
             db.table("instruments")
             .select("symbol, name, exchange, category, image_url, notes")
             .eq("active", True)
-            .order("category")
-            .order("symbol")
-            .execute()
         )
+        if category:
+            query = query.eq("category", category)
+        if search:
+            query = query.or_(f"symbol.ilike.%{search}%,name.ilike.%{search}%")
+        result = query.order("category").order("symbol").execute()
     except Exception:
         log.exception("Failed to list instruments")
         raise HTTPException(503, "Failed to list instruments")

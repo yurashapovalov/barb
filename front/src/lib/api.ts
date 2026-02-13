@@ -82,8 +82,15 @@ export async function getMessages(
 
 // --- Instruments ---
 
-export async function listInstruments(): Promise<Instrument[]> {
-  const res = await fetch(`${API_URL}/api/instruments`);
+export async function listInstruments(
+  search?: string,
+  category?: string,
+): Promise<Instrument[]> {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (category) params.set("category", category);
+  const qs = params.toString();
+  const res = await fetch(`${API_URL}/api/instruments${qs ? `?${qs}` : ""}`);
   return handleResponse<Instrument[]>(res);
 }
 
