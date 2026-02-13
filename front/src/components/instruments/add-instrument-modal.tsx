@@ -92,10 +92,10 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
     grouped.set(inst.category, group);
   }
 
-  const handleSelect = async (symbol: string) => {
-    if (addedSymbols.has(symbol)) return;
+  const handleSelect = async (inst: Instrument) => {
+    if (addedSymbols.has(inst.symbol)) return;
     try {
-      await add(symbol);
+      await add(inst);
     } catch (err) {
       console.error("Failed to add instrument:", err);
     }
@@ -127,7 +127,7 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
                     <CommandItem
                       key={inst.symbol}
                       value={inst.symbol}
-                      onSelect={() => handleSelect(inst.symbol)}
+                      onSelect={() => handleSelect(inst)}
                       className="flex items-center gap-3"
                     >
                       {inst.image_url && (

@@ -9,6 +9,8 @@ export interface Instrument {
 
 export interface UserInstrument {
   instrument: string;
+  name: string;
+  image_url: string | null;
   added_at: string;
 }
 

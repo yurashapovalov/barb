@@ -7,6 +7,8 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { RootLayout } from "@/components/layout/root-layout";
 import { LoginPageContainer } from "@/pages/login/login-page.container";
 import { ChatPageContainer } from "@/pages/chat/chat-page.container";
+import { HomePage } from "@/pages/home/home-page";
+import { InstrumentPage } from "@/pages/instrument/instrument-page";
 
 export function App() {
   return (
@@ -17,12 +19,11 @@ export function App() {
             <Route path="/login" element={<LoginPageContainer />} />
             <Route element={<AuthGuard />}>
               <Route element={<InstrumentsProvider />}>
-                <Route element={<ConversationsProvider />}>
-                  <Route element={<RootLayout />}>
-                    <Route path="/" element={<ChatPageContainer />} />
-                    <Route path="/i/:symbol" element={<ChatPageContainer />} />
-                    <Route path="/i/:symbol/c/:id" element={<ChatPageContainer />} />
-                    <Route path="/add" element={<ChatPageContainer />} />
+                <Route element={<RootLayout />}>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/i/:symbol" element={<ConversationsProvider />}>
+                    <Route index element={<InstrumentPage />} />
+                    <Route path="c/:id" element={<ChatPageContainer />} />
                   </Route>
                 </Route>
               </Route>

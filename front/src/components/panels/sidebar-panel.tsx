@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { ChevronsLeftIcon, LogOutIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AddInstrumentModal } from "@/components/instruments/add-instrument-modal";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
-import { useConversations } from "@/hooks/use-conversations";
 import { useInstruments } from "@/hooks/use-instruments";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
@@ -28,9 +27,8 @@ interface SidebarPanelProps {
 export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   const { user, signOut } = useAuth();
   const { preference, set: setTheme } = useTheme();
-  const { conversations } = useConversations();
   const { instruments } = useInstruments();
-  const { symbol, id } = useParams<{ symbol: string; id: string }>();
+  const { symbol } = useParams<{ symbol: string }>();
   const navigate = useNavigate();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
@@ -100,6 +98,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
       </PanelHeader>
       <div className="flex flex-1 flex-col overflow-y-auto px-2">
         <div className="mt-12 flex flex-col gap-1">
+          <span className="px-2 text-xs text-muted-foreground">Symbols</span>
           <Button
             variant="ghost"
             size="sm"
@@ -107,32 +106,22 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
             onClick={() => setAddModalOpen(true)}
           >
             <PlusIcon />
-            Add instrument
+            Add symbol
           </Button>
           {instruments.map((inst) => (
             <Button
               key={inst.instrument}
               variant="ghost"
               size="sm"
-              className={cn("justify-start", inst.instrument === symbol && "bg-accent")}
+              className={cn("justify-start gap-2", inst.instrument === symbol && "bg-accent")}
               onClick={() => navigate(`/i/${inst.instrument}`)}
             >
-              {inst.instrument}
-            </Button>
-          ))}
-        </div>
-        <div className="mt-4 flex flex-col gap-1">
-          <span className="px-2 text-xs text-muted-foreground">Chats</span>
-          {conversations.map((conv) => (
-            <Button
-              key={conv.id}
-              variant="ghost"
-              size="sm"
-              className={cn("justify-start", conv.id === id && "bg-accent")}
-              onClick={() => navigate(`/c/${conv.id}`)}
-            >
-              <MessageCircleIcon />
-              <span className="truncate">{conv.title}</span>
+              {inst.image_url && (
+                <img src={inst.image_url} alt="" className="size-5 rounded-full" />
+              )}
+              <span className="font-medium">{inst.instrument}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="truncate text-muted-foreground">{inst.name}</span>
             </Button>
           ))}
         </div>

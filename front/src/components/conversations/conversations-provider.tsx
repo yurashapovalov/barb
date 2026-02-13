@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { createConversation, listConversations, removeConversation } from "@/lib/api";
 import type { Conversation } from "@/types";
@@ -8,23 +8,25 @@ import { ConversationsContext } from "./conversations-context";
 export function ConversationsProvider() {
   const { session } = useAuth();
   const token = session?.access_token ?? "";
+  const { symbol } = useParams<{ symbol: string }>();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !symbol) return;
     let cancelled = false;
-    listConversations(token)
+    setLoading(true);
+    listConversations(token, symbol)
       .then((data) => { if (!cancelled) setConversations(data); })
       .catch((err) => { if (!cancelled) console.error("Failed to load conversations:", err); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, symbol]);
 
   const refresh = () => {
-    if (!token) return;
-    listConversations(token)
+    if (!token || !symbol) return;
+    listConversations(token, symbol)
       .then(setConversations)
       .catch((err) => console.error("Failed to refresh conversations:", err));
   };

@@ -18,7 +18,7 @@ import type { DataBlock } from "@/types";
 import { ChatPage } from "./chat-page";
 
 export function ChatPageContainer() {
-  const { id } = useParams<{ id: string }>();
+  const { symbol, id } = useParams<{ symbol: string; id: string }>();
   const { session } = useAuth();
   const { conversations, loading, refresh, updateTitle, remove } = useConversations();
   const navigate = useNavigate();
@@ -28,21 +28,14 @@ export function ChatPageContainer() {
   const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar();
   const [selectedData, setSelectedData] = useState<DataBlock | null>(null);
 
-  // Redirect to most recent conversation on bare "/"
-  useEffect(() => {
-    if (!loading && !id && conversations.length > 0) {
-      navigate(`/c/${conversations[0].id}`, { replace: true });
-    }
-  }, [loading, id, conversations, navigate]);
-
   useEffect(() => {
     setSelectedData(null);
     if (window.innerWidth < 1024) closeSidebar();
   }, [id, closeSidebar]);
 
   const onConversationCreated = (convId: string) => {
-    refresh();  // Update sidebar with new conversation
-    navigate(`/c/${convId}`, { replace: true });
+    refresh();
+    navigate(`/i/${symbol}/c/${convId}`, { replace: true });
   };
 
   const { messages, isLoading, error, send } = useChat({
@@ -79,7 +72,7 @@ export function ChatPageContainer() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => { if (id) remove(id).then(() => navigate("/", { replace: true })); }}>
+                <DropdownMenuItem onClick={() => { if (id) remove(id).then(() => navigate(`/i/${symbol}`, { replace: true })); }}>
                   <Trash2Icon />
                   Remove chat
                 </DropdownMenuItem>

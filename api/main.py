@@ -351,7 +351,7 @@ def list_user_instruments(user: dict = Depends(get_current_user)):
     try:
         result = (
             db.table("user_instruments")
-            .select("instrument, added_at")
+            .select("instrument, added_at, instruments(name, image_url)")
             .eq("user_id", user["sub"])
             .order("added_at")
             .execute()
@@ -360,7 +360,15 @@ def list_user_instruments(user: dict = Depends(get_current_user)):
         log.exception("Failed to list user instruments")
         raise HTTPException(503, "Failed to list user instruments")
 
-    return result.data
+    return [
+        {
+            "instrument": row["instrument"],
+            "name": row["instruments"]["name"],
+            "image_url": row["instruments"]["image_url"],
+            "added_at": row["added_at"],
+        }
+        for row in result.data
+    ]
 
 
 @app.post("/api/user-instruments", status_code=201)

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { addUserInstrument, listUserInstruments, removeUserInstrument } from "@/lib/api";
-import type { UserInstrument } from "@/types";
+import type { Instrument, UserInstrument } from "@/types";
 import { InstrumentsContext } from "./instruments-context";
 
 export function InstrumentsProvider() {
@@ -22,10 +22,15 @@ export function InstrumentsProvider() {
     return () => { cancelled = true; };
   }, [token]);
 
-  const add = async (symbol: string) => {
+  const add = async (inst: Instrument) => {
     if (!token) throw new Error("Not authenticated");
-    await addUserInstrument(symbol, token);
-    setInstruments((prev) => [...prev, { instrument: symbol, added_at: new Date().toISOString() }]);
+    await addUserInstrument(inst.symbol, token);
+    setInstruments((prev) => [...prev, {
+      instrument: inst.symbol,
+      name: inst.name,
+      image_url: inst.image_url,
+      added_at: new Date().toISOString(),
+    }]);
   };
 
   const remove = async (symbol: string) => {

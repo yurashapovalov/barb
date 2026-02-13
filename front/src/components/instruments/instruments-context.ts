@@ -1,10 +1,10 @@
 import { createContext } from "react";
-import type { UserInstrument } from "@/types";
+import type { Instrument, UserInstrument } from "@/types";
 
 export interface InstrumentsContextValue {
   instruments: UserInstrument[];
   loading: boolean;
-  add: (symbol: string) => Promise<void>;
+  add: (instrument: Instrument) => Promise<void>;
   remove: (symbol: string) => Promise<void>;
 }
 
