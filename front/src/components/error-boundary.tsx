@@ -1,9 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 interface Props {
   children?: ReactNode;
+  resetKey?: string;
 }
 
 interface State {
@@ -15,6 +16,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -34,4 +41,10 @@ export class ErrorBoundary extends Component<Props, State> {
       </div>
     );
   }
+}
+
+// Wrapper that resets error boundary on route navigation
+export function RouteErrorBoundary() {
+  const { pathname } = useLocation();
+  return <ErrorBoundary resetKey={pathname}><Outlet /></ErrorBoundary>;
 }

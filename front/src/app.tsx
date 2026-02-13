@@ -4,7 +4,7 @@ import { AuthGuard } from "@/components/auth/auth-guard";
 import { InstrumentsProvider } from "@/components/instruments/instruments-provider";
 import { ConversationsProvider } from "@/components/conversations/conversations-provider";
 import { SidebarProvider } from "@/components/sidebar/sidebar-provider";
-import { ErrorBoundary } from "@/components/error-boundary";
+import { ErrorBoundary, RouteErrorBoundary } from "@/components/error-boundary";
 import { RootLayout } from "@/components/layout/root-layout";
 import { LoginPageContainer } from "@/pages/login/login-page.container";
 import { ChatPageContainer } from "@/pages/chat/chat-page.container";
@@ -19,7 +19,7 @@ export function App() {
           <Routes>
             <Route path="/login" element={<LoginPageContainer />} />
             <Route element={<AuthGuard />}>
-              <Route element={<ErrorBoundary />}>
+              <Route element={<RouteErrorBoundary />}>
                 <Route element={<InstrumentsProvider />}>
                   <Route element={<ConversationsProvider />}>
                     <Route element={<SidebarProvider />}>
