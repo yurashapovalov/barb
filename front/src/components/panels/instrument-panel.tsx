@@ -8,7 +8,7 @@ import {
   PromptInputSubmit,
   usePromptInputController,
 } from "@/components/ai/prompt-input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import type { Conversation } from "@/types";
 
 interface InstrumentPanelProps {
@@ -40,10 +40,7 @@ function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, conver
       {header}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="mb-6 flex items-center gap-3">
-          <Avatar size="lg">
-            <AvatarImage src={imageUrl} alt={symbol} />
-            <AvatarFallback>{symbol.slice(0, 2)}</AvatarFallback>
-          </Avatar>
+          <Avatar size="lg" src={imageUrl} fallback={symbol.slice(0, 2)} />
           <h1 className="text-2xl font-semibold">
             {name}
             {exchange && <span> {exchange}</span>}
