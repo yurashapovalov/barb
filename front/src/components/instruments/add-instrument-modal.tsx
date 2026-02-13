@@ -32,9 +32,10 @@ const CATEGORIES: Record<string, string> = {
 interface AddInstrumentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAdded?: (symbol: string) => void;
 }
 
-export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalProps) {
+export function AddInstrumentModal({ open, onOpenChange, onAdded }: AddInstrumentModalProps) {
   const { instruments: userInstruments, add } = useInstruments();
   const addedSymbols = new Set(userInstruments.map((i) => i.instrument));
 
@@ -99,6 +100,7 @@ export function AddInstrumentModal({ open, onOpenChange }: AddInstrumentModalPro
     try {
       await add(inst);
       onOpenChange(false);
+      onAdded?.(inst.symbol);
     } catch (err) {
       console.error("Failed to add instrument:", err);
     }

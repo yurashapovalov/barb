@@ -1,29 +1,43 @@
 import type { ReactNode } from "react";
-import { MessageCirclePlusIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputProvider,
+  PromptInputSubmit,
+  usePromptInputController,
+} from "@/components/ai/prompt-input";
 import type { Conversation } from "@/types";
 
 interface InstrumentPanelProps {
   header: ReactNode;
   conversations: Conversation[];
   loading: boolean;
-  onNewChat: () => void;
+  onSend: (text: string) => void;
   onSelectChat: (conv: Conversation) => void;
 }
 
-export function InstrumentPanel({ header, conversations, loading, onNewChat, onSelectChat }: InstrumentPanelProps) {
+export function InstrumentPanel(props: InstrumentPanelProps) {
+  return (
+    <PromptInputProvider>
+      <InstrumentPanelInner {...props} />
+    </PromptInputProvider>
+  );
+}
+
+function InstrumentPanelInner({ header, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
+  const { textInput } = usePromptInputController();
+  const isEmpty = textInput.value.trim() === "";
+
   return (
     <div className="flex h-full flex-col bg-background">
       {header}
-      <div className="p-4">
-        <Button onClick={onNewChat}>
-          <MessageCirclePlusIcon />
-          New chat
-        </Button>
+      <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
-          <div className="mt-4 text-sm text-muted-foreground">Loading...</div>
-        ) : (
-          <div className="mt-4 flex flex-col gap-2">
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        ) : conversations.length > 0 ? (
+          <div className="flex flex-col gap-2">
             {conversations.map((conv) => (
               <button
                 key={conv.id}
@@ -36,13 +50,22 @@ export function InstrumentPanel({ header, conversations, loading, onNewChat, onS
                 </div>
               </button>
             ))}
-            {conversations.length === 0 && (
-              <div className="text-sm text-muted-foreground">
-                No conversations yet. Start a new chat!
-              </div>
-            )}
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            No conversations yet. Ask a question below!
           </div>
         )}
+      </div>
+      <div className="mx-auto w-full max-w-[740px] px-4 pb-8">
+        <PromptInput onSubmit={(message) => onSend(message.text)}>
+          <PromptInputBody>
+            <PromptInputTextarea />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputSubmit className="ml-auto" disabled={isEmpty} />
+          </PromptInputFooter>
+        </PromptInput>
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ export type ChatState = ReturnType<typeof useChat>;
 
 export function useChat({ conversationId, token, instrument, onConversationCreated, onTitleUpdate }: UseChatParams) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => !!conversationId);
   const [error, setError] = useState<string | null>(null);
 
   // Track current conversation ID (may change after creation)
@@ -44,12 +44,14 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
     }
     if (skipLoadRef.current) {
       skipLoadRef.current = false;
+      setIsLoading(false);
       return;
     }
 
     const cached = cacheRef.current.get(conversationId);
     if (cached) {
       setMessages(cached);
+      setIsLoading(false);
       return;
     }
 

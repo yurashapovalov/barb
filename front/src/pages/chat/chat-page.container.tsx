@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { EllipsisIcon, PanelLeftIcon, Trash2Icon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { DataBlock } from "@/types";
+import type { DataBlock, Message } from "@/types";
 import { ChatPage } from "./chat-page";
 
 export function ChatPageContainer() {
@@ -24,9 +24,31 @@ export function ChatPageContainer() {
   const navigate = useNavigate();
   const token = session?.access_token ?? "";
 
+  const location = useLocation();
   const { dataPct, onDataResize } = usePanelLayout();
   const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar();
   const [selectedData, setSelectedData] = useState<DataBlock | null>(null);
+
+  // Capture initial message from instrument page (sent via router state)
+  const [initialMessage] = useState(() => {
+    const msg = (location.state as { initialMessage?: string } | null)?.initialMessage ?? null;
+    if (msg) window.history.replaceState({}, "", location.pathname);
+    return msg;
+  });
+
+  // Pre-render user message so it's visible from the first frame
+  const [previewMessage] = useState<Message | null>(() => {
+    if (!initialMessage) return null;
+    return {
+      id: crypto.randomUUID(),
+      conversation_id: "pending",
+      role: "user" as const,
+      content: initialMessage,
+      data: null,
+      usage: null,
+      created_at: new Date().toISOString(),
+    };
+  });
 
   useEffect(() => {
     setSelectedData(null);
@@ -38,13 +60,29 @@ export function ChatPageContainer() {
     navigate(`/i/${symbol}/c/${convId}`, { replace: true });
   };
 
+  // "new" is a sentinel — means user started typing on instrument page
+  const conversationId = id === "new" ? undefined : id;
+
   const { messages, isLoading, error, send } = useChat({
-    conversationId: id,
+    conversationId,
     token,
     instrument: symbol ?? "",
     onConversationCreated,
     onTitleUpdate: updateTitle,
   });
+
+  // Auto-send initial message from instrument page
+  const sentRef = useRef(false);
+
+  useEffect(() => {
+    if (initialMessage && !sentRef.current) {
+      sentRef.current = true;
+      send(initialMessage);
+    }
+  }, [initialMessage, send]);
+
+  // Show preview until useChat has the real messages
+  const displayMessages = messages.length === 0 && previewMessage ? [previewMessage] : messages;
 
   const handleSelectData = useCallback((data: DataBlock) => {
     setSelectedData((prev) => (prev === data ? null : data));
@@ -96,7 +134,7 @@ export function ChatPageContainer() {
   return (
     <ChatPage
       chatHeader={chatHeader}
-      messages={messages}
+      messages={displayMessages}
       isLoading={isLoading}
       error={error}
       send={send}

@@ -10,17 +10,16 @@ import { useSidebar } from "@/hooks/use-sidebar";
 export function InstrumentPage() {
   const { symbol } = useParams<{ symbol: string }>();
   const { instruments } = useInstruments();
-  const { conversations: allConversations, loading, create } = useConversations();
+  const { conversations: allConversations, loading } = useConversations();
   const conversations = allConversations.filter((c) => c.instrument === symbol);
   const navigate = useNavigate();
   const { sidebarOpen, toggleSidebar } = useSidebar();
 
   const instrument = instruments.find((i) => i.instrument === symbol);
 
-  const handleNewChat = async () => {
+  const handleSend = (text: string) => {
     if (!symbol) return;
-    const conv = await create(symbol);
-    navigate(`/i/${symbol}/c/${conv.id}`);
+    navigate(`/i/${symbol}/c/new`, { state: { initialMessage: text } });
   };
 
   const header = (
@@ -47,7 +46,7 @@ export function InstrumentPage() {
       header={header}
       conversations={conversations}
       loading={loading}
-      onNewChat={handleNewChat}
+      onSend={handleSend}
       onSelectChat={(conv) => navigate(`/i/${symbol}/c/${conv.id}`)}
     />
   );

@@ -152,7 +152,11 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
           </div>
         )}
       </div>
-      <AddInstrumentModal open={addModalOpen} onOpenChange={setAddModalOpen} />
+      <AddInstrumentModal
+        open={addModalOpen}
+        onOpenChange={setAddModalOpen}
+        onAdded={(sym) => navigate(`/i/${sym}`)}
+      />
     </div>
   );
 }
