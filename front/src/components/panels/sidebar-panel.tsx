@@ -148,18 +148,25 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
         {allChats.length > 0 && (
           <div className="mt-4 flex flex-col gap-1">
             <span className="px-2 text-xs text-muted-foreground">Chats</span>
-            {allChats.map((conv) => (
-              <Button
-                key={conv.id}
-                variant="ghost"
-                size="sm"
-                className={cn("justify-start", conv.id === id && "bg-accent")}
-                onClick={() => navigate(`/i/${conv.instrument}/c/${conv.id}`)}
-              >
-                <MessageCircleIcon />
-                <span className="truncate">{conv.title}</span>
-              </Button>
-            ))}
+            {allChats.map((conv) => {
+              const img = instruments.find((i) => i.instrument === conv.instrument)?.image_url;
+              return (
+                <Button
+                  key={conv.id}
+                  variant="ghost"
+                  size="sm"
+                  className={cn("justify-start gap-2", conv.id === id && "bg-accent")}
+                  onClick={() => navigate(`/i/${conv.instrument}/c/${conv.id}`)}
+                >
+                  {img ? (
+                    <img src={img} alt="" className="size-5 rounded-full" />
+                  ) : (
+                    <MessageCircleIcon className="size-5" />
+                  )}
+                  <span className="truncate">{conv.title}</span>
+                </Button>
+              );
+            })}
           </div>
         )}
       </div>
