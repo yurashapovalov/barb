@@ -24,26 +24,20 @@ export function InstrumentPage() {
 
   const header = (
     <PanelHeader>
-      <div className="flex items-center gap-2">
-        {!sidebarOpen && (
-          <Button variant="ghost" size="icon-sm" onClick={toggleSidebar}>
-            <PanelLeftIcon />
-          </Button>
-        )}
-        {instrument?.image_url && (
-          <img src={instrument.image_url} alt="" className="size-5 rounded-full" />
-        )}
-        <span className="font-medium">{symbol}</span>
-        {instrument && (
-          <span className="text-muted-foreground">· {instrument.name}</span>
-        )}
-      </div>
+      {!sidebarOpen && (
+        <Button variant="ghost" size="icon-sm" onClick={toggleSidebar}>
+          <PanelLeftIcon />
+        </Button>
+      )}
     </PanelHeader>
   );
 
   return (
     <InstrumentPanel
       header={header}
+      name={instrument?.name}
+      exchange={instrument?.exchange}
+      imageUrl={instrument?.image_url ?? undefined}
       conversations={conversations}
       loading={loading}
       onSend={handleSend}

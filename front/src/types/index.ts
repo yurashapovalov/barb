@@ -10,6 +10,7 @@ export interface Instrument {
 export interface UserInstrument {
   instrument: string;
   name: string;
+  exchange: string;
   image_url: string | null;
   added_at: string;
 }

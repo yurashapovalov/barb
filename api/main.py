@@ -351,7 +351,7 @@ def list_user_instruments(user: dict = Depends(get_current_user)):
     try:
         result = (
             db.table("user_instruments")
-            .select("instrument, added_at, instruments(name, image_url)")
+            .select("instrument, added_at, instruments(name, exchange, image_url)")
             .eq("user_id", user["sub"])
             .order("added_at")
             .execute()
@@ -364,6 +364,7 @@ def list_user_instruments(user: dict = Depends(get_current_user)):
         {
             "instrument": row["instrument"],
             "name": row["instruments"]["name"],
+            "exchange": row["instruments"]["exchange"],
             "image_url": row["instruments"]["image_url"],
             "added_at": row["added_at"],
         }

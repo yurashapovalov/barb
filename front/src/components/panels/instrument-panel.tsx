@@ -12,6 +12,9 @@ import type { Conversation } from "@/types";
 
 interface InstrumentPanelProps {
   header: ReactNode;
+  name?: string;
+  exchange?: string;
+  imageUrl?: string;
   conversations: Conversation[];
   loading: boolean;
   onSend: (text: string) => void;
@@ -26,7 +29,7 @@ export function InstrumentPanel(props: InstrumentPanelProps) {
   );
 }
 
-function InstrumentPanelInner({ header, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
+function InstrumentPanelInner({ header, name, exchange, imageUrl, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -34,6 +37,15 @@ function InstrumentPanelInner({ header, conversations, loading, onSend, onSelect
     <div className="flex h-full flex-col bg-background">
       {header}
       <div className="flex-1 overflow-y-auto p-4">
+        <div className="mb-6 flex items-center gap-3">
+          {imageUrl && (
+            <img src={imageUrl} alt="" className="size-12 rounded-full" />
+          )}
+          <div>
+            <h1 className="text-lg font-semibold">{name}</h1>
+            {exchange && <p className="text-sm text-muted-foreground">{exchange}</p>}
+          </div>
+        </div>
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>
         ) : conversations.length > 0 ? (

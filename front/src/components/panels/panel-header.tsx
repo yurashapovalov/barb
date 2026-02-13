@@ -6,7 +6,7 @@ type PanelHeaderProps = HTMLAttributes<HTMLDivElement>;
 export function PanelHeader({ className, ...props }: PanelHeaderProps) {
   return (
     <div
-      className={cn("flex items-center justify-between px-2 py-2", className)}
+      className={cn("flex min-h-[45px] items-center justify-between px-2 py-2", className)}
       {...props}
     />
   );
