@@ -62,7 +62,7 @@ def _load_instruments():
 
 
 # --- Test scenarios ---
-# Based on real trader tasks. See docs/e2e-scenarios.md for rationale.
+# Based on real trader tasks (gap fade, ORB, volatility clustering, etc.)
 
 SCENARIOS = [
     {

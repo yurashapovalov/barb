@@ -257,9 +257,57 @@ Provider loads user instruments on mount. Exposes: `instruments`, `add(symbol)`,
 7. Scope `ConversationsProvider` to current instrument
 8. First-time flow: no instruments → `/add`
 
-### Phase 3: Dashboard content (future)
+### Phase 3: Dashboard chart + data card charts
+
+#### Instrument dashboard: candlestick chart
+
+Library: [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts) (official TradingView open-source, Apache 2.0, ~45 KB gzipped).
+
+- Candlestick + volume on the instrument dashboard (`/i/:symbol`)
+- Canvas-based, fast on thousands of bars
+- No wrapper needed — `useRef` + `useEffect`, ~50 lines
+- Style with CSS variables to match shadcn theme (background, grid, candle colors)
+- Data: new endpoint `GET /api/instruments/:symbol/ohlc?timeframe=1d&limit=500` serving OHLC from existing parquet files
+
+```
+┌─────────────────────────────────────────────┐
+│ NQ · E-mini Nasdaq 100 · CME                │
+├─────────────────────────────────────────────┤
+│ ┌─────────────────────────────────────────┐ │
+│ │         Candlestick chart               │ │
+│ │  ║ ║║║║║║│║║║║║║║║║║║║║║║║║║║          │ │
+│ │  ║ ║║║║║║│║║║║║║║║║║║║║║║║║║║          │ │
+│ ├─────────────────────────────────────────┤ │
+│ │  ▄▄ █▄▄▄█▄▄▄▄▄▄█▄▄▄▄ Volume           │ │
+│ └─────────────────────────────────────────┘ │
+├─────────────────────────────────────────────┤
+│ [+ New chat]                                │
+│ [conversation list]                         │
+└─────────────────────────────────────────────┘
+```
+
+New files:
+- `components/charts/candlestick-chart.tsx` — `useRef` + `useEffect` over lightweight-charts, OHLC + volume
+- `lib/api.ts` — `getOHLC(symbol, timeframe, limit, token)`
+
+Backend:
+- `GET /api/instruments/:symbol/ohlc?timeframe=1d&limit=500` — reads from existing parquet via `load_data()`, returns `[{time, open, high, low, close, volume}]`
+
+#### Data card charts (query results)
+
+Library: shadcn Charts (Recharts) — already in the stack.
+
+These are the charts inside data cards (query results in chat), NOT the dashboard chart. Described in `docs/architecture/charts.md`.
+
+- Bar chart: grouped categorical data (by weekday, by month name)
+- Line chart: time series trends (by month, by year)
+- Histogram: distributions (daily changes, gap sizes)
+- Area chart: equity curves (backtest P&L)
+
+lightweight-charts is not suitable here — these are categorical/statistical visualizations, not financial time-series.
+
+#### Other dashboard content (future)
 
 - Instrument info card (contract specs, sessions, holidays)
-- Embedded chart (lightweight-charts or TradingView widget)
 - Backtest results list
 - Saved queries / bookmarks
