@@ -6,7 +6,3 @@ export function useConversations(): ConversationsContextValue {
   if (!ctx) throw new Error("useConversations must be used within ConversationsProvider");
   return ctx;
 }
-
-export function useOptionalConversations(): ConversationsContextValue | null {
-  return useContext(ConversationsContext);
-}

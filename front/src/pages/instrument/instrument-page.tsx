@@ -12,7 +12,8 @@ import { useSidebar } from "@/hooks/use-sidebar";
 export function InstrumentPage() {
   const { symbol } = useParams<{ symbol: string }>();
   const { instruments } = useInstruments();
-  const { conversations, loading, create } = useConversations();
+  const { conversations: allConversations, loading, create } = useConversations();
+  const conversations = allConversations.filter((c) => c.instrument === symbol);
   const navigate = useNavigate();
   const { sidebarWidth, onSidebarResize } = usePanelLayout();
   const { sidebarOpen, toggleSidebar } = useSidebar();

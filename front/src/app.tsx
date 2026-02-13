@@ -20,14 +20,16 @@ export function App() {
             <Route element={<AuthGuard />}>
               <Route element={<ErrorBoundary />}>
                 <Route element={<InstrumentsProvider />}>
+                <Route element={<ConversationsProvider />}>
                   <Route element={<RootLayout />}>
                     <Route path="/" element={<HomePage />} />
-                    <Route path="/i/:symbol" element={<ConversationsProvider />}>
+                    <Route path="/i/:symbol">
                       <Route index element={<InstrumentPage />} />
                       <Route path="c/:id" element={<ChatPageContainer />} />
                     </Route>
                   </Route>
                 </Route>
+              </Route>
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

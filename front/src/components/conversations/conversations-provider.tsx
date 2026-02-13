@@ -1,60 +1,52 @@
-import { useEffect, useRef, useState } from "react";
-import { Outlet, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { createConversation, listConversations, removeConversation } from "@/lib/api";
-import { readCache, removeCache, writeCache } from "@/lib/cache";
+import { readCache, writeCache } from "@/lib/cache";
 import type { Conversation } from "@/types";
 import { ConversationsContext } from "./conversations-context";
 
-function cacheKey(symbol: string) {
-  return `conversations:${symbol}`;
+function cacheKey(userId: string) {
+  return `conversations:${userId}`;
 }
 
 export function ConversationsProvider() {
   const { session } = useAuth();
   const token = session?.access_token ?? "";
   const userId = session?.user?.id ?? "";
-  const { symbol } = useParams<{ symbol: string }>();
-
-  // Refs so callbacks always see the latest values
-  const symbolRef = useRef(symbol);
-  symbolRef.current = symbol;
-  const userIdRef = useRef(userId);
-  userIdRef.current = userId;
 
   const [conversations, setConversations] = useState<Conversation[]>(
-    () => (symbol ? readCache<Conversation[]>(cacheKey(symbol)) : null) ?? [],
+    () => (userId ? readCache<Conversation[]>(cacheKey(userId)) : null) ?? [],
   );
   const [loading, setLoading] = useState(
-    () => !symbol || readCache(cacheKey(symbol)) === null,
+    () => !userId || readCache(cacheKey(userId)) === null,
   );
 
   useEffect(() => {
-    if (!token || !symbol) return;
+    if (!token || !userId) return;
     let cancelled = false;
-    listConversations(token, symbol)
+    listConversations(token)
       .then((data) => {
         if (!cancelled) {
           setConversations(data);
-          writeCache(cacheKey(symbol), data);
+          writeCache(cacheKey(userId), data);
         }
       })
       .catch((err) => { if (!cancelled) console.error("Failed to load conversations:", err); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [token, symbol]);
+  }, [token, userId]);
 
-  const writeConversationsCache = (next: Conversation[]) => {
-    if (symbolRef.current) writeCache(cacheKey(symbolRef.current), next);
-    if (userIdRef.current) removeCache(`chats:${userIdRef.current}`);
+  const updateCache = (next: Conversation[]) => {
+    if (userId) writeCache(cacheKey(userId), next);
   };
 
   const refresh = () => {
-    if (!token || !symbolRef.current) return;
-    listConversations(token, symbolRef.current)
+    if (!token) return;
+    listConversations(token)
       .then((data) => {
         setConversations(data);
-        writeConversationsCache(data);
+        updateCache(data);
       })
       .catch((err) => console.error("Failed to refresh conversations:", err));
   };
@@ -62,7 +54,7 @@ export function ConversationsProvider() {
   const updateTitle = (id: string, title: string) => {
     setConversations((prev) => {
       const next = prev.map((c) => (c.id === id ? { ...c, title } : c));
-      writeConversationsCache(next);
+      updateCache(next);
       return next;
     });
   };
@@ -72,7 +64,7 @@ export function ConversationsProvider() {
     const conv = await createConversation(instrument, token);
     setConversations((prev) => {
       const next = [conv, ...prev];
-      writeConversationsCache(next);
+      updateCache(next);
       return next;
     });
     return conv;
@@ -83,7 +75,7 @@ export function ConversationsProvider() {
     await removeConversation(id, token);
     setConversations((prev) => {
       const next = prev.filter((c) => c.id !== id);
-      writeConversationsCache(next);
+      updateCache(next);
       return next;
     });
   };
