@@ -5,6 +5,8 @@ for the system prompt. Config comes from get_instrument() — either
 local INSTRUMENTS dict or Supabase.
 """
 
+from datetime import date
+
 from config.market.events import EventImpact, get_event_types_for_instrument
 from config.market.holidays import HOLIDAY_NAMES
 
@@ -39,6 +41,7 @@ def build_instrument_context(config: dict) -> str:
 Symbol: {config.get("symbol", "?")} ({config.get("name", "?")})
 Exchange: {config.get("exchange", "?")}
 Data: {config.get("data_start", "?")} to {config.get("data_end", "?")}
+Today: {date.today()}
 {tick_line}
 Default session: {config.get("default_session", "RTH")}
 All times in ET
