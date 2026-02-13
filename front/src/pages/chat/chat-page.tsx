@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { SidebarPanel } from "@/components/panels/sidebar-panel";
 import { ChatPanel } from "@/components/panels/chat-panel";
 import { DataPanel } from "@/components/panels/data-panel";
 import { ResizeHandle } from "@/components/panels/resize-handle";
@@ -7,10 +6,6 @@ import type { ChatState } from "@/hooks/use-chat";
 import type { DataBlock } from "@/types";
 
 interface ChatPageProps {
-  sidebarOpen: boolean;
-  sidebarWidth: number;
-  onSidebarResize: (delta: number) => void;
-  onToggleSidebar: () => void;
   chatHeader: ReactNode;
   messages: ChatState["messages"];
   isLoading: ChatState["isLoading"];
@@ -24,10 +19,6 @@ interface ChatPageProps {
 }
 
 export function ChatPage({
-  sidebarOpen,
-  sidebarWidth,
-  onSidebarResize,
-  onToggleSidebar,
   chatHeader,
   messages,
   isLoading,
@@ -41,17 +32,6 @@ export function ChatPage({
 }: ChatPageProps) {
   return (
     <div className="flex h-full">
-      {sidebarOpen && (
-        <>
-          <div
-            style={{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
-            className="w-[80vw] shrink-0 lg:w-(--sidebar-w)"
-          >
-            <SidebarPanel onCollapse={onToggleSidebar} />
-          </div>
-          <ResizeHandle className="hidden lg:block" onResize={onSidebarResize} />
-        </>
-      )}
       <div className="min-w-full flex-1 lg:min-w-0">
         <ChatPanel header={chatHeader} messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={onSelectData} />
       </div>

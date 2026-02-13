@@ -3,6 +3,7 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { InstrumentsProvider } from "@/components/instruments/instruments-provider";
 import { ConversationsProvider } from "@/components/conversations/conversations-provider";
+import { SidebarProvider } from "@/components/sidebar/sidebar-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { RootLayout } from "@/components/layout/root-layout";
 import { LoginPageContainer } from "@/pages/login/login-page.container";
@@ -21,6 +22,7 @@ export function App() {
               <Route element={<ErrorBoundary />}>
                 <Route element={<InstrumentsProvider />}>
                 <Route element={<ConversationsProvider />}>
+                <Route element={<SidebarProvider />}>
                   <Route element={<RootLayout />}>
                     <Route path="/" element={<HomePage />} />
                     <Route path="/i/:symbol">
@@ -28,6 +30,7 @@ export function App() {
                       <Route path="c/:id" element={<ChatPageContainer />} />
                     </Route>
                   </Route>
+                </Route>
                 </Route>
               </Route>
               </Route>

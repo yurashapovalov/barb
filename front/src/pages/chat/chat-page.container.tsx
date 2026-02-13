@@ -24,7 +24,7 @@ export function ChatPageContainer() {
   const navigate = useNavigate();
   const token = session?.access_token ?? "";
 
-  const { sidebarWidth, dataPct, onSidebarResize, onDataResize } = usePanelLayout();
+  const { dataPct, onDataResize } = usePanelLayout();
   const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar();
   const [selectedData, setSelectedData] = useState<DataBlock | null>(null);
 
@@ -95,10 +95,6 @@ export function ChatPageContainer() {
 
   return (
     <ChatPage
-      sidebarOpen={sidebarOpen}
-      sidebarWidth={sidebarWidth}
-      onSidebarResize={onSidebarResize}
-      onToggleSidebar={toggleSidebar}
       chatHeader={chatHeader}
       messages={messages}
       isLoading={isLoading}

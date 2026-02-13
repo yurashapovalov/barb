@@ -1,23 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useContext } from "react";
+import { SidebarContext, type SidebarContextValue } from "@/components/sidebar/sidebar-context";
 
-const LG_BREAKPOINT = 1024;
-
-function isDesktop() {
-  return window.innerWidth >= LG_BREAKPOINT;
-}
-
-export function useSidebar() {
-  const [open, setOpen] = useState(isDesktop);
-
-  useEffect(() => {
-    const mq = window.matchMedia(`(min-width: ${LG_BREAKPOINT}px)`);
-    const handler = (e: MediaQueryListEvent) => setOpen(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  const toggle = useCallback(() => setOpen((v) => !v), []);
-  const close = useCallback(() => setOpen(false), []);
-
-  return { sidebarOpen: open, toggleSidebar: toggle, closeSidebar: close, isDesktop: isDesktop() };
+export function useSidebar(): SidebarContextValue {
+  const ctx = useContext(SidebarContext);
+  if (!ctx) throw new Error("useSidebar must be used within SidebarProvider");
+  return ctx;
 }
