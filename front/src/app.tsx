@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { InstrumentsProvider } from "@/components/instruments/instruments-provider";
 import { ConversationsProvider } from "@/components/conversations/conversations-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { RootLayout } from "@/components/layout/root-layout";
@@ -15,10 +16,14 @@ export function App() {
           <Routes>
             <Route path="/login" element={<LoginPageContainer />} />
             <Route element={<AuthGuard />}>
-              <Route element={<ConversationsProvider />}>
-                <Route element={<RootLayout />}>
-                  <Route path="/" element={<ChatPageContainer />} />
-                  <Route path="/c/:id" element={<ChatPageContainer />} />
+              <Route element={<InstrumentsProvider />}>
+                <Route element={<ConversationsProvider />}>
+                  <Route element={<RootLayout />}>
+                    <Route path="/" element={<ChatPageContainer />} />
+                    <Route path="/i/:symbol" element={<ChatPageContainer />} />
+                    <Route path="/i/:symbol/c/:id" element={<ChatPageContainer />} />
+                    <Route path="/add" element={<ChatPageContainer />} />
+                  </Route>
                 </Route>
               </Route>
             </Route>

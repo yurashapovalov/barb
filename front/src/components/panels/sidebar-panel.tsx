@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { ChevronsLeftIcon, LogOutIcon, MessageCircleIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { AddInstrumentModal } from "@/components/instruments/add-instrument-modal";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversations } from "@/hooks/use-conversations";
+import { useInstruments } from "@/hooks/use-instruments";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { PanelHeader } from "./panel-header";
@@ -25,20 +28,13 @@ interface SidebarPanelProps {
 export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   const { user, signOut } = useAuth();
   const { preference, set: setTheme } = useTheme();
-  const { conversations, create } = useConversations();
-  const { id } = useParams<{ id: string }>();
+  const { conversations } = useConversations();
+  const { instruments } = useInstruments();
+  const { symbol, id } = useParams<{ symbol: string; id: string }>();
   const navigate = useNavigate();
+  const [addModalOpen, setAddModalOpen] = useState(false);
   const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
   const avatar = user?.user_metadata?.avatar_url as string | undefined;
-
-  const handleNewChat = async () => {
-    try {
-      const conv = await create("NQ");
-      navigate(`/c/${conv.id}`);
-    } catch (err) {
-      console.error("Failed to create conversation:", err);
-    }
-  };
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -104,16 +100,29 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
       </PanelHeader>
       <div className="flex flex-1 flex-col overflow-y-auto px-2">
         <div className="mt-12 flex flex-col gap-1">
-          <span className="px-2 text-xs text-muted-foreground">Chats</span>
           <Button
             variant="ghost"
             size="sm"
             className="justify-start"
-            onClick={handleNewChat}
+            onClick={() => setAddModalOpen(true)}
           >
             <PlusIcon />
-            New chat
+            Add instrument
           </Button>
+          {instruments.map((inst) => (
+            <Button
+              key={inst.instrument}
+              variant="ghost"
+              size="sm"
+              className={cn("justify-start", inst.instrument === symbol && "bg-accent")}
+              onClick={() => navigate(`/i/${inst.instrument}`)}
+            >
+              {inst.instrument}
+            </Button>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-col gap-1">
+          <span className="px-2 text-xs text-muted-foreground">Chats</span>
           {conversations.map((conv) => (
             <Button
               key={conv.id}
@@ -128,6 +137,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
           ))}
         </div>
       </div>
+      <AddInstrumentModal open={addModalOpen} onOpenChange={setAddModalOpen} />
     </div>
   );
 }

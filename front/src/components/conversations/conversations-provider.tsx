@@ -1,19 +1,9 @@
-import { createContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { createConversation, listConversations, removeConversation } from "@/lib/api";
 import type { Conversation } from "@/types";
-
-interface ConversationsContextValue {
-  conversations: Conversation[];
-  loading: boolean;
-  refresh: () => void;
-  updateTitle: (id: string, title: string) => void;
-  create: (instrument: string) => Promise<Conversation>;
-  remove: (id: string) => Promise<void>;
-}
-
-export const ConversationsContext = createContext<ConversationsContextValue | null>(null);
+import { ConversationsContext } from "./conversations-context";
 
 export function ConversationsProvider() {
   const { session } = useAuth();

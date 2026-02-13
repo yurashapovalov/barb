@@ -1,3 +1,17 @@
+export interface Instrument {
+  symbol: string;
+  name: string;
+  exchange: string;
+  category: string;
+  image_url: string | null;
+  notes: string | null;
+}
+
+export interface UserInstrument {
+  instrument: string;
+  added_at: string;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;

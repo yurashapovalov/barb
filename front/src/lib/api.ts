@@ -1,5 +1,6 @@
 import type {
   Conversation,
+  Instrument,
   Message,
   SSEDataBlockEvent,
   SSEDoneEvent,
@@ -9,6 +10,7 @@ import type {
   SSETitleUpdateEvent,
   SSEToolEndEvent,
   SSEToolStartEvent,
+  UserInstrument,
 } from "@/types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -42,8 +44,12 @@ export async function createConversation(
 
 export async function listConversations(
   token: string,
+  instrument?: string,
 ): Promise<Conversation[]> {
-  const res = await fetch(`${API_URL}/api/conversations`, {
+  const url = instrument
+    ? `${API_URL}/api/conversations?instrument=${encodeURIComponent(instrument)}`
+    : `${API_URL}/api/conversations`;
+  const res = await fetch(url, {
     method: "GET",
     headers: authHeaders(token),
   });
@@ -73,6 +79,53 @@ export async function getMessages(
   });
   return handleResponse<Message[]>(res);
 }
+
+// --- Instruments ---
+
+export async function listInstruments(): Promise<Instrument[]> {
+  const res = await fetch(`${API_URL}/api/instruments`);
+  return handleResponse<Instrument[]>(res);
+}
+
+export async function listUserInstruments(
+  token: string,
+): Promise<UserInstrument[]> {
+  const res = await fetch(`${API_URL}/api/user-instruments`, {
+    headers: authHeaders(token),
+  });
+  return handleResponse<UserInstrument[]>(res);
+}
+
+export async function addUserInstrument(
+  symbol: string,
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/user-instruments`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ instrument: symbol }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+}
+
+export async function removeUserInstrument(
+  symbol: string,
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/user-instruments/${encodeURIComponent(symbol)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
+}
+
+// --- Streaming ---
 
 export interface StreamCallbacks {
   onToolStart?: (event: SSEToolStartEvent) => void;
