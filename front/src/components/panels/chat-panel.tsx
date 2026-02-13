@@ -84,7 +84,7 @@ function ChatPanelInner({ header, messages, isLoading, error, send, selectedData
         <ConversationScrollButton />
       </Conversation>
       <div className="mx-auto w-full max-w-[740px] px-4 pb-8">
-        <PromptInput onSubmit={(message) => { send(message.text); }}>
+        <PromptInput onSubmit={(message) => send(message.text)}>
           <PromptInputBody>
             <PromptInputTextarea />
           </PromptInputBody>

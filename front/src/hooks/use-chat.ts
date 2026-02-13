@@ -112,7 +112,7 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
         setError(err instanceof Error ? err.message : "Failed to create conversation");
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         setIsLoading(false);
-        return;
+        throw err;
       }
     }
 
@@ -247,6 +247,7 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
       setError(err instanceof Error ? err.message : "Failed to send message");
       // Remove both optimistic messages on error
       setMessages((prev) => prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId));
+      throw err;
     } finally {
       isSendingRef.current = false;
       setIsLoading(false);
