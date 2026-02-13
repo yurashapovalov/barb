@@ -7,7 +7,7 @@ import { useConversations } from "@/hooks/use-conversations";
 import { useInstruments } from "@/hooks/use-instruments";
 import { useSidebar } from "@/hooks/use-sidebar";
 
-export function InstrumentPage() {
+export function InstrumentPageContainer() {
   const { symbol } = useParams<{ symbol: string }>();
   const { instruments } = useInstruments();
   const { conversations: allConversations, loading } = useConversations();

@@ -9,7 +9,7 @@ import { RootLayout } from "@/components/layout/root-layout";
 import { LoginPageContainer } from "@/pages/login/login-page.container";
 import { ChatPageContainer } from "@/pages/chat/chat-page.container";
 import { HomePage } from "@/pages/home/home-page";
-import { InstrumentPage } from "@/pages/instrument/instrument-page.container";
+import { InstrumentPageContainer } from "@/pages/instrument/instrument-page.container";
 
 export function App() {
   return (
@@ -21,18 +21,18 @@ export function App() {
             <Route element={<AuthGuard />}>
               <Route element={<ErrorBoundary />}>
                 <Route element={<InstrumentsProvider />}>
-                <Route element={<ConversationsProvider />}>
-                <Route element={<SidebarProvider />}>
-                  <Route element={<RootLayout />}>
-                    <Route path="/" element={<HomePage />} />
-                    <Route path="/i/:symbol">
-                      <Route index element={<InstrumentPage />} />
-                      <Route path="c/:id" element={<ChatPageContainer />} />
+                  <Route element={<ConversationsProvider />}>
+                    <Route element={<SidebarProvider />}>
+                      <Route element={<RootLayout />}>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/i/:symbol">
+                          <Route index element={<InstrumentPageContainer />} />
+                          <Route path="c/:id" element={<ChatPageContainer />} />
+                        </Route>
+                      </Route>
                     </Route>
                   </Route>
                 </Route>
-                </Route>
-              </Route>
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
