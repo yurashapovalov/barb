@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useConversations } from "@/hooks/use-conversations";
 import { useInstruments } from "@/hooks/use-instruments";
+import { useSidebar } from "@/hooks/use-sidebar";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 import { PanelHeader } from "./panel-header";
@@ -33,7 +34,13 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
   const { conversations } = useConversations();
   const { symbol, id } = useParams<{ symbol: string; id: string }>();
   const navigate = useNavigate();
+  const { closeSidebar } = useSidebar();
   const [addModalOpen, setAddModalOpen] = useState(false);
+
+  const go = (path: string) => {
+    navigate(path);
+    if (window.innerWidth < 1024) closeSidebar();
+  };
   const displayName = user?.user_metadata?.full_name ?? user?.email ?? "User";
   const avatar = user?.user_metadata?.avatar_url as string | undefined;
 
@@ -111,7 +118,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
               variant="ghost"
               size="sm"
               className={cn("justify-start gap-2", inst.instrument === symbol && !id && "bg-accent")}
-              onClick={() => navigate(`/i/${inst.instrument}`)}
+              onClick={() => go(`/i/${inst.instrument}`)}
             >
               <Avatar size="xs" src={inst.image_url} fallback={inst.instrument.slice(0, 2)} />
               <span className="font-medium">{inst.instrument}</span>
@@ -131,7 +138,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
                   variant="ghost"
                   size="sm"
                   className={cn("justify-start gap-2", conv.id === id && "bg-accent")}
-                  onClick={() => navigate(`/i/${conv.instrument}/c/${conv.id}`)}
+                  onClick={() => go(`/i/${conv.instrument}/c/${conv.id}`)}
                 >
                   <Avatar size="xs" src={img} fallback={conv.instrument.slice(0, 2)} />
                   <span className="truncate">{conv.title}</span>
@@ -144,7 +151,7 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
       <AddInstrumentModal
         open={addModalOpen}
         onOpenChange={setAddModalOpen}
-        onAdded={(sym) => navigate(`/i/${sym}`)}
+        onAdded={(sym) => go(`/i/${sym}`)}
       />
     </div>
   );

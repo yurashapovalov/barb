@@ -9,7 +9,7 @@ import { RootLayout } from "@/components/layout/root-layout";
 import { LoginPageContainer } from "@/pages/login/login-page.container";
 import { ChatPageContainer } from "@/pages/chat/chat-page.container";
 import { HomePage } from "@/pages/home/home-page";
-import { InstrumentPage } from "@/pages/instrument/instrument-page";
+import { InstrumentPage } from "@/pages/instrument/instrument-page.container";
 
 export function App() {
   return (

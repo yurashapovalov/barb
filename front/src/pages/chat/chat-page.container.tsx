@@ -25,7 +25,7 @@ export function ChatPageContainer() {
   const token = session?.access_token ?? "";
 
   const { dataPct, onDataResize } = usePanelLayout();
-  const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar();
+  const { sidebarOpen, toggleSidebar } = useSidebar();
   const [selectedData, setSelectedData] = useState<DataBlock | null>(null);
 
   // Read initial message from sessionStorage (survives StrictMode remount)
@@ -47,8 +47,7 @@ export function ChatPageContainer() {
 
   useEffect(() => {
     setSelectedData(null);
-    if (window.innerWidth < 1024) closeSidebar();
-  }, [id, closeSidebar]);
+  }, [id]);
 
   const onConversationCreated = (convId: string) => {
     refresh();
@@ -77,8 +76,8 @@ export function ChatPageContainer() {
     }
   }, [initialMessage, send]);
 
-  // Show preview until useChat has the real messages
-  const displayMessages = messages.length === 0 && previewMessage ? [previewMessage] : messages;
+  // Show preview until useChat has the real messages (not on error — send failed)
+  const displayMessages = messages.length === 0 && previewMessage && !error ? [previewMessage] : messages;
 
   const handleSelectData = useCallback((data: DataBlock) => {
     setSelectedData((prev) => (prev === data ? null : data));

@@ -12,6 +12,19 @@ interface UseChatParams {
 
 export type ChatState = ReturnType<typeof useChat>;
 
+// Module-level cache — survives component unmount/remount
+const messageCache = new Map<string, Message[]>();
+const MAX_CACHE = 10;
+
+function cacheSet(key: string, value: Message[]) {
+  messageCache.delete(key); // move to end (most recent)
+  messageCache.set(key, value);
+  if (messageCache.size > MAX_CACHE) {
+    const oldest = messageCache.keys().next().value!;
+    messageCache.delete(oldest);
+  }
+}
+
 export function useChat({ conversationId, token, instrument, onConversationCreated, onTitleUpdate }: UseChatParams) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(() => !!conversationId);
@@ -21,34 +34,22 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
   const convIdRef = useRef(conversationId);
   convIdRef.current = conversationId;
 
-  // Load history when opening an existing conversation.
-  // Skip if we just created it (messages already in state from send()).
-  const skipLoadRef = useRef(false);
+  // Skip loading when send() is in progress (it manages messages itself).
+  // Unlike skipLoadRef, this survives StrictMode double-effect runs.
+  const isSendingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
-  const cacheRef = useRef(new Map<string, Message[]>());
-  const cacheSet = (key: string, value: Message[]) => {
-    const cache = cacheRef.current;
-    cache.delete(key); // move to end (most recent)
-    cache.set(key, value);
-    if (cache.size > 10) {
-      const oldest = cache.keys().next().value!;
-      cache.delete(oldest);
-    }
-  };
 
   useEffect(() => {
+    // Don't touch messages while send() is in progress
+    if (isSendingRef.current) return;
+
     if (!conversationId) {
       setMessages([]);
       setError(null);
       return;
     }
-    if (skipLoadRef.current) {
-      skipLoadRef.current = false;
-      setIsLoading(false);
-      return;
-    }
 
-    const cached = cacheRef.current.get(conversationId);
+    const cached = messageCache.get(conversationId);
     if (cached) {
       setMessages(cached);
       setIsLoading(false);
@@ -80,6 +81,7 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
   }, [conversationId, token]);
 
   const send = async (text: string) => {
+    isSendingRef.current = true;
     setError(null);
 
     // Show user message immediately — before any network calls
@@ -104,9 +106,9 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
         const conv = await createConversation(instrument, token);
         resolvedConvId = conv.id;
         convIdRef.current = conv.id;
-        skipLoadRef.current = true;
-        onConversationCreated?.(conv.id);
+        try { onConversationCreated?.(conv.id); } catch { /* navigate may throw */ }
       } catch (err) {
+        isSendingRef.current = false;
         setError(err instanceof Error ? err.message : "Failed to create conversation");
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         setIsLoading(false);
@@ -246,6 +248,7 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
       // Remove both optimistic messages on error
       setMessages((prev) => prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId));
     } finally {
+      isSendingRef.current = false;
       setIsLoading(false);
       abortRef.current = null;
     }
