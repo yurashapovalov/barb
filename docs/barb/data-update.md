@@ -14,11 +14,13 @@ Parquet файлы — кеш, не база данных. Source of truth — �
 data/
   1d/
     futures/NQ.parquet     — daily bars (settlement close)
-    futures/.last_update   — "2026-02-10" (state file)
     stocks/AAPL.parquet    — (будущее)
   1m/
     futures/NQ.parquet     — minute bars
     stocks/AAPL.parquet    — (будущее)
+  futures/
+    .last_update           — "2026-02-12" (state file, per asset type)
+  stocks/                  — (будущее)
 ```
 
 Parquet: `[timestamp, open, high, low, close, volume]`, compression=zstd.
@@ -112,7 +114,7 @@ SYMBOL_MAP = {
 Server: root@37.27.204.135 (/opt/barb)
 Venv:   /opt/barb/.venv-scripts/ (pandas, httpx, python-dotenv, pyarrow)
 Log:    /var/log/barb-update.log
-State:  data/futures/.last_update
+State:  data/{type}/.last_update (e.g. data/futures/.last_update)
 ```
 
 ```cron

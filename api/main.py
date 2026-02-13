@@ -89,6 +89,10 @@ register_error_handlers(app)
 # --- Request/Response models ---
 
 
+class AddUserInstrumentRequest(BaseModel):
+    instrument: str
+
+
 class CreateConversationRequest(BaseModel):
     instrument: str = "NQ"
 
@@ -318,6 +322,95 @@ def health():
     )
 
 
+@app.get("/api/instruments")
+def list_instruments():
+    """List all available instruments (public, no auth)."""
+    db = get_db()
+    try:
+        result = (
+            db.table("instruments")
+            .select("symbol, name, exchange, category, image_url, notes")
+            .eq("active", True)
+            .order("category")
+            .order("symbol")
+            .execute()
+        )
+    except Exception:
+        log.exception("Failed to list instruments")
+        raise HTTPException(503, "Failed to list instruments")
+
+    return result.data
+
+
+@app.get("/api/user-instruments")
+def list_user_instruments(user: dict = Depends(get_current_user)):
+    """List instruments the user has added to their workspace."""
+    db = get_db()
+    try:
+        result = (
+            db.table("user_instruments")
+            .select("instrument, added_at")
+            .eq("user_id", user["sub"])
+            .order("added_at")
+            .execute()
+        )
+    except Exception:
+        log.exception("Failed to list user instruments")
+        raise HTTPException(503, "Failed to list user instruments")
+
+    return result.data
+
+
+@app.post("/api/user-instruments", status_code=201)
+def add_user_instrument(
+    request: AddUserInstrumentRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Add an instrument to the user's workspace."""
+    if not get_instrument(request.instrument):
+        raise HTTPException(400, f"Unknown instrument: {request.instrument}")
+
+    db = get_db()
+    try:
+        result = (
+            db.table("user_instruments")
+            .insert({"user_id": user["sub"], "instrument": request.instrument})
+            .execute()
+        )
+    except Exception as e:
+        if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+            raise HTTPException(409, "Instrument already added")
+        log.exception("Failed to add user instrument")
+        raise HTTPException(503, "Failed to add user instrument")
+
+    return result.data[0]
+
+
+@app.delete("/api/user-instruments/{symbol}")
+def remove_user_instrument(
+    symbol: str,
+    user: dict = Depends(get_current_user),
+):
+    """Remove an instrument from the user's workspace."""
+    db = get_db()
+    try:
+        result = (
+            db.table("user_instruments")
+            .delete()
+            .eq("user_id", user["sub"])
+            .eq("instrument", symbol)
+            .execute()
+        )
+    except Exception:
+        log.exception("Failed to remove user instrument")
+        raise HTTPException(503, "Failed to remove user instrument")
+
+    if not result.data:
+        raise HTTPException(404, "Instrument not in your workspace")
+
+    return {"ok": True}
+
+
 @app.post("/api/conversations")
 def create_conversation(
     request: CreateConversationRequest,
@@ -355,18 +448,17 @@ def create_conversation(
 
 @app.get("/api/conversations")
 def list_conversations(
+    instrument: str | None = None,
     user: dict = Depends(get_current_user),
 ) -> list[ConversationResponse]:
     db = get_db()
     try:
-        result = (
-            db.table("conversations")
-            .select("*")
-            .eq("user_id", user["sub"])
-            .eq("status", "active")
-            .order("updated_at", desc=True)
-            .execute()
+        query = (
+            db.table("conversations").select("*").eq("user_id", user["sub"]).eq("status", "active")
         )
+        if instrument:
+            query = query.eq("instrument", instrument)
+        result = query.order("updated_at", desc=True).execute()
     except Exception:
         log.exception("Failed to list conversations")
         raise HTTPException(503, "Failed to list conversations")
