@@ -344,6 +344,37 @@ def list_instruments(search: str | None = None, category: str | None = None):
     return result.data
 
 
+@app.get("/api/instruments/{symbol}/ohlc")
+def get_ohlc(symbol: str):
+    """Return all daily OHLC bars for an instrument."""
+    try:
+        df = load_data(symbol, "1d")
+    except FileNotFoundError:
+        raise HTTPException(404, f"Instrument not found: {symbol}")
+
+    records = []
+    for ts, row in df.iterrows():
+        records.append(
+            {
+                "time": str(ts)[:10],
+                "open": row["open"],
+                "high": row["high"],
+                "low": row["low"],
+                "close": row["close"],
+                "volume": int(row["volume"]),
+            }
+        )
+    return records
+
+
+@app.post("/api/admin/reload-data")
+def reload_data():
+    """Clear load_data LRU cache so next request picks up fresh parquet files."""
+    load_data.cache_clear()
+    log.info("Data cache cleared")
+    return {"status": "ok"}
+
+
 @app.get("/api/user-instruments")
 def list_user_instruments(user: dict = Depends(get_current_user)):
     """List instruments the user has added to their workspace."""

@@ -1,312 +1,237 @@
-# Frontend: Instrument Workspace Architecture
+# Frontend Architecture
 
-## Problem
+React SPA. Vite + TypeScript + React 19 + Tailwind v4 + shadcn/ui.
 
-The frontend is a flat chat list. Sidebar shows all conversations, "New chat" always creates NQ. Backend already supports 31 instruments (loaded from Supabase at startup), but the UI has no way to pick or switch instruments.
-
-## Target
-
-Instrument-centric workspace, similar to Claude Projects or Slack workspaces. Each instrument is a workspace with its own chat list, and later — dashboard, chart, backtests.
-
-## Current state
+## Routes
 
 ```
-Routes:
-  /           → ChatPage (new chat)
-  /c/:id      → ChatPage (existing chat)
-
-Layout:
-  sidebar-panel | chat-panel | data-panel
-
-Sidebar:
-  [user menu]
-  [+ New chat]        ← hardcodes "NQ"
-  [conversation list] ← all conversations, flat
-
-Key files:
-  app.tsx                          — BrowserRouter, routes
-  components/panels/sidebar-panel  — sidebar with conversation list
-  components/conversations/conversations-provider — loads all conversations
-  pages/chat/chat-page             — 3-panel layout
-  lib/api.ts                       — createConversation(instrument, token)
-  types/index.ts                   — Conversation { instrument }
+/login              → LoginPage (Google OAuth)
+/                   → HomePage (redirect to last instrument or empty state)
+/i/:symbol          → InstrumentPage (dashboard + conversation list)
+/i/:symbol/c/:id    → ChatPage (chat + data panel)
+/i/:symbol/c/new    → ChatPage (auto-send initial message)
 ```
 
-The `instrument` field already exists on every conversation. The API's `createConversation` accepts any instrument. The frontend just never lets the user choose.
+All routes except `/login` are behind `AuthGuard` — redirects to `/login` if no session, shows spinner while checking.
 
-## Target state
-
-### Routes
+## Layout
 
 ```
-/                       → redirect to last instrument or /add
-/i/:symbol              → instrument dashboard (chat list as primary view)
-/i/:symbol/c/:id        → chat within instrument
-/add                    → add instrument modal (full page for first-time)
-/login                  → login (unchanged)
+┌──────────┬────────────────────────┬──────────────┐
+│ sidebar  │      main area         │  data panel   │
+│          │                        │  (optional)   │
+│ [user]   │  InstrumentPage:       │               │
+│          │    instrument header   │  table/chart   │
+│ NQ ←     │    conversation list   │  from query    │
+│ ES       │    prompt input        │  result        │
+│ CL       │                        │               │
+│          │  ChatPage:             │               │
+│ Chats    │    messages            │               │
+│ chat 1   │    prompt input        │               │
+│ chat 2   │                        │               │
+│          │                        │               │
+│ [+ Add]  │                        │               │
+└──────────┴────────────────────────┴──────────────┘
 ```
 
-### Navigation model
+Data panel appears on click of a data card in chat. Resizable via drag handle on desktop, full-screen overlay on mobile.
+
+## Component architecture
+
+### Pattern: container / panel
+
+Every page follows the same split:
+
+- **Container** (`*-page.container.tsx`) — hooks, data loading, navigation, event handlers
+- **Panel** (`*-panel.tsx`) — pure props, renders UI
+- **Page** (`*-page.tsx`) — layout composition (optional, ChatPage composes chat + data panels)
 
 ```
-┌──────────────────────────────────────────────────────┐
-│ sidebar            │ main area                        │
-│                    │                                  │
-│ [user menu]        │  On /i/:symbol:                  │
-│                    │    instrument header (name, info) │
-│ ── instruments ──  │    [+ New chat]                  │
-│ [NQ] ← active     │    conversation list (cards)     │
-│ [ES]              │                                   │
-│ [CL]              │  On /i/:symbol/c/:id:             │
-│                    │    chat-panel | data-panel        │
-│ [+ Add]            │    (same 3-panel as now, minus   │
-│                    │     sidebar conversations)       │
-└──────────────────────────────────────────────────────┘
+hook → container → panel → component
 ```
 
-**Sidebar changes:**
-- Shows user's instruments (icons or short symbols), not conversations
-- Active instrument is highlighted
-- "+ Add" button at the bottom opens instrument search modal
-- User menu stays at top (theme, settings, sign out)
+Panels never import hooks directly. Exception: `sidebar-panel.tsx` (documented — splitting would create 15+ prop interface).
 
-**Instrument dashboard (`/i/:symbol`):**
-- Header: instrument name, exchange, description from Supabase
-- "New chat" button — creates conversation with this instrument
-- List of conversations for this instrument, sorted by `updated_at`
-- Each conversation card: title, date, message count
-- Click card → navigate to `/i/:symbol/c/:id`
-
-**Chat view (`/i/:symbol/c/:id`):**
-- Same layout as current `ChatPage`: chat-panel + data-panel
-- Sidebar shows instruments (not conversations) — clicking another instrument navigates away
-- Back button in chat header → returns to `/i/:symbol`
-
-### Add instrument modal
-
-Triggered by "+ Add" in sidebar. Modal overlay (not a page, except for first-time users with 0 instruments).
+### Provider tree
 
 ```
-┌─────────────────────────────────┐
-│ Add instrument                  │
-│                                 │
-│ [🔍 Search by symbol or name ] │
-│                                 │
-│ Equity Index Futures            │
-│   NQ  E-mini Nasdaq 100   [+]  │
-│   ES  E-mini S&P 500      [+]  │
-│   YM  E-mini Dow Jones    [+]  │
-│                                 │
-│ Energy Futures                  │
-│   CL  Crude Oil WTI       [+]  │
-│   NG  Natural Gas          [+]  │
-│   ...                           │
-└─────────────────────────────────┘
+ErrorBoundary
+  Toaster (sonner)
+  BrowserRouter
+    AuthProvider
+      AuthGuard
+        RouteErrorBoundary
+          InstrumentsProvider    ← user's instruments, loaded once
+            ConversationsProvider  ← all conversations, loaded once
+              SidebarProvider     ← open/close state
+                RootLayout        ← sidebar + main area
+                  Routes
 ```
 
-- Source: `GET /api/instruments` (new endpoint, returns all 31)
-- Grouped by `category` from Supabase `instruments` table
-- Search filters by `symbol` and `name` (client-side, 31 items)
-- Already-added instruments show checkmark instead of "+"
-- Click "+" → calls `POST /api/user-instruments` → instrument appears in sidebar
+### Providers
 
-### Component changes
+| Provider | Data | Pattern |
+|----------|------|---------|
+| AuthProvider | session, user | Supabase `onAuthStateChange` listener |
+| InstrumentsProvider | user's instruments | fetch on mount, localStorage cache, error → toast |
+| ConversationsProvider | all conversations | fetch on mount, localStorage cache, error → toast |
+| SidebarProvider | open/close state | localStorage persisted |
 
-**Modified:**
+Providers expose `error` + `retry` for error recovery. All errors surface as sonner toasts.
 
-| File | Change |
-|------|--------|
-| `app.tsx` | New route structure: `/i/:symbol`, `/i/:symbol/c/:id`, `/add` |
-| `sidebar-panel.tsx` | Show instruments instead of conversations. Active instrument highlight. "+ Add" button |
-| `conversations-provider.tsx` | Filter by current instrument (from route param `:symbol`) |
-| `lib/api.ts` | New functions: `listInstruments`, `listUserInstruments`, `addUserInstrument`, `removeUserInstrument`, `listConversations` gets `?instrument=` param |
-| `types/index.ts` | New `Instrument` type |
+ConversationsProvider loads ALL conversations. Filtering by instrument happens at the consumer (instrument-page.container filters by `:symbol`).
 
-**New:**
+### Cache
 
-| File | Purpose |
-|------|---------|
-| `pages/instrument/instrument-page.tsx` | Instrument dashboard — header + conversation list |
-| `pages/instrument/instrument-page.container.tsx` | Data loading, connects to providers |
-| `components/instruments/instruments-provider.tsx` | Context: user's instruments list, add/remove |
-| `components/instruments/add-instrument-modal.tsx` | Search + add instrument modal |
+Two layers:
+- **localStorage** (`readCache`/`writeCache` in `lib/cache.ts`) — conversations, instruments. Shown immediately on mount, replaced by fresh API data.
+- **Module-level Map** (`messageCache` in `use-chat.ts`) — chat messages. Survives unmount/remount, LRU eviction at 10 entries.
 
-### Data model
-
-**New Supabase table: `user_instruments`**
-
-```sql
-create table user_instruments (
-  id         uuid primary key default gen_random_uuid(),
-  user_id    uuid not null references auth.users(id),
-  instrument text not null,
-  added_at   timestamptz not null default now(),
-
-  unique (user_id, instrument)
-);
-
-alter table user_instruments enable row level security;
-
-create policy "Users manage own instruments"
-  on user_instruments for all
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-```
-
-**New API endpoints:**
+## File structure
 
 ```
-GET    /api/instruments              → list all 31 (public, from instrument_full view)
-GET    /api/user-instruments         → list user's added instruments
-POST   /api/user-instruments         → add instrument { instrument: "ES" }
-DELETE /api/user-instruments/:symbol → remove instrument from user's list
+front/src/
+  app.tsx                                — routes, Toaster, theme
+  main.tsx                               — entry point
+
+  lib/
+    api.ts                               — all API calls, SSE streaming, 401 handling
+    cache.ts                             — localStorage cache (readCache/writeCache)
+    format.ts                            — number/date formatting
+    parse-content.ts                     — parse message content → text + data block segments
+    supabase.ts                          — Supabase client
+    utils.ts                             — cn() for tailwind-merge
+
+  hooks/
+    use-auth.ts                          — AuthContext consumer
+    use-chat.ts                          — messages, send, SSE callbacks, module-level cache
+    use-conversations.ts                 — ConversationsContext consumer
+    use-instruments.ts                   — InstrumentsContext consumer
+    use-panel-layout.ts                  — data panel resize (% width)
+    use-sidebar.ts                       — SidebarContext consumer
+    use-theme.ts                         — dark/light/system, useSyncExternalStore
+
+  components/
+    auth/
+      auth-provider.tsx                  — session state, Supabase listener
+      auth-guard.tsx                     — redirect if unauthenticated, spinner while loading
+    conversations/
+      conversations-context.ts           — context type
+      conversations-provider.tsx         — fetch, cache, CRUD, error/retry
+    instruments/
+      instruments-context.ts             — context type
+      instruments-provider.tsx           — fetch, cache, add/remove, error/retry
+      add-instrument-modal.tsx           — search + add instrument dialog
+    sidebar/
+      sidebar-context.ts                 — context type
+      sidebar-provider.tsx               — open/close state
+    panels/
+      sidebar-panel.tsx                  — instruments list, chats list, user menu, theme
+      instrument-panel.tsx               — instrument header, conversation list, prompt
+      chat-panel.tsx                     — messages, prompt input, empty state
+      data-panel.tsx                     — table + chart from query result
+      panel-header.tsx                   — shared header bar
+      home-panel.tsx                     — home page content
+      resize-handle.tsx                  — drag to resize data panel
+    ai/
+      conversation.tsx                   — scroll container, empty state, scroll button
+      message.tsx                        — message bubble, actions (like/dislike)
+      prompt-input.tsx                   — textarea, submit button, provider
+      data-card.tsx                      — inline data block in chat (clickable)
+    charts/
+      bar-chart.tsx                      — Recharts bar chart for data cards
+    layout/
+      root-layout.tsx                    — sidebar + main area + mobile overlay
+    error-boundary.tsx                   — ErrorBoundary + RouteErrorBoundary
+    ui/                                  — shadcn components (button, dialog, dropdown, etc.)
+
+  pages/
+    login/
+      login-page.container.tsx           — redirect if already authenticated
+      login-page.tsx                     — Google OAuth button
+    home/
+      home-page.tsx                      — redirect to first instrument or empty state
+    instrument/
+      instrument-page.container.tsx      — loads conversations for symbol, passes to panel
+    chat/
+      chat-page.container.tsx            — useChat, preview message, auto-send, sendRef
+      chat-page.tsx                      — layout: chat panel + data panel + resize
+
+  types/
+    index.ts                             — Message, Conversation, Instrument, DataBlock, SSE events
+
+  __tests__/
+    api.test.ts                          — API functions + SSE streaming
+    parse-content.test.ts                — content parsing
+    use-chat.test.ts                     — chat hook lifecycle
+    use-theme.test.ts                    — theme switching
 ```
 
-**Modified endpoint:**
+## SSE streaming
 
-```
-GET /api/conversations?instrument=NQ → filter conversations by instrument
-```
+`api.ts` → `sendMessageStream()` parses SSE events from `POST /api/chat/stream`:
 
-Currently `list_conversations` in `api/main.py` returns all user conversations. Add optional `instrument` query param:
+| Event | Handler | Effect |
+|-------|---------|--------|
+| `text_delta` | append to assistant message | streaming text |
+| `tool_start` | add loading data card | shows spinner in chat |
+| `tool_end` | update data card if error | shows error on card |
+| `data_block` | replace loading with result | table/chart appears |
+| `done` | finalize message, cache | message complete |
+| `persist` | update message ID | real ID from DB |
+| `title_update` | update conversation title | sidebar reflects new title |
+| `error` | set error, show toast | user sees error |
 
-```python
-@app.get("/api/conversations")
-def list_conversations(
-    instrument: str | None = None,  # new
-    user: dict = Depends(get_current_user),
-):
-    query = db.table("conversations").select("*").eq("user_id", user["sub"]).eq("status", "active")
-    if instrument:
-        query = query.eq("instrument", instrument)
-    ...
-```
+Type guards (`isToolStartEvent`, `isTextDeltaEvent`, etc.) validate each event — no `as unknown as` casts.
 
-### Types
+## Error handling
 
-```typescript
-// types/index.ts
+All errors surface as **sonner toasts** — one place, consistent.
 
-interface Instrument {
-  symbol: string;        // "NQ"
-  name: string;          // "E-mini Nasdaq 100"
-  exchange: string;      // "CME"
-  category: string;      // "equity_index"
-  tick_size: number;
-  tick_value: number;
-  notes: string | null;  // rollover warnings etc.
-}
+| Source | How |
+|--------|-----|
+| Provider load failure | toast in catch block, error state for retry |
+| Chat send failure | toast in useChat catch, optimistic messages rolled back |
+| SSE error event | toast from onError callback |
+| 401 response | `checkAuth()` in api.ts → sign out → redirect to login |
+| Remove chat failure | toast in catch block |
+| Render crash | ErrorBoundary / RouteErrorBoundary (resets on navigation) |
 
-interface UserInstrument {
-  instrument: string;    // "NQ"
-  added_at: string;
-}
-```
+## Auth
 
-### State management
+Google OAuth via Supabase. Token in localStorage (Supabase default). All API calls send `Authorization: Bearer <token>`. Mid-session 401 triggers automatic sign-out via dynamic import of supabase client.
 
-**`InstrumentsProvider`** — wraps authenticated routes, similar to `ConversationsProvider`:
+## Theme
 
-```
-AuthGuard
-  └── InstrumentsProvider          ← new, loads user's instruments once
-        └── Routes
-              /i/:symbol
-                └── ConversationsProvider  ← scoped to :symbol
-                      └── InstrumentPage or ChatPage
-```
+`use-theme.ts` — `useSyncExternalStore` over localStorage. No provider needed. Applies `.dark` class to `<html>`. Sonner Toaster receives theme preference for matching.
 
-Provider loads user instruments on mount. Exposes: `instruments`, `add(symbol)`, `remove(symbol)`.
+## Deploy
 
-**`ConversationsProvider`** — becomes instrument-scoped. Reads `:symbol` from route, passes `?instrument=` to API. Re-fetches when symbol changes.
+Vercel. Auto-deploy from `main`. Root: `front/`. SPA rewrite via `vercel.json`.
 
-### Navigation flow
+Env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`.
 
-1. **User logs in** → redirect to `/` → check user instruments
-   - Has instruments → redirect to `/i/{first_instrument}`
-   - No instruments → redirect to `/add` (full-page add experience)
+## Next: Phase 3
 
-2. **User clicks instrument in sidebar** → navigate to `/i/:symbol`
-   - Dashboard loads conversations for that instrument
+### Candlestick chart on instrument dashboard
 
-3. **User clicks "+ New chat"** on dashboard → `POST /api/conversations { instrument }` → navigate to `/i/:symbol/c/:id`
+Library: TradingView Lightweight Charts (~45 KB gzipped).
 
-4. **User clicks conversation** on dashboard → navigate to `/i/:symbol/c/:id`
+- Candlestick + volume on `/i/:symbol`
+- New endpoint: `GET /api/instruments/:symbol/ohlc?timeframe=1d&limit=500`
+- New component: `components/charts/candlestick-chart.tsx`
 
-5. **User clicks "+ Add" in sidebar** → open modal → select instrument → `POST /api/user-instruments` → instrument appears in sidebar → navigate to `/i/:symbol`
+### Data card charts
 
-6. **User in chat clicks different instrument in sidebar** → navigate to `/i/:other_symbol` (leaves chat)
+Library: Recharts (already installed, `bar-chart.tsx` exists).
 
-## Implementation phases
+Charts inside data cards (query results in chat):
+- Bar chart: grouped categorical data (by weekday, by month)
+- Line chart: time series trends
+- Histogram: distributions
+- Area chart: equity curves
 
-### Phase 1: Backend
-
-1. Migration: create `user_instruments` table with RLS
-2. New endpoints: `/api/instruments`, `/api/user-instruments` CRUD
-3. Add `?instrument=` filter to `GET /api/conversations`
-4. Tests for new endpoints
-
-### Phase 2: Frontend structure
-
-1. `Instrument` type, API functions in `lib/api.ts`
-2. `InstrumentsProvider` — loads user instruments
-3. New routes in `app.tsx`
-4. Sidebar: instruments instead of conversations
-5. `AddInstrumentModal` — search and add
-6. `InstrumentPage` — dashboard with conversation list
-7. Scope `ConversationsProvider` to current instrument
-8. First-time flow: no instruments → `/add`
-
-### Phase 3: Dashboard chart + data card charts
-
-#### Instrument dashboard: candlestick chart
-
-Library: [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts) (official TradingView open-source, Apache 2.0, ~45 KB gzipped).
-
-- Candlestick + volume on the instrument dashboard (`/i/:symbol`)
-- Canvas-based, fast on thousands of bars
-- No wrapper needed — `useRef` + `useEffect`, ~50 lines
-- Style with CSS variables to match shadcn theme (background, grid, candle colors)
-- Data: new endpoint `GET /api/instruments/:symbol/ohlc?timeframe=1d&limit=500` serving OHLC from existing parquet files
-
-```
-┌─────────────────────────────────────────────┐
-│ NQ · E-mini Nasdaq 100 · CME                │
-├─────────────────────────────────────────────┤
-│ ┌─────────────────────────────────────────┐ │
-│ │         Candlestick chart               │ │
-│ │  ║ ║║║║║║│║║║║║║║║║║║║║║║║║║║          │ │
-│ │  ║ ║║║║║║│║║║║║║║║║║║║║║║║║║║          │ │
-│ ├─────────────────────────────────────────┤ │
-│ │  ▄▄ █▄▄▄█▄▄▄▄▄▄█▄▄▄▄ Volume           │ │
-│ └─────────────────────────────────────────┘ │
-├─────────────────────────────────────────────┤
-│ [+ New chat]                                │
-│ [conversation list]                         │
-└─────────────────────────────────────────────┘
-```
-
-New files:
-- `components/charts/candlestick-chart.tsx` — `useRef` + `useEffect` over lightweight-charts, OHLC + volume
-- `lib/api.ts` — `getOHLC(symbol, timeframe, limit, token)`
-
-Backend:
-- `GET /api/instruments/:symbol/ohlc?timeframe=1d&limit=500` — reads from existing parquet via `load_data()`, returns `[{time, open, high, low, close, volume}]`
-
-#### Data card charts (query results)
-
-Library: shadcn Charts (Recharts) — already in the stack.
-
-These are the charts inside data cards (query results in chat), NOT the dashboard chart. Described in `docs/architecture/charts.md`.
-
-- Bar chart: grouped categorical data (by weekday, by month name)
-- Line chart: time series trends (by month, by year)
-- Histogram: distributions (daily changes, gap sizes)
-- Area chart: equity curves (backtest P&L)
-
-lightweight-charts is not suitable here — these are categorical/statistical visualizations, not financial time-series.
-
-#### Other dashboard content (future)
+### Other dashboard content
 
 - Instrument info card (contract specs, sessions, holidays)
 - Backtest results list

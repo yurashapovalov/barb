@@ -8,7 +8,9 @@ import {
   PromptInputSubmit,
   usePromptInputController,
 } from "@/components/ai/prompt-input";
+import { CandlestickChart } from "@/components/charts/candlestick-chart";
 import { Avatar } from "@/components/ui/avatar";
+import type { OHLCBar } from "@/lib/api";
 import type { Conversation } from "@/types";
 
 interface InstrumentPanelProps {
@@ -17,6 +19,7 @@ interface InstrumentPanelProps {
   name?: string;
   exchange?: string;
   imageUrl?: string;
+  ohlcData?: OHLCBar[] | null;
   conversations: Conversation[];
   loading: boolean;
   onSend: (text: string) => void;
@@ -31,7 +34,7 @@ export function InstrumentPanel(props: InstrumentPanelProps) {
   );
 }
 
-function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
+function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, ohlcData, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -46,6 +49,11 @@ function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, conver
             {exchange && <span> {exchange}</span>}
           </h1>
         </div>
+        {ohlcData && (
+          <div className="mb-6 overflow-hidden rounded-lg border">
+            <CandlestickChart data={ohlcData} />
+          </div>
+        )}
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>
         ) : conversations.length > 0 ? (

@@ -108,6 +108,20 @@ export async function listInstruments(
   return handleResponse<Instrument[]>(res);
 }
 
+export interface OHLCBar {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export async function getOHLC(symbol: string): Promise<OHLCBar[]> {
+  const res = await fetch(`${API_URL}/api/instruments/${encodeURIComponent(symbol)}/ohlc`);
+  return handleResponse<OHLCBar[]>(res);
+}
+
 export async function listUserInstruments(
   token: string,
 ): Promise<UserInstrument[]> {
