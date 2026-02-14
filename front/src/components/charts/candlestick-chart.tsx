@@ -52,6 +52,7 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
       height: container.clientHeight,
       handleScroll: true,
       handleScale: true,
+      layout: { ...getTheme(isDark()).layout, attributionLogo: false },
     });
     chartRef.current = chart;
 
