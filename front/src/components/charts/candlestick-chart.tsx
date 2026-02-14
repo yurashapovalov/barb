@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createChart, ColorType, type IChartApi } from "lightweight-charts";
+import { createChart, ColorType, CandlestickSeries, HistogramSeries, type IChartApi } from "lightweight-charts";
 import type { OHLCBar } from "@/lib/api";
 
 interface CandlestickChartProps {
@@ -51,7 +51,7 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
     });
     chartRef.current = chart;
 
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#26a69a",
       downColor: "#ef5350",
       borderDownColor: "#ef5350",
@@ -60,7 +60,7 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
       wickUpColor: "#26a69a",
     });
 
-    const volumeSeries = chart.addHistogramSeries({
+    const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
     });
@@ -87,9 +87,17 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
 
     candlestickSeries.setData(candleData);
     volumeSeries.setData(volumeData);
-    chart.timeScale().fitContent();
 
-    // Resize observer
+    // Show last ~2 months by default
+    if (candleData.length > 60) {
+      chart.timeScale().setVisibleLogicalRange({
+        from: candleData.length - 60,
+        to: candleData.length - 1,
+      });
+    } else {
+      chart.timeScale().fitContent();
+    }
+
     const ro = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
       chart.applyOptions({ width, height });
@@ -110,5 +118,5 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
     };
   }, [data]);
 
-  return <div ref={containerRef} className="h-[300px] w-full" />;
+  return <div ref={containerRef} className="h-[400px] w-full" />;
 }

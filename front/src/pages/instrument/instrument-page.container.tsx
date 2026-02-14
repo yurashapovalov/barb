@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PanelLeftIcon } from "lucide-react";
 import { InstrumentPanel } from "@/components/panels/instrument-panel";
 import { PanelHeader } from "@/components/panels/panel-header";
 import { Button } from "@/components/ui/button";
-import { getOHLC, type OHLCBar } from "@/lib/api";
 import { useConversations } from "@/hooks/use-conversations";
 import { useInstruments } from "@/hooks/use-instruments";
+import { useOHLC } from "@/hooks/use-ohlc";
 import { useSidebar } from "@/hooks/use-sidebar";
 
 export function InstrumentPageContainer() {
@@ -16,16 +15,7 @@ export function InstrumentPageContainer() {
   const conversations = allConversations.filter((c) => c.instrument === symbol);
   const navigate = useNavigate();
   const { sidebarOpen, toggleSidebar } = useSidebar();
-  const [ohlcData, setOhlcData] = useState<OHLCBar[] | null>(null);
-
-  useEffect(() => {
-    if (!symbol) return;
-    let cancelled = false;
-    getOHLC(symbol).then((data) => {
-      if (!cancelled) setOhlcData(data);
-    });
-    return () => { cancelled = true; };
-  }, [symbol]);
+  const { data: ohlcData } = useOHLC(symbol);
 
   const instrument = instruments.find((i) => i.instrument === symbol);
 

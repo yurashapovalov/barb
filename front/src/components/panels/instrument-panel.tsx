@@ -41,19 +41,17 @@ function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, ohlcDa
   return (
     <div className="flex h-full flex-col bg-background">
       {header}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="mb-6 flex items-center gap-3">
-          <Avatar size="lg" src={imageUrl} fallback={symbol.slice(0, 2)} />
-          <h1 className="text-xl font-semibold">
-            {name}
-            {exchange && <span> {exchange}</span>}
-          </h1>
-        </div>
-        {ohlcData && (
-          <div className="mb-6 overflow-hidden rounded-lg border">
-            <CandlestickChart data={ohlcData} />
+      <div className="flex-1 overflow-y-auto px-4">
+        <div className="relative mb-6">
+          <div className="absolute left-0 top-0 z-10 flex items-center gap-3 p-3">
+            <Avatar size="lg" src={imageUrl} fallback={symbol.slice(0, 2)} />
+            <h1 className="text-xl font-semibold">
+              {name}
+              {exchange && <span> {exchange}</span>}
+            </h1>
           </div>
-        )}
+          {ohlcData && <CandlestickChart data={ohlcData} />}
+        </div>
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>
         ) : conversations.length > 0 ? (
