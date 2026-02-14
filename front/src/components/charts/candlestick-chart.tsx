@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createChart, ColorType, CandlestickSeries, HistogramSeries, type IChartApi } from "lightweight-charts";
+import { createChart, ColorType, CandlestickSeries, HistogramSeries, type IChartApi, type ISeriesApi } from "lightweight-charts";
 import type { OHLCBar } from "@/lib/api";
 
 interface CandlestickChartProps {
@@ -10,6 +10,8 @@ function isDark() {
   return document.documentElement.classList.contains("dark");
 }
 
+// Hardcoded hex values — lightweight-charts doesn't support CSS variables (oklch).
+// These match Tailwind's zinc palette. Update both if design system changes.
 function getTheme(dark: boolean) {
   return {
     layout: {
@@ -36,14 +38,16 @@ function getTheme(dark: boolean) {
 export function CandlestickChart({ data }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
+  // Create chart once
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const dark = isDark();
     const chart = createChart(container, {
-      ...getTheme(dark),
+      ...getTheme(isDark()),
       width: container.clientWidth,
       height: container.clientHeight,
       handleScroll: true,
@@ -51,7 +55,7 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
     });
     chartRef.current = chart;
 
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+    candleSeriesRef.current = chart.addSeries(CandlestickSeries, {
       upColor: "#26a69a",
       downColor: "#ef5350",
       borderDownColor: "#ef5350",
@@ -60,7 +64,7 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
       wickUpColor: "#26a69a",
     });
 
-    const volumeSeries = chart.addSeries(HistogramSeries, {
+    volumeSeriesRef.current = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
     });
@@ -68,6 +72,31 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
     chart.priceScale("volume").applyOptions({
       scaleMargins: { top: 0.8, bottom: 0 },
     });
+
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      chart.applyOptions({ width, height });
+    });
+    ro.observe(container);
+
+    const mo = new MutationObserver(() => {
+      chart.applyOptions(getTheme(isDark()));
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+    return () => {
+      mo.disconnect();
+      ro.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      candleSeriesRef.current = null;
+      volumeSeriesRef.current = null;
+    };
+  }, []);
+
+  // Update data without recreating chart
+  useEffect(() => {
+    if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) return;
 
     const candleData = data.map((bar) => ({
       time: bar.time,
@@ -85,37 +114,18 @@ export function CandlestickChart({ data }: CandlestickChartProps) {
         : "rgba(239, 83, 80, 0.3)",
     }));
 
-    candlestickSeries.setData(candleData);
-    volumeSeries.setData(volumeData);
+    candleSeriesRef.current.setData(candleData);
+    volumeSeriesRef.current.setData(volumeData);
 
     // Show last ~2 months by default
     if (candleData.length > 60) {
-      chart.timeScale().setVisibleLogicalRange({
+      chartRef.current.timeScale().setVisibleLogicalRange({
         from: candleData.length - 60,
         to: candleData.length - 1,
       });
     } else {
-      chart.timeScale().fitContent();
+      chartRef.current.timeScale().fitContent();
     }
-
-    const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      chart.applyOptions({ width, height });
-    });
-    ro.observe(container);
-
-    // Theme observer — watch for class changes on <html>
-    const mo = new MutationObserver(() => {
-      chart.applyOptions(getTheme(isDark()));
-    });
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-
-    return () => {
-      mo.disconnect();
-      ro.disconnect();
-      chart.remove();
-      chartRef.current = null;
-    };
   }, [data]);
 
   return <div ref={containerRef} className="h-[400px] w-full" />;

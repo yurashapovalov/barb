@@ -20,6 +20,7 @@ interface InstrumentPanelProps {
   exchange?: string;
   imageUrl?: string;
   ohlcData?: OHLCBar[] | null;
+  ohlcLoading?: boolean;
   conversations: Conversation[];
   loading: boolean;
   onSend: (text: string) => void;
@@ -34,7 +35,7 @@ export function InstrumentPanel(props: InstrumentPanelProps) {
   );
 }
 
-function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, ohlcData, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
+function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, ohlcData, ohlcLoading, conversations, loading, onSend, onSelectChat }: InstrumentPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -50,7 +51,13 @@ function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, ohlcDa
               {exchange && <span> {exchange}</span>}
             </h1>
           </div>
-          {ohlcData && <CandlestickChart data={ohlcData} />}
+          {ohlcData ? (
+            <CandlestickChart data={ohlcData} />
+          ) : ohlcLoading ? (
+            <div className="flex h-[400px] items-center justify-center">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+            </div>
+          ) : null}
         </div>
         {loading ? (
           <div className="text-sm text-muted-foreground">Loading...</div>

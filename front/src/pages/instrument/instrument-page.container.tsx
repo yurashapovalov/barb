@@ -15,7 +15,7 @@ export function InstrumentPageContainer() {
   const conversations = allConversations.filter((c) => c.instrument === symbol);
   const navigate = useNavigate();
   const { sidebarOpen, toggleSidebar } = useSidebar();
-  const { data: ohlcData } = useOHLC(symbol);
+  const { data: ohlcData, loading: ohlcLoading } = useOHLC(symbol);
 
   const instrument = instruments.find((i) => i.instrument === symbol);
 
@@ -43,6 +43,7 @@ export function InstrumentPageContainer() {
       exchange={instrument?.exchange}
       imageUrl={instrument?.image_url ?? undefined}
       ohlcData={ohlcData}
+      ohlcLoading={ohlcLoading}
       conversations={conversations}
       loading={loading}
       onSend={handleSend}

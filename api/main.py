@@ -368,8 +368,11 @@ def get_ohlc(symbol: str):
 
 
 @app.post("/api/admin/reload-data")
-def reload_data():
+def reload_data(token: str = ""):
     """Clear load_data LRU cache so next request picks up fresh parquet files."""
+    settings = get_settings()
+    if not settings.admin_token or token != settings.admin_token:
+        raise HTTPException(403, "Invalid admin token")
     load_data.cache_clear()
     log.info("Data cache cleared")
     return {"status": "ok"}
