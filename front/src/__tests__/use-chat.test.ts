@@ -50,7 +50,7 @@ beforeEach(() => {
 describe("useChat", () => {
   it("starts with empty messages when no conversationId", () => {
     const { result } = renderHook(() =>
-      useChat({ conversationId: undefined, token: TOKEN }),
+      useChat({ conversationId: undefined, token: TOKEN, instrument: "NQ" }),
     );
 
     expect(result.current.messages).toEqual([]);
@@ -66,7 +66,7 @@ describe("useChat", () => {
     mockedApi.getMessages.mockResolvedValue(msgs);
 
     const { result } = renderHook(() =>
-      useChat({ conversationId: "conv-1", token: TOKEN }),
+      useChat({ conversationId: "conv-1", token: TOKEN, instrument: "NQ" }),
     );
 
     await waitFor(() => {
@@ -79,7 +79,7 @@ describe("useChat", () => {
     mockedApi.getMessages.mockRejectedValue(new Error("Network error"));
 
     const { result } = renderHook(() =>
-      useChat({ conversationId: "conv-1", token: TOKEN }),
+      useChat({ conversationId: "conv-err", token: TOKEN, instrument: "NQ" }),
     );
 
     await waitFor(() => {
@@ -108,6 +108,7 @@ describe("useChat", () => {
       useChat({
         conversationId: undefined,
         token: TOKEN,
+        instrument: "NQ",
         onConversationCreated: onCreated,
       }),
     );
@@ -128,7 +129,7 @@ describe("useChat", () => {
     mockStreamSuccess();
 
     const { result } = renderHook(() =>
-      useChat({ conversationId: "conv-1", token: TOKEN }),
+      useChat({ conversationId: "conv-send", token: TOKEN, instrument: "NQ" }),
     );
 
     await waitFor(() => {
@@ -141,7 +142,7 @@ describe("useChat", () => {
 
     expect(mockedApi.createConversation).not.toHaveBeenCalled();
     expect(mockedApi.sendMessageStream).toHaveBeenCalledWith(
-      "conv-1", "What is the range?", TOKEN,
+      "conv-send", "What is the range?", TOKEN,
       expect.any(Object), expect.any(AbortSignal),
     );
     // user + assistant placeholder
@@ -155,7 +156,7 @@ describe("useChat", () => {
     mockedApi.sendMessageStream.mockRejectedValue(new Error("Server down"));
 
     const { result } = renderHook(() =>
-      useChat({ conversationId: "conv-1", token: TOKEN }),
+      useChat({ conversationId: "conv-stream-err", token: TOKEN, instrument: "NQ" }),
     );
 
     await waitFor(() => {
@@ -163,7 +164,7 @@ describe("useChat", () => {
     });
 
     await act(async () => {
-      await result.current.send("hello");
+      await result.current.send("hello").catch(() => {});
     });
 
     expect(result.current.messages).toHaveLength(0);
@@ -180,7 +181,7 @@ describe("useChat", () => {
     );
 
     const { result } = renderHook(() =>
-      useChat({ conversationId: "conv-1", token: TOKEN }),
+      useChat({ conversationId: "conv-sse-err", token: TOKEN, instrument: "NQ" }),
     );
 
     await waitFor(() => {
@@ -198,11 +199,11 @@ describe("useChat", () => {
     mockedApi.createConversation.mockRejectedValue(new Error("Auth failed"));
 
     const { result } = renderHook(() =>
-      useChat({ conversationId: undefined, token: TOKEN }),
+      useChat({ conversationId: undefined, token: TOKEN, instrument: "NQ" }),
     );
 
     await act(async () => {
-      await result.current.send("hello");
+      await result.current.send("hello").catch(() => {});
     });
 
     expect(result.current.error).toBe("Auth failed");

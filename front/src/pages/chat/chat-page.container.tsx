@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EllipsisIcon, PanelLeftIcon, Trash2Icon } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
 import { useConversations } from "@/hooks/use-conversations";
@@ -67,14 +68,16 @@ export function ChatPageContainer() {
 
   // Auto-send initial message from instrument page
   const sentRef = useRef(false);
+  const sendRef = useRef(send);
+  sendRef.current = send;
 
   useEffect(() => {
     if (initialMessage && !sentRef.current) {
       sentRef.current = true;
       sessionStorage.removeItem("barb:initial-msg");
-      send(initialMessage);
+      sendRef.current(initialMessage);
     }
-  }, [initialMessage, send]);
+  }, [initialMessage]);
 
   // Show preview until useChat has the real messages (not on error — send failed)
   const displayMessages = messages.length === 0 && previewMessage && !error ? [previewMessage] : messages;
@@ -90,7 +93,7 @@ export function ChatPageContainer() {
     <PanelHeader>
       <div className="flex items-center gap-1.5">
         {!sidebarOpen && (
-          <Button variant="ghost" size="icon-sm" onClick={toggleSidebar}>
+          <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label="Open sidebar">
             <PanelLeftIcon />
           </Button>
         )}
@@ -99,7 +102,7 @@ export function ChatPageContainer() {
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm">
+                <Button variant="ghost" size="icon-sm" aria-label="Chat options">
                   <EllipsisIcon />
                 </Button>
               </DropdownMenuTrigger>
@@ -111,7 +114,7 @@ export function ChatPageContainer() {
                       await remove(id);
                       navigate(`/i/${symbol}`, { replace: true });
                     } catch (err) {
-                      console.error("Failed to remove chat:", err instanceof Error ? err.message : err);
+                      toast.error(err instanceof Error ? err.message : "Failed to remove chat");
                     }
                   }}
                 >
@@ -131,7 +134,6 @@ export function ChatPageContainer() {
       chatHeader={chatHeader}
       messages={displayMessages}
       isLoading={isLoading}
-      error={error}
       send={send}
       selectedData={selectedData}
       onSelectData={handleSelectData}

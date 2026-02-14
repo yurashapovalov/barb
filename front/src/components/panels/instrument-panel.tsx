@@ -41,7 +41,7 @@ function InstrumentPanelInner({ header, symbol, name, exchange, imageUrl, conver
       <div className="flex-1 overflow-y-auto p-4">
         <div className="mb-6 flex items-center gap-3">
           <Avatar size="lg" src={imageUrl} fallback={symbol.slice(0, 2)} />
-          <h1 className="text-2xl font-semibold">
+          <h1 className="text-xl font-semibold">
             {name}
             {exchange && <span> {exchange}</span>}
           </h1>

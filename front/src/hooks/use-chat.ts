@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { createConversation, getMessages, sendMessageStream } from "@/lib/api";
 import type { DataBlock, Message } from "@/types";
 
@@ -68,7 +69,10 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) {
+          setError(err.message);
+          toast.error(err.message);
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -109,7 +113,9 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
         try { onConversationCreated?.(conv.id); } catch { /* navigate may throw */ }
       } catch (err) {
         isSendingRef.current = false;
-        setError(err instanceof Error ? err.message : "Failed to create conversation");
+        const msg = err instanceof Error ? err.message : "Failed to create conversation";
+        setError(msg);
+        toast.error(msg);
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         setIsLoading(false);
         throw err;
@@ -240,11 +246,14 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
         },
         onError(event) {
           setError(event.error);
+          toast.error(event.error);
         },
       }, abort.signal);
     } catch (err) {
       if (abort.signal.aborted) return;
-      setError(err instanceof Error ? err.message : "Failed to send message");
+      const msg = err instanceof Error ? err.message : "Failed to send message";
+      setError(msg);
+      toast.error(msg);
       // Remove both optimistic messages on error
       setMessages((prev) => prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId));
       throw err;

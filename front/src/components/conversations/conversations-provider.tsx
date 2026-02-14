@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { createConversation, listConversations, removeConversation } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/cache";
@@ -21,10 +22,12 @@ export function ConversationsProvider() {
   const [loading, setLoading] = useState(
     () => !userId || readCache(cacheKey(userId)) === null,
   );
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     if (!token || !userId) return;
     let cancelled = false;
+    setError(null);
     listConversations(token)
       .then((data) => {
         if (!cancelled) {
@@ -32,10 +35,18 @@ export function ConversationsProvider() {
           writeCache(cacheKey(userId), data);
         }
       })
-      .catch((err) => { if (!cancelled) console.error("Failed to load conversations:", err); })
+      .catch((err) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : "Failed to load conversations";
+          setError(msg);
+          toast.error(msg);
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [token, userId]);
+  };
+
+  useEffect(load, [token, userId]);
 
   const updateCache = (next: Conversation[]) => {
     if (userId) writeCache(cacheKey(userId), next);
@@ -43,12 +54,23 @@ export function ConversationsProvider() {
 
   const refresh = () => {
     if (!token) return;
+    setError(null);
     listConversations(token)
       .then((data) => {
         setConversations(data);
         updateCache(data);
       })
-      .catch((err) => console.error("Failed to refresh conversations:", err));
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "Failed to refresh conversations";
+        setError(msg);
+        toast.error(msg);
+      });
+  };
+
+  const retry = () => {
+    setError(null);
+    setLoading(true);
+    load();
   };
 
   const updateTitle = (id: string, title: string) => {
@@ -81,7 +103,7 @@ export function ConversationsProvider() {
   };
 
   return (
-    <ConversationsContext.Provider value={{ conversations, loading, refresh, updateTitle, create, remove }}>
+    <ConversationsContext.Provider value={{ conversations, loading, error, refresh, retry, updateTitle, create, remove }}>
       <Outlet />
     </ConversationsContext.Provider>
   );

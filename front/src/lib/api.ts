@@ -22,12 +22,29 @@ function authHeaders(token: string) {
   };
 }
 
+async function checkAuth(res: Response): Promise<void> {
+  if (res.status === 401) {
+    const { supabase } = await import("@/lib/supabase");
+    await supabase.auth.signOut();
+    throw new Error("Session expired");
+  }
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
+  await checkAuth(res);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+async function handleVoidResponse(res: Response): Promise<void> {
+  await checkAuth(res);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API error ${res.status}: ${text}`);
+  }
 }
 
 export async function createConversation(
@@ -64,10 +81,7 @@ export async function removeConversation(
     method: "DELETE",
     headers: authHeaders(token),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
+  await handleVoidResponse(res);
 }
 
 export async function getMessages(
@@ -112,10 +126,7 @@ export async function addUserInstrument(
     headers: authHeaders(token),
     body: JSON.stringify({ instrument: symbol }),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
+  await handleVoidResponse(res);
 }
 
 export async function removeUserInstrument(
@@ -126,10 +137,45 @@ export async function removeUserInstrument(
     method: "DELETE",
     headers: authHeaders(token),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
+  await handleVoidResponse(res);
+}
+
+// --- SSE type guards ---
+
+function has<K extends string>(obj: unknown, key: K): obj is Record<K, unknown> {
+  return typeof obj === "object" && obj !== null && key in obj;
+}
+
+function isToolStartEvent(obj: unknown): obj is SSEToolStartEvent {
+  return has(obj, "tool_name") && typeof obj.tool_name === "string" && has(obj, "input");
+}
+
+function isToolEndEvent(obj: unknown): obj is SSEToolEndEvent {
+  return has(obj, "tool_name") && typeof obj.tool_name === "string" && has(obj, "duration_ms");
+}
+
+function isTextDeltaEvent(obj: unknown): obj is SSETextDeltaEvent {
+  return has(obj, "delta") && typeof obj.delta === "string";
+}
+
+function isDoneEvent(obj: unknown): obj is SSEDoneEvent {
+  return has(obj, "answer") && typeof obj.answer === "string";
+}
+
+function isPersistEvent(obj: unknown): obj is SSEPersistEvent {
+  return has(obj, "message_id") && has(obj, "persisted");
+}
+
+function isTitleUpdateEvent(obj: unknown): obj is SSETitleUpdateEvent {
+  return has(obj, "title") && typeof obj.title === "string";
+}
+
+function isErrorEvent(obj: unknown): obj is SSEErrorEvent {
+  return has(obj, "error") && typeof obj.error === "string";
+}
+
+function isDataBlockEvent(obj: unknown): obj is SSEDataBlockEvent {
+  return has(obj, "query") && has(obj, "result");
 }
 
 // --- Streaming ---
@@ -159,6 +205,7 @@ export async function sendMessageStream(
     signal,
   });
 
+  await checkAuth(res);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
@@ -205,31 +252,30 @@ export async function sendMessageStream(
         continue;
       }
 
-      const obj = data as Record<string, unknown>;
       switch (eventType) {
         case "tool_start":
-          if (obj.tool_name) callbacks.onToolStart?.(obj as unknown as SSEToolStartEvent);
+          if (isToolStartEvent(data)) callbacks.onToolStart?.(data);
           break;
         case "tool_end":
-          if (obj.tool_name) callbacks.onToolEnd?.(obj as unknown as SSEToolEndEvent);
+          if (isToolEndEvent(data)) callbacks.onToolEnd?.(data);
           break;
         case "data_block":
-          callbacks.onDataBlock?.(obj as unknown as SSEDataBlockEvent);
+          if (isDataBlockEvent(data)) callbacks.onDataBlock?.(data);
           break;
         case "text_delta":
-          if (typeof obj.delta === "string") callbacks.onTextDelta?.(obj as unknown as SSETextDeltaEvent);
+          if (isTextDeltaEvent(data)) callbacks.onTextDelta?.(data);
           break;
         case "done":
-          if (typeof obj.answer === "string") callbacks.onDone?.(obj as unknown as SSEDoneEvent);
+          if (isDoneEvent(data)) callbacks.onDone?.(data);
           break;
         case "persist":
-          callbacks.onPersist?.(obj as unknown as SSEPersistEvent);
+          if (isPersistEvent(data)) callbacks.onPersist?.(data);
           break;
         case "title_update":
-          if (typeof obj.title === "string") callbacks.onTitleUpdate?.(obj as unknown as SSETitleUpdateEvent);
+          if (isTitleUpdateEvent(data)) callbacks.onTitleUpdate?.(data);
           break;
         case "error":
-          if (typeof obj.error === "string") callbacks.onError?.(obj as unknown as SSEErrorEvent);
+          if (isErrorEvent(data)) callbacks.onError?.(data);
           break;
       }
     }

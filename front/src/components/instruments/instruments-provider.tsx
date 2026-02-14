@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { addUserInstrument, listUserInstruments, removeUserInstrument } from "@/lib/api";
 import { readCache, writeCache } from "@/lib/cache";
@@ -21,10 +22,12 @@ export function InstrumentsProvider() {
   const [loading, setLoading] = useState(
     () => !userId || readCache(cacheKey(userId)) === null,
   );
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     if (!token || !userId) return;
     let cancelled = false;
+    setError(null);
     listUserInstruments(token)
       .then((data) => {
         if (!cancelled) {
@@ -32,10 +35,24 @@ export function InstrumentsProvider() {
           writeCache(cacheKey(userId), data);
         }
       })
-      .catch((err) => { if (!cancelled) console.error("Failed to load instruments:", err); })
+      .catch((err) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : "Failed to load instruments";
+          setError(msg);
+          toast.error(msg);
+        }
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [token, userId]);
+  };
+
+  useEffect(load, [token, userId]);
+
+  const retry = () => {
+    setError(null);
+    setLoading(true);
+    load();
+  };
 
   const add = async (inst: Instrument) => {
     if (!token) throw new Error("Not authenticated");
@@ -65,7 +82,7 @@ export function InstrumentsProvider() {
   };
 
   return (
-    <InstrumentsContext.Provider value={{ instruments, loading, add, remove }}>
+    <InstrumentsContext.Provider value={{ instruments, loading, error, add, remove, retry }}>
       <Outlet />
     </InstrumentsContext.Provider>
   );

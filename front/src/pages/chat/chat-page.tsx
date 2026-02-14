@@ -9,7 +9,6 @@ interface ChatPageProps {
   chatHeader: ReactNode;
   messages: ChatState["messages"];
   isLoading: ChatState["isLoading"];
-  error: ChatState["error"];
   send: ChatState["send"];
   selectedData: DataBlock | null;
   onSelectData: (data: DataBlock) => void;
@@ -22,7 +21,6 @@ export function ChatPage({
   chatHeader,
   messages,
   isLoading,
-  error,
   send,
   selectedData,
   onSelectData,
@@ -33,7 +31,7 @@ export function ChatPage({
   return (
     <div className="flex h-full">
       <div className="min-w-full flex-1 lg:min-w-0">
-        <ChatPanel header={chatHeader} messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={onSelectData} />
+        <ChatPanel header={chatHeader} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} />
       </div>
       {selectedData && (
         <>

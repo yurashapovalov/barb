@@ -119,7 +119,7 @@ export function DataPanel({ data, onClose }: DataPanelProps) {
     <div className="flex h-full flex-col bg-background">
       <PanelHeader>
         <div />
-        <Button variant="ghost" size="icon-sm" onClick={onClose}>
+        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close panel">
           <XIcon className="size-4" />
         </Button>
       </PanelHeader>

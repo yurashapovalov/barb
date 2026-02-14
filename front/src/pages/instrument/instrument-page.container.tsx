@@ -26,7 +26,7 @@ export function InstrumentPageContainer() {
   const header = (
     <PanelHeader>
       {!sidebarOpen && (
-        <Button variant="ghost" size="icon-sm" onClick={toggleSidebar}>
+        <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label="Open sidebar">
           <PanelLeftIcon />
         </Button>
       )}

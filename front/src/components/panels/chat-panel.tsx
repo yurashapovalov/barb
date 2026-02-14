@@ -1,4 +1,4 @@
-import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai/conversation";
+import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai/conversation";
 import { DataCard } from "@/components/ai/data-card";
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai/message";
 import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
@@ -19,21 +19,20 @@ interface ChatPanelProps {
   header?: React.ReactNode;
   messages: ChatState["messages"];
   isLoading: ChatState["isLoading"];
-  error: ChatState["error"];
   send: ChatState["send"];
   selectedData?: DataBlock | null;
   onSelectData?: (data: DataBlock) => void;
 }
 
-export function ChatPanel({ header, messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
+export function ChatPanel({ header, messages, isLoading, send, selectedData, onSelectData }: ChatPanelProps) {
   return (
     <PromptInputProvider>
-      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} error={error} send={send} selectedData={selectedData} onSelectData={onSelectData} />
+      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} />
     </PromptInputProvider>
   );
 }
 
-function ChatPanelInner({ header, messages, isLoading, error, send, selectedData, onSelectData }: ChatPanelProps) {
+function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSelectData }: ChatPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -41,6 +40,12 @@ function ChatPanelInner({ header, messages, isLoading, error, send, selectedData
     <div className="flex h-full flex-col bg-background">
       {header}
       <Conversation className="relative min-h-0 flex-1">
+        {messages.length === 0 && !isLoading ? (
+          <ConversationEmptyState
+            title="No messages yet"
+            description="Ask a question to get started"
+          />
+        ) : (
         <ConversationContent className="mx-auto max-w-[700px] gap-12 pb-12">
           {messages.map((msg, i) => {
             const isModel = msg.role === "model";
@@ -76,10 +81,6 @@ function ChatPanelInner({ header, messages, isLoading, error, send, selectedData
             );
           })}
         </ConversationContent>
-        {error && (
-          <div className="mx-4 rounded bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
         )}
         <ConversationScrollButton />
       </Conversation>

@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
+import { Toaster } from "sonner";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { InstrumentsProvider } from "@/components/instruments/instruments-provider";
@@ -10,10 +11,14 @@ import { LoginPageContainer } from "@/pages/login/login-page.container";
 import { ChatPageContainer } from "@/pages/chat/chat-page.container";
 import { HomePage } from "@/pages/home/home-page";
 import { InstrumentPageContainer } from "@/pages/instrument/instrument-page.container";
+import { useTheme } from "@/hooks/use-theme";
 
 export function App() {
+  const { preference } = useTheme();
+
   return (
     <ErrorBoundary>
+      <Toaster theme={preference} />
       <BrowserRouter>
         <AuthProvider>
           <Routes>

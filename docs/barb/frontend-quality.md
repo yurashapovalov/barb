@@ -100,9 +100,7 @@ Intentional, not premature:
 
 Known deviations from this checklist (update as we fix them):
 
-- **Discriminated unions**: async states use `boolean + null`, not discriminated unions.
-- **Error recovery**: no retry mechanism on network errors. User must reload or re-send.
-- **A11y**: not audited. Icon buttons may be missing labels.
-- **Tests**: 4 test files for 46 source files. Critical paths (auth, chat, streaming) not covered.
-- **Code splitting**: no `React.lazy`, entire app in one bundle.
+- **Discriminated unions**: async states use `boolean + null + error`, not discriminated unions. Decided to keep this pattern because provider data (conversations, instruments) persists across loading/error states — a pure discriminated union where data only exists in "success" doesn't fit when you want to show stale cached data during refresh.
+- **Tests**: 4 test files for 58 source files. Critical paths (auth, chat streaming, component rendering) not covered.
+- **Code splitting**: no `React.lazy`, entire app in one bundle. App is small — add when bundle size becomes a problem.
 - **sidebar-panel.tsx**: uses 7 hooks directly instead of receiving props. Documented exception — splitting would create a 15+ prop interface for no real benefit.
