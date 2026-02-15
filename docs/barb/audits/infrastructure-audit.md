@@ -1,268 +1,313 @@
 # Audit: infrastructure.md
 
-Date: 2026-02-15
+Date: 2026-02-15 (full re-audit)
 
-## Claims
+Source: `docs/barb/infrastructure.md`
 
-### Claim 1
-- **Doc**: line 6: "GitHub (yurashapovalov/barb)"
+Verified against: `docker-compose.yml`, `docker-compose.prod.yml`, `Caddyfile`, `Dockerfile`, `.github/workflows/deploy.yml`, `api/config.py`, `api/auth.py`, `api/main.py`, `api/db.py`, `front/vercel.json`, `front/package.json`, `config/models.py`, `assistant/chat.py`, all 19 files in `supabase/migrations/`.
+
+---
+
+## Section: Deploy (lines 3-18)
+
+### Claim 1 — "GitHub (yurashapovalov/barb)" (line 6)
 - **Verdict**: UNVERIFIABLE
-- **Evidence**: remote repository name, cannot verify from local code
+- **Evidence**: Remote repository name cannot be verified from local code alone.
 
-### Claim 2
-- **Doc**: line 8: "GitHub Actions -> тесты + деплой бэкенда на Hetzner"
+### Claim 2 — "GitHub Actions -> тесты + деплой бэкенда на Hetzner" (line 8)
 - **Verdict**: ACCURATE
-- **Evidence**: `.github/workflows/deploy.yml:8-41` — test job + deploy job SSHs to 37.27.204.135
+- **Evidence**: `.github/workflows/deploy.yml` — `test` job (lint + pytest), `deploy` job (SSH to Hetzner).
 
-### Claim 3
-- **Doc**: line 9: "Vercel -> автодеплой фронта"
+### Claim 3 — "Vercel -> автодеплой фронта" (line 9)
 - **Verdict**: UNVERIFIABLE
-- **Evidence**: `front/vercel.json` exists but Vercel deployment is external
+- **Evidence**: `front/vercel.json` exists with SPA rewrite, but Vercel deployment is configured externally.
 
-### Claim 4
-- **Doc**: line 12: "Бэкенд (Hetzner, 37.27.204.135)"
+### Claim 4 — "Бэкенд (Hetzner, 37.27.204.135)" (line 12)
 - **Verdict**: ACCURATE
-- **Evidence**: `.github/workflows/deploy.yml:35` — `host: 37.27.204.135`
+- **Evidence**: `.github/workflows/deploy.yml:35` — `host: 37.27.204.135`.
 
-### Claim 5
-- **Doc**: line 14: "Docker Compose: docker-compose.yml + docker-compose.prod.yml"
+### Claim 5 — "Docker Compose: docker-compose.yml + docker-compose.prod.yml" (line 14)
 - **Verdict**: ACCURATE
-- **Evidence**: both files exist; `.github/workflows/deploy.yml:41` uses both
+- **Evidence**: Both files exist. `.github/workflows/deploy.yml:41` — `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`.
 
-### Claim 6
-- **Doc**: line 15: "Uvicorn, 2 воркера"
+### Claim 6 — "Caddy reverse proxy: автоматический TLS, api.getbarb.trade -> api:8000" (line 15)
 - **Verdict**: ACCURATE
-- **Evidence**: `docker-compose.prod.yml:12` — `--workers 2`
+- **Evidence**: `Caddyfile:1-3` — `api.getbarb.trade { reverse_proxy api:8000 }`. Caddy automatically provisions TLS when a domain is specified.
 
-### Claim 7
-- **Doc**: line 16: "Данные (Parquet) в volume /app/data"
+### Claim 7 — "Uvicorn, 2 воркера" (line 16)
 - **Verdict**: ACCURATE
-- **Evidence**: `docker-compose.prod.yml:14` — `./data:/app/data`
+- **Evidence**: `docker-compose.prod.yml:12` — `uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 2`.
 
-### Claim 8
-- **Doc**: line 17: "Деплой: SSH -> git pull -> docker compose up --build"
+### Claim 8 — "Данные (Parquet) в volume ./data:/app/data" (line 17)
 - **Verdict**: ACCURATE
-- **Evidence**: `.github/workflows/deploy.yml:38-41`
+- **Evidence**: `docker-compose.prod.yml:14` — `./data:/app/data`. Also `docker-compose.yml:7` same mount.
 
-### Claim 9
-- **Doc**: line 20: "Root directory: front/"
+### Claim 9 — "Деплой: SSH -> cd /opt/barb -> git pull -> docker compose up -d --build -> docker system prune -f" (line 18)
+- **Verdict**: ACCURATE
+- **Evidence**: `.github/workflows/deploy.yml:38-42` — exact match of the command sequence.
+
+---
+
+## Section: Фронт (lines 20-24)
+
+### Claim 10 — "Root directory: front/" (line 22)
 - **Verdict**: UNVERIFIABLE
-- **Evidence**: Vercel root directory configured in dashboard, not in code
+- **Evidence**: Vercel root directory is configured in dashboard, not in code. `front/vercel.json` exists at the right path.
 
-### Claim 10
-- **Doc**: line 21: "Build: npm run build -> dist/"
+### Claim 11 — "Build: tsc -b && vite build -> dist/" (line 23)
 - **Verdict**: ACCURATE
-- **Evidence**: `front/package.json:8` — `"build": "tsc -b && vite build"`
+- **Evidence**: `front/package.json:8` — `"build": "tsc -b && vite build"`. Vite outputs to `dist/` by default.
 
-### Claim 11
-- **Doc**: line 22: "SPA rewrite: vercel.json"
+### Claim 12 — "SPA rewrite: vercel.json -> все пути на index.html" (line 24)
 - **Verdict**: ACCURATE
-- **Evidence**: `front/vercel.json:3` — rewrite rule to index.html
+- **Evidence**: `front/vercel.json:3` — `{ "source": "/(.*)", "destination": "/index.html" }`.
 
-### Claim 12
-- **Doc**: line 27: "getbarb.trade -> Vercel (фронт)"
+---
+
+## Section: DNS (lines 26-29)
+
+### Claim 13 — "getbarb.trade -> Vercel (фронт)" (line 28)
 - **Verdict**: UNVERIFIABLE
-- **Evidence**: DNS configuration is external
+- **Evidence**: DNS configuration is external.
 
-### Claim 13
-- **Doc**: line 28: "api.getbarb.trade -> 37.27.204.135"
-- **Verdict**: UNVERIFIABLE
-- **Evidence**: `Caddyfile:1` references `api.getbarb.trade` but DNS is external
+### Claim 14 — "api.getbarb.trade -> 37.27.204.135 (Caddy -> Uvicorn)" (line 29)
+- **Verdict**: PARTIALLY VERIFIABLE
+- **Evidence**: `Caddyfile:1` references `api.getbarb.trade`. `.github/workflows/deploy.yml:35` confirms `37.27.204.135`. DNS A record itself is external.
 
-### Claim 14
-- **Doc**: line 32: "Файл: .github/workflows/deploy.yml"
+---
+
+## Section: CI (lines 31-38)
+
+### Claim 15 — "Файл: .github/workflows/deploy.yml" (line 33)
 - **Verdict**: ACCURATE
-- **Evidence**: file exists
+- **Evidence**: File exists at that path.
 
-### Claim 15
-- **Doc**: line 34: "test -- pip install -> ruff check -> pytest"
+### Claim 16 — "test: pip install -e .[dev] -> ruff check . -> pytest --tb=short -q" (line 35)
 - **Verdict**: ACCURATE
-- **Evidence**: `.github/workflows/deploy.yml:20-26`
+- **Evidence**: `.github/workflows/deploy.yml:20-26` — exact match.
 
-### Claim 16
-- **Doc**: line 35: "deploy -- SSH -> git pull -> docker compose up"
+### Claim 17 — "deploy: SSH на Hetzner -> git pull -> docker compose up" (line 36)
 - **Verdict**: ACCURATE
-- **Evidence**: `.github/workflows/deploy.yml:32-41`
+- **Evidence**: `.github/workflows/deploy.yml:32-42`.
 
-### Claim 17
-- **Doc**: line 37: "Deploy запускается только после успешных тестов"
+### Claim 18 — "Deploy запускается только после успешных тестов (needs: test)" (line 38)
 - **Verdict**: ACCURATE
-- **Evidence**: `.github/workflows/deploy.yml:29` — `needs: test`
+- **Evidence**: `.github/workflows/deploy.yml:29` — `needs: test`.
 
-### Claim 18
-- **Doc**: line 42: "CORS: https://getbarb.trade"
+---
+
+## Section: Production environment (lines 42-47)
+
+### Claim 19 — "CORS: https://getbarb.trade,http://localhost:3000" (line 43)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.prod.yml:7` — `CORS_ORIGINS=${CORS_ORIGINS:-https://getbarb.trade,http://localhost:3000}`. Default matches exactly.
+
+### Claim 20 — "ENV: production" (line 44)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.prod.yml:6` — `ENV=production`.
+
+### Claim 21 — "Логи: JSON формат (_JSONFormatter)" (line 45)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/main.py:30-42` — `_JSONFormatter` class used when `ENV == "production"`. Outputs JSON with `ts`, `level`, `logger`, `msg`, `request_id`.
+
+### Claim 22 — "2 uvicorn воркера (--workers 2)" (line 46)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.prod.yml:12` — `--workers 2`.
+
+### Claim 23 — "Caddy: порты 80/443, автоматический TLS" (line 47)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.prod.yml:19-20` — ports `80:80` and `443:443`. Caddy auto-provisions TLS.
+
+---
+
+## Section: Development environment (lines 49-55)
+
+### Claim 24 — "CORS: * (default)" (line 50)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/main.py:76` — `os.getenv("CORS_ORIGINS", "*")`. Dev compose does not set `CORS_ORIGINS`, so default `*` applies.
+
+### Claim 25 — "ENV: development" (line 51)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.yml:19` — `ENV=development`.
+
+### Claim 26 — "Логи: plaintext" (line 52)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/main.py:48-52` — `logging.basicConfig` with text format in non-production.
+
+### Claim 27 — "Hot-reload (--reload) через volume mounts" (line 53)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.yml:20` — `--reload`. Lines 7-11 mount source directories.
+
+### Claim 28 — "Исходники монтируются: barb/, assistant/, api/, config/, data/" (line 54)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.yml:7-11` — mounts `./data`, `./barb`, `./assistant`, `./api`, `./config`.
+
+### Claim 29 — "Healthcheck: curl -f http://localhost:8000/health каждые 30s" (line 55)
+- **Verdict**: ACCURATE
+- **Evidence**: `docker-compose.yml:21-25` — `curl -f http://localhost:8000/health`, `interval: 30s`.
+
+---
+
+## Section: Секреты — Бэкенд (lines 59-66)
+
+### Claim 30 — "ANTHROPIC_API_KEY — Claude API" (line 60)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/config.py:9` — `anthropic_api_key: str`. `assistant/chat.py:34` — `anthropic.Anthropic(api_key=api_key)`. Both compose files pass it.
+
+### Claim 31 — "GEMINI_API_KEY — Gemini API" (line 61)
+- **Verdict**: INACCURATE
+- **Evidence**: `GEMINI_API_KEY` is passed in both `docker-compose.yml:14` and `docker-compose.prod.yml:9`, but `api/config.py` does NOT define `gemini_api_key`. No Python code reads this env var. `config/models.py` defines Gemini model configs, and `assistant/chat.py:34` uses `anthropic.Anthropic` (not Gemini SDK). The env var is unused dead config.
+- **Note**: The var is present in compose files and would be needed if/when the Gemini migration completes, but calling it a used backend secret is currently inaccurate.
+
+### Claim 32 — "SUPABASE_URL — Supabase endpoint" (line 62)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/config.py:10` — `supabase_url: str`. `api/db.py:12` uses it to create Supabase client.
+
+### Claim 33 — "SUPABASE_SERVICE_KEY — Supabase service role (полный доступ)" (line 63)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/config.py:11` — `supabase_service_key: str`. `api/db.py:12` uses it as the key for `create_client()`.
+
+### Claim 34 — "ADMIN_TOKEN — для POST /api/admin/reload-data (в dev compose, на сервере через .env)" (line 64)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/config.py:12` — `admin_token: str`. `api/main.py:374` — validates `token != settings.admin_token`. `docker-compose.yml:18` passes `ADMIN_TOKEN=${ADMIN_TOKEN}`. In production, Docker Compose merges environment lists from both compose files, so `ADMIN_TOKEN` from the base file is still available.
+
+### Claim 35 — "Backend НЕ использует SUPABASE_ANON_KEY" (line 66)
+- **Verdict**: ACCURATE
+- **Evidence**: `api/config.py` has no `supabase_anon_key` field. `api/db.py` uses only `supabase_service_key`. `docker-compose.yml:16` passes it, but backend code never reads it. `docker-compose.prod.yml` does not pass it.
+
+### Claim 36 — "Backend НЕ использует SUPABASE_JWT_SECRET — JWT валидируется через JWKS endpoint" (line 66)
+- **Verdict**: ACCURATE
+- **Evidence**: No `SUPABASE_JWT_SECRET` in `api/config.py` or any compose file. `api/auth.py:15` — uses `PyJWKClient` with `{supabase_url}/auth/v1/.well-known/jwks.json`. JWT decoded with `ES256` algorithm and `audience="authenticated"`.
+
+---
+
+## Section: Секреты — Фронт (lines 68-70)
+
+### Claim 37 — "VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY — Supabase клиент" (line 69)
+- **Verdict**: ACCURATE
+- **Evidence**: `front/src/lib/supabase.ts:3-7` — reads both env vars, throws if missing.
+
+### Claim 38 — "VITE_API_URL — backend API" (line 70)
+- **Verdict**: ACCURATE
+- **Evidence**: `front/src/lib/api.ts:16` — `import.meta.env.VITE_API_URL ?? ""`.
+
+---
+
+## Section: Секреты — GitHub (lines 72-73)
+
+### Claim 39 — "SSH_PRIVATE_KEY — SSH ключ для деплоя на Hetzner" (line 73)
+- **Verdict**: ACCURATE
+- **Evidence**: `.github/workflows/deploy.yml:37` — `key: ${{ secrets.SSH_PRIVATE_KEY }}`.
+
+---
+
+## Section: База данных (lines 75-86)
+
+### Claim 40 — "6 таблиц + 1 view" (line 77)
+- **Verdict**: ACCURATE
+- **Evidence**: Migrations create 6 tables: `conversations`, `messages`, `tool_calls`, `instruments`, `exchanges`, `user_instruments`. Plus `instrument_full` view.
+
+### Claim 41 — "conversations — разговоры пользователей (RLS: user_id)" (line 78)
+- **Verdict**: ACCURATE
+- **Evidence**: `20260129_init.sql` — table with `user_id uuid`, RLS policies with `auth.uid() = user_id`.
+
+### Claim 42 — "messages — сообщения в разговорах (cascade delete)" (line 79)
+- **Verdict**: ACCURATE
+- **Evidence**: `20260129_init.sql:17` — `references public.conversations(id) on delete cascade`.
+
+### Claim 43 — "tool_calls — вызовы run_query (FK на messages)" (line 80)
+- **Verdict**: ACCURATE
+- **Evidence**: `20260129_init.sql:30` — `references public.messages(id) on delete cascade`.
+
+### Claim 44 — "instruments — торговые инструменты (public read, service-role write)" (line 81)
+- **Verdict**: ACCURATE
+- **Evidence**: `20260209_instruments.sql:27` — `"Anyone can read instruments" ... using (true)`. No insert/update/delete policies for anon users; service role bypasses RLS.
+
+### Claim 45 — "exchanges — биржи с ETH/maintenance (public read, service-role write)" (line 82)
 - **Verdict**: WRONG
-- **Evidence**: `docker-compose.prod.yml:7` — default includes `https://getbarb.trade,http://localhost:3000`
-- **Fix**: add `,http://localhost:3000` to CORS value
+- **Evidence**: ETH was moved to `instruments.config.sessions` in migration `20260216_eth_to_instruments.sql`. Maintenance was dropped entirely in `20260217_drop_maintenance.sql`. Current exchanges schema: `code text PK, name text, timezone text, image_url text`. No ETH or maintenance columns remain.
+- **Fix**: Change to `exchanges — биржи с timezone (public read, service-role write)`.
 
-### Claim 19
-- **Doc**: line 43: "ENV: production"
+### Claim 46 — "user_instruments — инструменты в workspace пользователя (RLS: user_id)" (line 83)
 - **Verdict**: ACCURATE
-- **Evidence**: `docker-compose.prod.yml:6` — `ENV=production`
+- **Evidence**: `20260221_user_instruments.sql` — `user_id uuid`, RLS with `auth.uid() = user_id`.
 
-### Claim 20
-- **Doc**: line 44: "Логи: JSON формат"
+### Claim 47 — "instrument_full — view: instruments + exchanges join" (line 84)
 - **Verdict**: ACCURATE
-- **Evidence**: `api/main.py:30-46` — `_JSONFormatter` in production
+- **Evidence**: `20260220_view_cleanup.sql` (latest definition) — `from instruments i join exchanges e on i.exchange = e.code`. Selects: `symbol, name, exchange, type, category, currency, default_session, data_start, data_end, events, notes, config, exchange_timezone, exchange_name`.
 
-### Claim 21
-- **Doc**: line 45: "2 uvicorn воркера"
+### Claim 48 — "RLS на всех user-scoped таблицах — пользователь видит только свои данные" (line 86)
 - **Verdict**: ACCURATE
-- **Evidence**: `docker-compose.prod.yml:12` — `--workers 2`
+- **Evidence**: RLS enabled on `conversations`, `messages`, `tool_calls`, `user_instruments` with user-scoped policies. `instruments` and `exchanges` have public-read RLS, which is not "user-scoped" but also not contradicted by the statement.
 
-### Claim 22
-- **Doc**: line 48: "CORS: *"
+---
+
+## Section: Dockerfile (lines 88-96)
+
+### Claim 49 — "FROM python:3.12-slim" (line 91)
 - **Verdict**: ACCURATE
-- **Evidence**: `api/main.py:76` — defaults to `"*"`
+- **Evidence**: `Dockerfile:1` — `FROM python:3.12-slim`.
 
-### Claim 23
-- **Doc**: line 49: "ENV: development"
+### Claim 50 — "COPY pyproject.toml, barb/, assistant/, config/, api/, scripts/" (line 92)
 - **Verdict**: ACCURATE
-- **Evidence**: `docker-compose.yml:19` — `ENV=development`
+- **Evidence**: `Dockerfile:11-16` — copies all listed items individually.
 
-### Claim 24
-- **Doc**: line 50: "Логи: plaintext"
+### Claim 51 — "pip install --no-cache-dir ." (line 93)
 - **Verdict**: ACCURATE
-- **Evidence**: `api/main.py:48-52` — `logging.basicConfig` with text format
+- **Evidence**: `Dockerfile:17` — `RUN pip install --no-cache-dir .`.
 
-### Claim 25
-- **Doc**: line 51: "Hot-reload через volume mounts"
+### Claim 52 — "Не копирует front/, tests/, data/ — фронт на Vercel, данные через volume" (line 96)
 - **Verdict**: ACCURATE
-- **Evidence**: `docker-compose.yml:7-11` — mounts all source dirs; line 20 — `--reload`
+- **Evidence**: Dockerfile has no COPY for `front/`, `tests/`, or `data/`. Data is mounted via volume (`./data:/app/data`). A `mkdir -p /app/data` placeholder is created.
 
-### Claim 26
-- **Doc**: line 52: "Все исходники монтируются в контейнер"
-- **Verdict**: ACCURATE
-- **Evidence**: `docker-compose.yml:7-11` — data, barb, assistant, api, config mounted
+---
 
-### Claim 27
-- **Doc**: line 56: "ANTHROPIC_API_KEY"
-- **Verdict**: ACCURATE
-- **Evidence**: `api/config.py:9` — `anthropic_api_key: str`
+## Missing from doc
 
-### Claim 28
-- **Doc**: line 57: "SUPABASE_ANON_KEY -- backend secret"
-- **Verdict**: OUTDATED
-- **Evidence**: `api/config.py` has no `supabase_anon_key`; only frontend uses it
-- **Fix**: remove from backend secrets, note as frontend-only
+### Missing 1 — SUPABASE_ANON_KEY in dev compose
+- **Detail**: `docker-compose.yml:16` passes `SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}` to the container, but the backend code never reads it. The doc correctly states the backend doesn't use it (line 66), but the dev compose file still passes it unnecessarily.
+- **Severity**: Low (dead config, not a doc error)
 
-### Claim 29
-- **Doc**: line 58: "SUPABASE_JWT_SECRET -- валидация JWT"
-- **Verdict**: WRONG
-- **Evidence**: `api/auth.py:15` — uses JWKS endpoint with ES256, not JWT_SECRET. Not in `api/config.py`.
-- **Fix**: remove entirely — JWT validation uses JWKS, not a secret
+### Missing 2 — Dockerfile installs curl as system dependency
+- **Detail**: `Dockerfile:6-8` installs `curl` (needed for healthcheck). Doc's Dockerfile section doesn't mention system dependencies.
+- **Severity**: Low (detail omission)
 
-### Claim 30
-- **Doc**: line 59: "VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_API_URL"
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/lib/supabase.ts:3,6` and `front/src/lib/api.ts:16`
+### Missing 3 — Dockerfile creates /app/data directory
+- **Detail**: `Dockerfile:20` — `RUN mkdir -p /app/data`. Not mentioned in doc.
+- **Severity**: Low (detail omission)
 
-### Claim 31
-- **Doc**: line 60: "SSH_PRIVATE_KEY -- GitHub Actions"
-- **Verdict**: ACCURATE
-- **Evidence**: `.github/workflows/deploy.yml:37` — `key: ${{ secrets.SSH_PRIVATE_KEY }}`
+### Missing 4 — Caddy volumes in production
+- **Detail**: `docker-compose.prod.yml:22-25` — `caddy_data` and `caddy_config` volumes for TLS certificate persistence. Not mentioned.
+- **Severity**: Low (infrastructure detail)
 
-### Claim 32
-- **Doc**: line 64: "Три таблицы: conversations, messages, tool_calls"
-- **Verdict**: OUTDATED
-- **Evidence**: migrations show 6 tables: +instruments, exchanges, user_instruments
-- **Fix**: change to "Шесть таблиц" and list all
+### Missing 5 — conversations table has additional columns not described
+- **Detail**: `usage` (jsonb, migration 20260130), `context` (jsonb, migration 20260131), `status` (text, migration 20260204). These are not mentioned in the table description.
+- **Severity**: Low (the doc gives brief descriptions, not full schemas)
 
-### Claim 33
-- **Doc**: line 64: "RLS -- пользователь видит только свои данные"
-- **Verdict**: ACCURATE
-- **Evidence**: RLS policies with `auth.uid() = user_id` on all user-scoped tables
-
-### Claim 34
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `Caddyfile:1-3` and `docker-compose.prod.yml:16-25` — Caddy reverse proxy with TLS
-- **Fix**: add Caddy to "Бэкенд" section
-
-### Claim 35
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `docker-compose.yml:14` — `GEMINI_API_KEY` env var
-- **Fix**: add to "Секреты"
-
-### Claim 36
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `api/config.py:12` — `ADMIN_TOKEN` for reload-data endpoint
-- **Fix**: add to "Секреты"
-
-### Claim 37
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `supabase/migrations/20260214_instrument_full_view.sql` — `instrument_full` view
-- **Fix**: add to "База данных"
+---
 
 ## Summary
 
-| Verdict | Count |
-|---------|-------|
-| ACCURATE | 21 |
-| OUTDATED | 2 |
-| WRONG | 2 |
-| MISSING | 4 |
-| UNVERIFIABLE | 4 |
-| **Total** | **33** |
-| **Accuracy** | **64%** |
+| Verdict       | Count |
+|---------------|-------|
+| ACCURATE      | 38    |
+| WRONG         | 1     |
+| INACCURATE    | 1     |
+| UNVERIFIABLE  | 4     |
+| **Total**     | **44** |
 
-## Verification
+### Wrong claims requiring fix
 
-Date: 2026-02-15
+1. **Claim 45** (line 82): `exchanges — биржи с ETH/maintenance` -- ETH and maintenance columns no longer exist. Fix: `exchanges — биржи с timezone (public read, service-role write)`.
 
-### Claim 1 — CONFIRMED
-### Claim 2 — CONFIRMED
-### Claim 3 — CONFIRMED
-### Claim 4 — CONFIRMED
-### Claim 5 — CONFIRMED
-### Claim 6 — CONFIRMED
-### Claim 7 — CONFIRMED
-### Claim 8 — CONFIRMED
-### Claim 9 — CONFIRMED
-### Claim 10 — CONFIRMED
-### Claim 11 — CONFIRMED
-### Claim 12 — CONFIRMED
-### Claim 13 — CONFIRMED
-### Claim 14 — CONFIRMED
-### Claim 15 — CONFIRMED
-### Claim 16 — CONFIRMED
-### Claim 17 — CONFIRMED
-### Claim 18 — DISPUTED
-- **Auditor said**: WRONG
-- **Should be**: OUTDATED (incomplete)
-- **Reason**: doc lists primary CORS origin `https://getbarb.trade`, omits `http://localhost:3000` fallback. Incomplete, not wrong.
-### Claim 19 — CONFIRMED
-### Claim 20 — CONFIRMED
-### Claim 21 — CONFIRMED
-### Claim 22 — CONFIRMED
-### Claim 23 — CONFIRMED
-### Claim 24 — CONFIRMED
-### Claim 25 — CONFIRMED
-### Claim 26 — CONFIRMED
-### Claim 27 — CONFIRMED
-### Claim 28 — DISPUTED
-- **Auditor said**: OUTDATED
-- **Should be**: WRONG
-- **Reason**: SUPABASE_ANON_KEY is not a backend secret at all (frontend-only). Not outdated — it was never correct.
-### Claim 29 — CONFIRMED
-### Claim 30 — CONFIRMED
-### Claim 31 — CONFIRMED
-### Claim 32 — CONFIRMED
-### Claim 33 — CONFIRMED
-### Claim 34 — CONFIRMED
-### Claim 35 — CONFIRMED
-### Claim 36 — DISPUTED
-- **Auditor said**: MISSING
-- **Should be**: INCONCLUSIVE
-- **Reason**: ADMIN_TOKEN is dev-only (not in docker-compose.prod.yml). Doc's "Секреты" may intentionally list only production secrets.
-### Claim 37 — CONFIRMED
+### Inaccurate claims
 
-| Result | Count |
-|--------|-------|
-| CONFIRMED | 34 |
-| DISPUTED | 3 |
-| INCONCLUSIVE | 0 |
-| **Total** | **37** |
+1. **Claim 31** (line 61): `GEMINI_API_KEY — Gemini API` -- The env var is passed in compose files but no Python code reads it. It's dead config, not an active backend secret. Fix: either remove from the doc or annotate as "reserved / unused" pending Gemini migration.
+
+### Overall accuracy
+
+42 of 44 claims are correct or unverifiable. The doc is **95% accurate** (excluding unverifiable claims: 38 of 40 = 95%).
+
+The two issues are:
+1. Outdated exchanges table description (ETH/maintenance removed in migrations 16-17)
+2. GEMINI_API_KEY listed as active secret but unused by code
