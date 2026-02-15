@@ -8,18 +8,17 @@ Conversational trading analytics. User asks a question about the market in any l
 barb/
   interpreter.py    — 9-step query pipeline (CORE, change carefully)
   expressions.py    — AST expression parser (CORE, change carefully)
-  functions.py      — ~41 functions, will grow to 107 (changes most often)
+  functions/        — 106 trading functions in 12 modules (target: 107)
   data.py           — parquet data loading (lru_cache — loads once per instrument)
   validation.py     — input validation
 
 assistant/
-  chat.py           — LLM chat loop, SSE streaming, prompt caching (MODEL hardcoded here)
+  chat.py           — LLM chat loop, SSE streaming, prompt caching
   context.py        — sliding window + summarization for long conversations
-  prompt.py         — system prompt builder from instrument config (97 lines, will be refactored)
+  prompt.py         — system prompt builder from instrument config
   tools/
     __init__.py     — run_query tool definition + result formatting
-    reference/
-      expressions.md — expression syntax docs (embedded in tool description)
+    reference.py    — auto-generates function reference from SIGNATURES + DESCRIPTIONS
 
 config/
   models.py         — config data models
@@ -35,11 +34,12 @@ api/
   db.py             — Supabase client (service role)
   errors.py         — structured error responses
   request_id.py     — request ID middleware + logging filter
-front/          — React/TypeScript UI (Vercel)
-scripts/        — data download, maintenance
-tests/          — pytest (mirrors barb/ structure)
-docs/barb/      — architecture documentation
-supabase/       — database migrations, RLS policies
+
+front/              — React/TypeScript SPA (Vite, Tailwind v4, shadcn/ui)
+scripts/            — data download, maintenance
+tests/              — pytest (mirrors barb/ structure)
+docs/barb/          — architecture documentation (single source of truth)
+supabase/           — database migrations, RLS policies
 ```
 
 ## How it works
@@ -73,20 +73,31 @@ ruff check .                   # lint
 
 ## Documentation
 
-**`docs/`** — describes the current system as-is. May be slightly outdated but useful for understanding existing code:
-overview, api, query-engine, assistant, config, frontend, infrastructure, charts, result-format, column-ordering.
+**`docs/barb/`** — single source of truth. Every doc describes the system as it is today:
+- `query-engine.md` — 9-step pipeline, expressions, functions
+- `assistant.md` — LLM chat flow, tool calling, prompt caching
+- `api.md` — endpoints, SSE events, auth
+- `frontend.md` — React SPA architecture, providers, components
+- `frontend-quality.md` — frontend code quality checklist (4 states, consistency, race conditions)
+- `functions-architecture.md` — 107 functions, TradingView matching, SIGNATURES pattern
+- `prompt-architecture.md` — 6-layer prompt system, auto-generation from code
+- `infrastructure.md` — deploy, CI, DNS
+- `data-notes.md`, `data-update.md` — data sources, update pipeline
+- `result-format.md`, `charts.md`, `column-ordering.md` — output formatting
+- `research.md` — indicator implementations, cross-platform verification
 
-**`docs/barb/`** — target architecture for refactoring. This is where we're heading:
-- `functions-architecture.md` — 107 functions, TradingView matching, SIGNATURES pattern, test strategy
-- `prompt-architecture.md` — 6-layer prompt system, auto-generation from code, annotations
-- `backtest.md` — strategy engine, entry/exit logic, metrics
-- `screener-compare.md` — multi-instrument screening, compare, daily cache
+**`docs/barb/roadmap/`** — future plans (not yet implemented):
+- `backtest.md` — strategy engine
+- `screener-compare.md` — multi-instrument screening
+- `prompt-refactor.md` — prompt restructuring plan
+- `barb-evolution.md` — project roadmap
 
-**When refactoring:** follow `docs/barb/`. When understanding existing code: check `docs/`.
-
-If a task touches barb/functions.py → read docs/barb/functions-architecture.md first.
-If a task touches assistant/prompt.py → read docs/barb/prompt-architecture.md first.
-If unsure → read the relevant doc. It's faster than guessing wrong.
+**Before changing code, read the relevant doc:**
+- `front/` → `docs/barb/frontend.md` + `docs/barb/frontend-quality.md`
+- `barb/functions/` → `docs/barb/functions-architecture.md`
+- `assistant/prompt.py` → `docs/barb/prompt-architecture.md`
+- `api/` → `docs/barb/api.md`
+- If unsure → read the relevant doc. It's faster than guessing wrong.
 
 ## How to work
 
@@ -99,6 +110,8 @@ If unsure → read the relevant doc. It's faster than guessing wrong.
 **One thing at a time.** Don't refactor + add features + fix bugs in one pass. Separate concerns. Small commits that do one thing. If you notice something unrelated that needs fixing — note it, don't fix it. Finish the current task first.
 
 **Don't break what works.** Run tests after changes. If tests fail, fix before moving on. If there are no tests for what you changed — write them.
+
+**Update docs with code.** When you change code, check if `docs/barb/` has a doc that describes it. If yes — update the doc in the same commit. Code without updated docs = incomplete work.
 
 ## Tests
 

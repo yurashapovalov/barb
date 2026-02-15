@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // empty' | { read fp; case \"$fp\" in */interpreter.py|*/expressions.py) echo '{\"feedback\": \"⚠️ CORE FILE. Read the entire file first. Explain what you are changing and why.\"}' ;; esac; }",
+            "command": "jq -r '.tool_input.file_path // empty' | { read fp; case \"$fp\" in */interpreter.py|*/expressions.py) echo '{\"feedback\": \"⚠️ CORE FILE. Read the entire file first. Explain what you are changing and why.\"}' ;; */docs/barb/*.md) echo '{\"feedback\": \"📄 DOC FILE. Verify every fact you write against actual code. Include file:line references for claims.\"}' ;; esac; }",
             "timeout": 5
           }
         ]

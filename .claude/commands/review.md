@@ -1,10 +1,9 @@
 ---
 description: Review recent code changes for quality, correctness, and architecture compliance
-allowed-tools: Read, Grep, Glob, Bash
-agent: code-reviewer
+allowed-tools: Read, Grep, Glob, Bash, Task
 ---
 
-Review the current code changes.
+Review the current code changes. Determine which reviewers to invoke based on changed files.
 
 ## Changed files
 
@@ -14,4 +13,14 @@ Review the current code changes.
 
 !`git diff 2>/dev/null || git diff HEAD~1 2>/dev/null || echo "no diff available"`
 
-Review these changes against CLAUDE.md checklist and docs/barb/ architecture.
+## Instructions
+
+Look at the changed files above. Then:
+
+1. If ANY Python files changed (`barb/`, `api/`, `assistant/`, `scripts/`, `config/`): invoke the **backend-reviewer** agent via the Task tool with the diff
+2. If ANY frontend files changed (`front/`): invoke the **frontend-reviewer** agent via the Task tool with the diff
+3. If both changed: invoke BOTH agents in parallel
+
+Always invoke the **architect** agent as well — it checks cross-cutting architecture concerns.
+
+Pass the full diff and file list to each agent. Wait for all agents to complete, then combine their output into a single review.

@@ -365,7 +365,7 @@ Expression вычисляется на баре входа и фиксирует
 
 ### Chart type expansion
 Текущее: только bar chart для group_by результатов.
-Запланировано (из docs/architecture/charts.md):
+Запланировано (из docs/barb/charts.md):
 - Line chart — для временных группировок (month, year)
 - Histogram — для распределений (source_rows, table)
 - Area chart — для equity curves (backtest)
