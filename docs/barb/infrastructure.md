@@ -58,7 +58,6 @@ Deploy запускается только после успешных тест�
 
 ### Бэкенд (env vars)
 - `ANTHROPIC_API_KEY` — Claude API
-- `GEMINI_API_KEY` — Gemini API (в compose, но не используется кодом — reserved)
 - `SUPABASE_URL` — Supabase endpoint
 - `SUPABASE_SERVICE_KEY` — Supabase service role (полный доступ)
 - `ADMIN_TOKEN` — для `POST /api/admin/reload-data` (в dev compose, на сервере через `.env`)
