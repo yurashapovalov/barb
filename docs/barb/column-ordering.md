@@ -11,7 +11,7 @@
 | 1m, 5m, 15m, 30m, 1h, 2h, 4h | `date` + `time` | `2024-03-15`, `09:30` |
 | daily, weekly, monthly, quarterly, yearly | только `date` | `2024-03-15` |
 
-Для недельных/месячных `date` — дата начала периода.
+Для недельных/месячных/квартальных/годовых `date` — дата конца периода (pandas offsets W, ME, QE, YE).
 
 ## Приоритет колонок
 
@@ -74,3 +74,9 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
 ```
 
 Вызывается в `_build_response()` перед сериализацией.
+
+## Точность значений
+
+OHLCV колонки (`_PRESERVE_PRECISION`) сохраняют оригинальную точность из данных. Все остальные float колонки (из `map`, `select`, агрегации) округляются до `CALCULATED_PRECISION = 4` знаков после запятой для удаления FP noise.
+
+Обрабатывается в `_serialize_records()` при конвертации DataFrame → JSON.

@@ -30,13 +30,27 @@ Claude формулирует ответ на основе summary
 - max_tokens: 4096
 - temperature: 0 (детерминистичные ответы)
 
-### prompt.py
-Строит system prompt из конфига инструмента. Включает:
+### prompt/ (package)
+Строит system prompt из конфига инструмента. Два файла:
+
+**system.py** — `build_system_prompt(instrument)`. Собирает промпт из секций:
 - Роль и контекст (символ, биржа, диапазон данных, сессии)
-- Инструкции по workflow
-- Секцию `<acknowledgment>` — модель пишет 15-20 слов перед tool call
-- Секцию `<data_titles>` — модель даёт название каждому результату
-- Примеры использования
+- `<recipes>` — multi-function паттерны (MACD cross, breakout, NFP, OPEX)
+- `<instructions>` — 12 правил workflow
+- `<transparency>` — упоминание альтернативных индикаторов
+- `<acknowledgment>` — модель пишет 10-20 слов перед tool call
+- `<data_titles>` — модель даёт название каждому результату
+- `<examples>` — 5 примеров использования
+
+**context.py** — `build_instrument_context(config)`, `build_holiday_context(config)`, `build_event_context(config)`. Генерируют контекстные блоки из instrument config (сессии, праздники, экономические события).
+
+### context.py (top-level)
+Sliding window + summarization для длинных разговоров.
+
+- `SUMMARY_THRESHOLD = 20` — после 20 обменов запускается суммаризация
+- `WINDOW_SIZE = 10` — последние 10 обменов сохраняются полностью
+- `build_history_with_context()` — подставляет summary + recent messages
+- `summarize()` — вызывает Claude (без tools) для сжатия старых сообщений в 3-5 предложений
 
 ### tools/
 Один инструмент: **run_query**
@@ -45,8 +59,13 @@ Claude формулирует ответ на основе summary
 - `model_response` — компактный summary для модели
 - `table` — полные данные для UI
 - `source_rows` — исходные строки (для агрегаций)
+- `source_row_count` — количество исходных строк
+- `chart` — chart hints (category, value columns) для фронтенда
 
-Tool description включает полную спецификацию Barb Script + expressions.md.
+### tools/reference.py
+Авто-генерация reference для tool description из `SIGNATURES` + `DESCRIPTIONS` dicts. Заменяет статический `expressions.md`. Добавляешь функцию в `barb/functions/` → она автоматически появляется в промпте.
+
+Формат: display groups (compact для утилит, expanded с описаниями для индикаторов).
 
 ## Prompt Caching
 
@@ -55,6 +74,7 @@ System prompt кэшируется через `cache_control: {"type": "ephemera
 ## Tool Calls
 
 Каждый вызов логируется в Supabase (таблица `tool_calls`):
-- tool_name, input, output
+- message_id — FK на messages
+- tool_name, input (jsonb), output (jsonb)
 - error (если был)
 - duration_ms
