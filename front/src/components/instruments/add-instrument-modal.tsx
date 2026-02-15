@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
+import { toast } from "sonner";
 import {
   Command,
   CommandEmpty,
@@ -53,7 +54,7 @@ export function AddInstrumentModal({ open, onOpenChange, onAdded }: AddInstrumen
       setLoading(true);
       listInstruments()
         .then(setAllInstruments)
-        .catch((err) => console.error("Failed to load instruments:", err))
+        .catch(() => toast.error("Failed to load instruments"))
         .finally(() => setLoading(false));
     } else {
       clearTimeout(debounceRef.current);
@@ -82,7 +83,7 @@ export function AddInstrumentModal({ open, onOpenChange, onAdded }: AddInstrumen
       debounceRef.current = setTimeout(() => {
         listInstruments(value)
           .then(setServerResults)
-          .catch((err) => console.error("Failed to search instruments:", err));
+          .catch(() => toast.error("Failed to search instruments"));
       }, 300);
     }
   };
@@ -101,8 +102,8 @@ export function AddInstrumentModal({ open, onOpenChange, onAdded }: AddInstrumen
       await add(inst);
       onOpenChange(false);
       onAdded?.(inst.symbol);
-    } catch (err) {
-      console.error("Failed to add instrument:", err);
+    } catch {
+      toast.error("Failed to add instrument");
     }
   };
 

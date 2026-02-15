@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronsLeftIcon, LogOutIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SettingsIcon, SunIcon } from "lucide-react";
+import { ChevronsLeftIcon, LogOutIcon, MonitorIcon, MoonIcon, PaletteIcon, PlusIcon, SunIcon } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AddInstrumentModal } from "@/components/instruments/add-instrument-modal";
 import { Avatar } from "@/components/ui/avatar";
@@ -55,10 +55,6 @@ export function SidebarPanel({ onCollapse }: SidebarPanelProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-48">
-            <DropdownMenuItem>
-              <SettingsIcon />
-              Settings
-            </DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
                 <PaletteIcon />
