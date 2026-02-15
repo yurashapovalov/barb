@@ -96,7 +96,8 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
         sessions: {"RTH": ("09:30", "17:00"), ...}
 
     Returns:
-        {"result": ..., "metadata": {...}, "table": [...] | None, "query": query}
+        {"summary": ..., "table": [...] | None, "source_rows": ...,
+         "source_row_count": ..., "metadata": {...}, "query": query, "chart": ...}
 
     Raises:
         QueryError: On validation or execution failure
@@ -713,19 +714,14 @@ def _build_summary_for_table(
     if stats:
         summary["stats"] = stats
 
-    # First/last rows with timestamp + map columns
+    # First/last rows with date/time + map columns
     if table:
-        first_last_cols = ["timestamp"] + map_columns
-        # Filter to columns that exist
+        first_last_cols = ["date", "time"] + map_columns
+        # Filter to columns that exist in serialized output
         first_last_cols = [c for c in first_last_cols if c in table[0]]
 
-        first_row = {k: table[0].get(k) for k in first_last_cols if k in table[0]}
-        last_row = {k: table[-1].get(k) for k in first_last_cols if k in table[-1]}
-
-        # Convert timestamps to string for JSON
-        for row in [first_row, last_row]:
-            if "timestamp" in row and hasattr(row["timestamp"], "isoformat"):
-                row["timestamp"] = row["timestamp"].isoformat()
+        first_row = {k: table[0][k] for k in first_last_cols if k in table[0]}
+        last_row = {k: table[-1][k] for k in first_last_cols if k in table[-1]}
 
         if first_row:
             summary["first"] = first_row
