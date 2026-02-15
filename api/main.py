@@ -374,7 +374,8 @@ def reload_data(token: str = ""):
     if not settings.admin_token or token != settings.admin_token:
         raise HTTPException(403, "Invalid admin token")
     load_data.cache_clear()
-    log.info("Data cache cleared")
+    _get_assistant.cache_clear()
+    log.info("Data and assistant caches cleared")
     return {"status": "ok"}
 
 
