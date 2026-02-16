@@ -209,8 +209,10 @@ class Assistant:
                         "columns": columns,
                         "session": metadata.get("session"),
                         "timeframe": metadata.get("from"),
-                        "source_rows": result.get("source_rows"),
-                        "source_row_count": result.get("source_row_count"),
+                        # source_rows as separate evidence only when result is table_data.
+                        # When result already IS source_rows — don't duplicate.
+                        "source_rows": source_rows if table_data else None,
+                        "source_row_count": result.get("source_row_count") if table_data else None,
                         "title": title,
                         "chart": chart_hint,
                     }

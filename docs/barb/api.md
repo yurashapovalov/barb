@@ -62,7 +62,9 @@ event: tool_end
 data: {"tool_name": "run_query", "duration_ms": 1234, "error": null}
 
 event: data_block
-data: {"query": {...}, "result": [...], "rows": 13, "columns": ["date", "open", "high", "low", "close", "volume"], "session": "RTH", "timeframe": "daily", "source_rows": [...], "source_row_count": 80, "title": "...", "chart": {"category": "...", "value": "..."}}
+data: {"query": {...}, "result": [...], "rows": 13, "columns": ["date", "open", "high", "low", "close", "volume"], "session": "RTH", "timeframe": "daily", "source_rows": [...] | null, "source_row_count": 80 | null, "title": "...", "chart": {"category": "...", "value": "..."}}
+// source_rows: separate evidence only for aggregations with table_data.
+// When result already IS the evidence (no table_data) — source_rows is null.
 
 event: done
 data: {"answer": "...", "usage": {...}, "tool_calls": [...], "data": [...]}
