@@ -42,6 +42,7 @@ export interface DataBlock {
   timeframe: string | null;
   source_rows: Record<string, unknown>[] | null;
   source_row_count: number | null;
+  columns?: string[] | null;
   title?: string;
   status?: "loading" | "success" | "error";
   error?: string;

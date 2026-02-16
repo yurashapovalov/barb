@@ -57,9 +57,10 @@ function normalizeResult(result: unknown): Row[] {
   return [{ value: result }];
 }
 
-function buildColumns(rows: Row[]): ColumnDef<Row>[] {
+function buildColumns(rows: Row[], columnOrder?: string[] | null): ColumnDef<Row>[] {
   if (rows.length === 0) return [];
-  return Object.keys(rows[0]).map((key) => ({
+  const keys = columnOrder ?? Object.keys(rows[0]);
+  return keys.map((key) => ({
     accessorKey: key,
     header: ({ column }) => {
       const sorted = column.getIsSorted();
@@ -103,7 +104,7 @@ export function DataPanel({ data, onClose }: DataPanelProps) {
   }, [data]);
 
   const rows = normalizeResult(data.source_rows ?? data.result);
-  const columns = buildColumns(rows);
+  const columns = buildColumns(rows, data.columns);
   const chartInfo = getChartInfo(data, rows);
 
   const table = useReactTable({

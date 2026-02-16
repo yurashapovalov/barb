@@ -75,6 +75,12 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
 
 Вызывается в `_build_response()` перед сериализацией.
 
+### Сохранение порядка через JSONB
+
+PostgreSQL JSONB не сохраняет порядок ключей в объектах. При загрузке `messages.data` из БД порядок колонок в строках `result` теряется.
+
+Решение: `assistant/chat.py` передаёт `columns` — массив имён колонок в правильном порядке. JSONB сохраняет порядок элементов массива. Фронтенд (`data-panel.tsx`) использует `columns` для построения таблицы, с fallback на `Object.keys(rows[0])` для старых данных.
+
 ## Точность значений
 
 OHLCV колонки (`_PRESERVE_PRECISION`) сохраняют оригинальную точность из данных. Все остальные float колонки (из `map`, `select`, агрегации) округляются до `CALCULATED_PRECISION = 4` знаков после запятой для удаления FP noise.

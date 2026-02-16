@@ -198,10 +198,15 @@ class Assistant:
                 chart_hint = result.get("chart")
                 metadata = result.get("metadata", {})
                 if not call_error and ui_data:
+                    # Column order from _order_columns() — JSONB doesn't preserve key order
+                    columns = (
+                        list(ui_data[0].keys()) if isinstance(ui_data, list) and ui_data else None
+                    )
                     block = {
                         "query": query,
                         "result": ui_data,
                         "rows": len(ui_data) if isinstance(ui_data, list) else None,
+                        "columns": columns,
                         "session": metadata.get("session"),
                         "timeframe": metadata.get("from"),
                         "source_rows": result.get("source_rows"),

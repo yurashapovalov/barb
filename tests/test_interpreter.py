@@ -637,3 +637,54 @@ class TestSourceRows:
         assert "open" in row
         assert "close" in row
         assert "range" in row
+
+
+class TestSerialization:
+    def test_date_function_serialized_to_string(self, nq_daily, sessions):
+        """datetime.date objects from date() are serialized to ISO strings."""
+        result = execute(
+            {"from": "daily", "map": {"d": "date()"}, "limit": 3},
+            nq_daily,
+            sessions,
+        )
+        for row in result["table"]:
+            assert isinstance(row["d"], str)
+            assert len(row["d"]) == 10  # "YYYY-MM-DD"
+
+    def test_column_order_preserved_in_table(self, nq_daily, sessions):
+        """Table rows preserve column order: date, OHLCV, then map columns."""
+        result = execute(
+            {"from": "daily", "map": {"range": "high - low"}, "limit": 1},
+            nq_daily,
+            sessions,
+        )
+        keys = list(result["table"][0].keys())
+        assert keys[0] == "date"
+        assert keys[1:6] == ["open", "high", "low", "close", "volume"]
+        assert keys[6] == "range"
+
+    def test_column_order_intraday(self, nq_minute_slice, sessions):
+        """Intraday results have date, time, then OHLCV."""
+        result = execute(
+            {"from": "1h", "period": "2024-01", "limit": 1},
+            nq_minute_slice,
+            sessions,
+        )
+        keys = list(result["table"][0].keys())
+        assert keys[0] == "date"
+        assert keys[1] == "time"
+
+    def test_column_order_grouped(self, nq_daily, sessions):
+        """Grouped results have group key first, then aggregates."""
+        result = execute(
+            {
+                "from": "daily",
+                "map": {"dow": "dayofweek()"},
+                "group_by": "dow",
+                "select": "mean(close)",
+            },
+            nq_daily,
+            sessions,
+        )
+        keys = list(result["table"][0].keys())
+        assert keys[0] == "dow"
