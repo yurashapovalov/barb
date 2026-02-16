@@ -18,7 +18,7 @@ Query is a flat JSON object with these fields (all optional):
 - where: "expression" — filter rows (boolean expression)
 - group_by: "column" or ["col1", "col2"] — group rows (must be column name, not expression)
 - select: "mean(col)" or ["sum(x)", "count()"] — aggregate functions
-- sort: "column desc" or "column asc" — sort results
+- sort: "column desc" or "column asc" — sort results (use column NAME from map, not expression)
 - limit: number — max rows to return
 
 Execution order is FIXED: session → period → from → map → where → group_by → select → sort → limit

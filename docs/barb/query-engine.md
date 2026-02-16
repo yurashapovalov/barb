@@ -16,7 +16,7 @@
 5. where      — фильтр строк по условию (expression)
 6. group_by   — группировка (по колонке из map)
 7. select     — агрегация ("count()", "mean(col)", ["sum(x)", "max(y)"])
-8. sort       — сортировка ("column desc" или "column asc")
+8. sort       — сортировка ("column desc" или "column asc", по имени колонки из map, не выражению)
 9. limit      — ограничение количества строк
     ↓
 Результат (summary для модели + table для UI)
