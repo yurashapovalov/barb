@@ -8,6 +8,8 @@
 
 Модель присылает `"columns": ["date", "close", "chg"]` в запросе. Interpreter показывает ровно эти колонки в указанном порядке. Без дополнений, без OHLCV по умолчанию.
 
+Правило порядка в промпте: `date/time first, then answer columns (from map), then supporting context (close, volume)`. Идентификация → ответ → контекст.
+
 Применяется только к table-результатам. Scalar и grouped результаты управляют своими колонками — `columns` к ним не применяется.
 
 ### 2. Fallback — модель не прислала `columns`
@@ -42,10 +44,10 @@
 ```json
 {"from": "daily", "period": "2024:2025",
  "map": {"chg": "change_pct(close, 1)"}, "where": "chg <= -2.5",
- "columns": ["date", "close", "chg"]}
+ "columns": ["date", "chg", "close"]}
 ```
 
-Результат: `date | close | chg` — только то что модель указала.
+Результат: `date | chg | close` — ответ (chg) перед контекстом (close).
 
 ### Projection — скрытый helper
 
