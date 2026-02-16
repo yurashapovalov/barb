@@ -78,6 +78,7 @@ update_data.py --type stocks (будущее)
    e. write to .tmp file → rename (atomic)
 7. PATCH Supabase instruments.data_end
 8. Записать date → data/{type}/.last_update
+9. POST /api/admin/reload-data → сброс lru_cache (API подхватит свежие parquet)
 ```
 
 ### Data Safety
@@ -153,7 +154,7 @@ Credentials из `.env` (SUPABASE_URL, SUPABASE_SERVICE_KEY).
 
 После append данных — API должен сбросить `lru_cache` в `barb/data.py`.
 
-`POST /api/admin/reload-data?token=ADMIN_TOKEN` — вызывает `load_data.cache_clear()` + `_get_assistant.cache_clear()`, zero downtime. Cron вызывает после update_data.py.
+`POST /api/admin/reload-data?token=ADMIN_TOKEN` — вызывает `load_data.cache_clear()` + `_get_assistant.cache_clear()`, zero downtime. Скрипт `update_data.py` вызывает его автоматически в конце (`_reload_api_cache()`). Требует `ADMIN_TOKEN` в `.env`.
 
 ## CLI
 

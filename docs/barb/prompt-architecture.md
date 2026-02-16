@@ -68,7 +68,7 @@ Sessions:
   ETH          18:00-17:00
   OVERNIGHT    18:00-09:30
   ...
-  RTH          09:30-17:00
+  RTH          09:30-16:15
 </instrument>
 ```
 
@@ -94,8 +94,9 @@ High impact:
   FOMC Rate Decision — 8x/year, 14:00 ET
   Non-Farm Payrolls — 1st Friday, 08:30 ET
   CPI — monthly, 08:30 ET
+  PCE — monthly, 08:30 ET
 
-Medium impact: PPI, GDP, Retail Sales, ...
+Medium impact: PPI, GDP, Retail Sales, ISM Manufacturing, ISM Services, Consumer Confidence, Michigan Sentiment, Durable Goods Orders
 
 NFP = 1st Friday of month. OPEX = 3rd Friday. Quad Witching = 3rd Fri Mar/Jun/Sep/Dec.
 When user asks about event days → calculate dates and query those dates.

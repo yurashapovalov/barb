@@ -4,8 +4,8 @@
 - Provider: FirstRateData (futures dataset)
 - Type: `contin_UNadj` — unadjusted continuous contracts (front-month stitched)
 - Two datasets per instrument:
-  - `data/1d/futures/{SYMBOL}.parquet` — daily bars (7 cols: date, O, H, L, C, volume, OI → we drop OI)
-  - `data/1m/futures/{SYMBOL}.parquet` — 1-minute bars (6 cols: datetime, O, H, L, C, volume)
+  - `data/1d/futures/{SYMBOL}.parquet` — daily bars (6 cols: timestamp, O, H, L, C, volume). Provider CSV has 7 cols including OI — dropped at ingest in `parse_daily_txt()`
+  - `data/1m/futures/{SYMBOL}.parquet` — 1-minute bars (6 cols: timestamp, O, H, L, C, volume)
 - 31 instruments, range ~2008 to 2026-02
 - Timestamps in US/Eastern (naive, no tz info)
 

@@ -1,192 +1,64 @@
 # Audit: frontend-quality.md
 
-Date: 2026-02-15
+**Date**: 2026-02-16
+**Claims checked**: 42
+**Correct**: 37 | **Wrong**: 2 | **Outdated**: 0 | **Unverifiable**: 3
 
-## Claims
+## Issues
 
-### Claim 1
-- **Doc**: line 7: "Every component that displays data handles 4 states: Loading, Error, Empty, Success"
-- **Verdict**: UNVERIFIABLE
-- **Evidence**: claim is an aspirational guideline about "every component"; doc itself acknowledges gaps
+### [WRONG] dangerouslySetInnerHTML without sanitization exists in chart.tsx
+- **Doc says**: "No `dangerouslySetInnerHTML` without sanitization."
+- **Code says**: `chart.tsx` (shadcn/ui component) uses `dangerouslySetInnerHTML` on line 81 to inject CSS variables from code-defined config. No explicit sanitization, but inputs are not user-controlled — they come from `ChartConfig` objects defined in code. Low risk but contradicts the absolute "No" statement.
+- **File**: `front/src/components/ui/chart.tsx:81`
 
-### Claim 2
-- **Doc**: line 22: "User input is not lost on error. If send fails, text stays in the input."
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/components/ai/prompt-input.tsx:74-77` — input only cleared on `.then()` (success); on `.catch()` value preserved
+### [WRONG] Test file count: "4 test files for 63 source files" — source count is 58, not 63
+- **Doc says**: "4 test files for 63 source files"
+- **Code says**: There are 4 test files (correct) and 63 total `.ts`/`.tsx` files, but only 58 are non-test source files (excluding 4 test files + `test-setup.ts`). The doc implies 63 source files being tested, but 63 includes the test files themselves.
+- **File**: `front/src/__tests__/` (4 files), `front/src/` (63 total, 58 non-test)
 
-### Claim 3
-- **Doc**: line 23: "Expired token redirects to login, not a white screen."
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/components/auth/auth-guard.tsx:16` — `if (!session) return <Navigate to="/login" replace />;`
+## All Claims Checked
 
-### Claim 4
-- **Doc**: line 24: "Error boundaries reset on navigation (RouteErrorBoundary with resetKey)."
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/components/error-boundary.tsx:47-49` — `RouteErrorBoundary` uses `pathname` as `resetKey`
-
-### Claim 5
-- **Doc**: line 28: "No `any`. No `as unknown as X`."
-- **Verdict**: ACCURATE
-- **Evidence**: Grep for `: any` and `as unknown as` across `.ts`/`.tsx` returned no matches
-
-### Claim 6
-- **Doc**: lines 30-39: "Use discriminated unions for async states"
-- **Verdict**: ACCURATE
-- **Evidence**: guideline; doc acknowledges in line 103 that codebase does NOT use this yet — consistent
-
-### Claim 7
-- **Doc**: line 48: "Container/panel split: container has hooks, panel has props."
-- **Verdict**: ACCURATE
-- **Evidence**: `chat-page.container.tsx:21`, `instrument-page.container.tsx:11`, `login-page.container.tsx:5` — all use hooks and pass props to panels
-
-### Claim 8
-- **Doc**: line 49: "Cache: `readCache`/`writeCache` in all providers, same pattern."
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/lib/cache.ts:3-18` defines `readCache`/`writeCache`; used in conversations-provider, instruments-provider, use-ohlc
-
-### Claim 9
-- **Doc**: line 50: "Naming: `ChatPageContainer`, `InstrumentPageContainer`, `LoginPageContainer`."
-- **Verdict**: ACCURATE
-- **Evidence**: all three containers use consistent naming
-
-### Claim 10
-- **Doc**: line 51: "Headers: sidebar toggle built the same way in every page container."
-- **Verdict**: ACCURATE
-- **Evidence**: identical pattern across all page containers and HomePage
-
-### Claim 11
-- **Doc**: line 58: "hook -> container -> panel -> component"
-- **Verdict**: ACCURATE
-- **Evidence**: data flow verified in chat and instrument pages
-
-### Claim 12
-- **Doc**: line 63: "Panels never import hooks directly (exception: sidebar-panel)."
-- **Verdict**: ACCURATE
-- **Evidence**: Grep for `from "@/hooks` in panels/ shows only sidebar-panel imports hooks
-
-### Claim 13
-- **Doc**: line 67: "StrictMode double-mount does not break logic."
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/main.tsx:7` uses `<StrictMode>`; sessionStorage and refs designed to survive double-mount
-
-### Claim 14
-- **Doc**: line 68: "Fast navigation: old request's response does not overwrite new data."
-- **Verdict**: ACCURATE
-- **Evidence**: all async effects use `cancelled` flag pattern in use-chat, use-ohlc, providers
-
-### Claim 15
-- **Doc**: line 69: "Double click: does not create duplicate requests."
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/components/panels/chat-panel.tsx:93` — submit button disabled while loading
-
-### Claim 16
-- **Doc**: line 75: "`aria-label` on icon-only buttons."
-- **Verdict**: ACCURATE
-- **Evidence**: all icon-only buttons have aria-labels across page containers, sidebar, data-panel, prompt-input
-
-### Claim 17
-- **Doc**: line 82: "`useCallback` on functions passed to memoized children. Not on everything."
-- **Verdict**: ACCURATE
-- **Evidence**: only 2 files use `useCallback` — selective, not blanket
-
-### Claim 18
-- **Doc**: line 84: "Route-level code splitting with `React.lazy`."
-- **Verdict**: ACCURATE
-- **Evidence**: guideline; doc acknowledges in line 105 this is NOT implemented yet — consistent
-
-### Claim 19
-- **Doc**: line 85: "Stable references: module-level constants, singleton caches."
-- **Verdict**: ACCURATE
-- **Evidence**: `use-chat.ts:17-18` module-level `messageCache`; `data-panel.tsx:90-91` module-level row models
-
-### Claim 20
-- **Doc**: line 89: "No `dangerouslySetInnerHTML` without sanitization."
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/components/ui/chart.tsx:81` — only usage, HTML from internal config values, no user input
-
-### Claim 21
-- **Doc**: line 90: "Token storage: understand the tradeoff"
-- **Verdict**: UNVERIFIABLE
-- **Evidence**: knowledge guideline, not verifiable code claim
-
-### Claim 22
-- **Doc**: line 103: "async states use `boolean + null + error`, not discriminated unions"
-- **Verdict**: ACCURATE
-- **Evidence**: `use-chat.ts:30-32`, conversations-provider, instruments-provider all use boolean+null pattern
-
-### Claim 23
-- **Doc**: line 104: "4 test files for 58 source files"
-- **Verdict**: ACCURATE
-- **Evidence**: `front/src/__tests__/` contains exactly 4 files; source count ~58
-
-### Claim 24
-- **Doc**: line 104: "Critical paths (auth, chat streaming, component rendering) not covered."
-- **Verdict**: OUTDATED
-- **Evidence**: `front/src/__tests__/use-chat.test.ts` now covers chat streaming path
-- **Fix**: change to "Critical paths (auth, component rendering) not covered. Chat has basic tests."
-
-### Claim 25
-- **Doc**: line 105: "no `React.lazy`, entire app in one bundle"
-- **Verdict**: ACCURATE
-- **Evidence**: Grep for `React.lazy` returned no matches
-
-### Claim 26
-- **Doc**: line 106: "sidebar-panel.tsx: uses 7 hooks directly"
-- **Verdict**: WRONG
-- **Evidence**: `front/src/components/panels/sidebar-panel.tsx` uses 8 hooks: useState, useNavigate, useParams, useAuth, useConversations, useInstruments, useSidebar, useTheme
-- **Fix**: change "7 hooks" to "8 hooks"
-
-### Claim 27
-- **Doc**: line 106: "splitting would create a 15+ prop interface"
-- **Verdict**: UNVERIFIABLE
-- **Evidence**: subjective estimate of hypothetical refactoring
-
-### Claim 28
-- **Doc**: line 20: "Network error does not break UI permanently. User can retry."
-- **Verdict**: ACCURATE
-- **Evidence**: conversations-provider and instruments-provider have `retry()` function; chat errors show toast
-
-### Claim 29
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `front/src/pages/home/home-page.tsx:7` — `HomePage` uses hooks directly without a `HomePageContainer` wrapper, breaking container/panel convention
-- **Fix**: add to "Current Gaps": "HomePage uses hooks directly without a container wrapper"
-
-## Summary
-
-| Verdict | Count |
-|---------|-------|
-| ACCURATE | 21 |
-| OUTDATED | 1 |
-| WRONG | 1 |
-| MISSING | 1 |
-| UNVERIFIABLE | 3 |
-| **Total** | **27** |
-| **Accuracy** | **78%** |
-
-## Verification
-
-Date: 2026-02-15
-
-### Claims 1-22 — CONFIRMED
-### Claim 23 — DISPUTED
-- **Auditor said**: ACCURATE
-- **Should be**: OUTDATED
-- **Reason**: Source file count is 63, not ~58
-### Claim 24 — DISPUTED
-- **Auditor said**: ACCURATE
-- **Should be**: OUTDATED
-- **Reason**: Chat tests exist (use-chat.test.ts), claim about no chat tests is outdated
-### Claims 25-26 — CONFIRMED
-### Claim 26 — DISPUTED
-- **Auditor said**: ACCURATE
-- **Should be**: OUTDATED
-- **Reason**: Sidebar uses 8 hooks, not 7
-### Claims 27-29 — CONFIRMED
-
-| Result | Count |
-|--------|-------|
-| CONFIRMED | 26 |
-| DISPUTED | 3 |
-| INCONCLUSIVE | 0 |
-| **Total** | **29** |
+| # | Claim | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | Every component that displays data handles 4 states: Loading, Error, Empty, Success | CORRECT | `instrument-panel.tsx` shows loading spinner (line 57-59), conversations loading (line 62-63), empty state (line 80-82), and data (line 54-56). `chat-panel.tsx` shows empty state (line 43-47), messages (line 49-83), loading in submit button (line 93). Providers handle loading/error/data states. |
+| 2 | Network error does not break UI permanently, user can retry without reload | CORRECT | Providers (`conversations-provider.tsx:70-74`, `instruments-provider.tsx:51-55`) expose `retry()`. API errors are caught and shown via `toast.error()`. |
+| 3 | Optimistic data rolls back on error | CORRECT | `use-chat.ts:258` — on error, both optimistic user message and assistant message are removed: `prev.filter((m) => m.id !== userMsg.id && m.id !== assistantId)` |
+| 4 | User input is not lost on error — if send fails, text stays in the input | CORRECT | `prompt-input.tsx:74-78` — `onSubmit` returns a Promise; `.then()` clears input, `.catch()` only logs. If `send()` throws, input is preserved. |
+| 5 | Expired token redirects to login, not a white screen | CORRECT | `api.ts:25-31` — `checkAuth()` on 401 calls `supabase.auth.signOut()` which triggers `onAuthStateChange`, sets session to null. `auth-guard.tsx:16` — `!session` renders `<Navigate to="/login" />`. |
+| 6 | Error boundaries reset on navigation (RouteErrorBoundary with resetKey) | CORRECT | `error-boundary.tsx:47-50` — `RouteErrorBoundary` uses `pathname` as `resetKey`. `ErrorBoundary.componentDidUpdate` (line 21-24) resets error when `resetKey` changes. |
+| 7 | No `any` type usage | CORRECT | Grep for `: any`, `<any>`, `any[]`, `any)` across all `.ts`/`.tsx` files returns zero matches. |
+| 8 | No `as unknown as X` usage | CORRECT | Grep for `as unknown as` returns zero matches. |
+| 9 | No `dangerouslySetInnerHTML` without sanitization | WRONG | `chart.tsx:81` uses `dangerouslySetInnerHTML` for CSS injection. Input is code-defined config, not user input — safe in practice, but contradicts the absolute claim. |
+| 10 | Async states use `boolean + null + error`, not discriminated unions | CORRECT | `conversations-provider.tsx:19-25`, `instruments-provider.tsx:19-25`, `use-chat.ts:30-32` all use `useState<T[]>`, `useState(boolean)`, `useState<string \| null>` pattern. |
+| 11 | Discriminated union gap documented — provider data persists across loading/error states | CORRECT | Providers keep data in state even during loading/error. `conversations-provider.tsx:57-68` (refresh) updates data on success but doesn't clear on loading. |
+| 12 | Types express domain concepts: Instrument, Conversation, Message | CORRECT | `types/index.ts` defines `Instrument`, `UserInstrument`, `Message`, `Conversation`, `DataBlock`, `UsageBlock` — all domain types. |
+| 13 | Container/panel split: container has hooks, panel has props | CORRECT | `ChatPageContainer` (hooks) renders `ChatPage` (props); `InstrumentPageContainer` (hooks) renders `InstrumentPanel` (props); `LoginPageContainer` (hooks) renders `LoginPage` (props). |
+| 14 | Cache: `readCache`/`writeCache` in all providers, same pattern | CORRECT | `conversations-provider.tsx:6,35`, `instruments-provider.tsx:6,35`, `use-ohlc.ts:4,31` all use `readCache`/`writeCache` from `lib/cache.ts`. |
+| 15 | Naming: `ChatPageContainer`, `InstrumentPageContainer`, `LoginPageContainer` — consistent | CORRECT | Confirmed in `chat-page.container.tsx:21`, `instrument-page.container.tsx:11`, `login-page.container.tsx:5`. |
+| 16 | Sidebar toggle built the same way in every page container | CORRECT | `ChatPageContainer:95-98`, `InstrumentPageContainer:30-33`, `HomePage:12-15` all use identical pattern: `!sidebarOpen && <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label="Open sidebar"><PanelLeftIcon /></Button>` |
+| 17 | Data flows: hook -> container -> panel -> component | CORRECT | `ChatPageContainer` uses `useChat` hook, passes data to `ChatPage`, which passes to `ChatPanel`/`DataPanel`. |
+| 18 | Components don't know where data comes from | CORRECT | `ChatPage`, `InstrumentPanel`, `HomePanel`, `LoginPage` all receive data via props, no direct API/hook imports. |
+| 19 | Panels never import hooks directly (exception: sidebar-panel, documented) | CORRECT | Grep for `import.*from.*hooks/` in `components/panels/` shows only `sidebar-panel.tsx` imports hooks directly. `chat-panel.tsx` imports `type ChatState` (type-only, not a hook call). |
+| 20 | sidebar-panel.tsx uses 8 hooks directly | CORRECT | `useState`, `useNavigate`, `useParams`, `useAuth`, `useConversations`, `useInstruments`, `useSidebar`, `useTheme` — exactly 8 hooks at `sidebar-panel.tsx:31-38`. |
+| 21 | StrictMode double-mount does not break logic | CORRECT | `main.tsx:7` uses `<StrictMode>`. `chat-page.container.tsx:33` reads initial message from `sessionStorage` (survives remount). `sentRef` persists across StrictMode unmount/remount. Providers use `cancelled` flag pattern. |
+| 22 | Fast navigation: old request's response does not overwrite new data (cleanup + cancelled flag) | CORRECT | `use-chat.ts:60,82`, `conversations-provider.tsx:29,46`, `instruments-provider.tsx:29,46`, `use-ohlc.ts:26,40` all use `let cancelled = false` / `return () => { cancelled = true }` pattern. |
+| 23 | Double click: does not create duplicate requests (disable button while loading) | CORRECT | `chat-panel.tsx:93` — submit button `disabled={isEmpty \|\| isLoading}`. `login-page.tsx:69` — magic link button `disabled={!isValidEmail \|\| sending}`. |
+| 24 | Semantic HTML: `<button>` for actions, `<a>` for navigation | CORRECT | `instrument-panel.tsx:67-69` uses `<button>` for clickable items. Navigation uses `useNavigate` programmatically. `login-page.tsx:44` uses `<Button>` for actions. |
+| 25 | `aria-label` on icon-only buttons | CORRECT | All icon-only buttons have aria-labels: "Open sidebar", "Collapse sidebar", "Close panel", "Chat options", "Submit" — verified across 7 instances in 6 files. |
+| 26 | `useCallback` on functions passed to memoized children, not on everything | CORRECT | `chat-page.container.tsx:85` — `useCallback` on `handleSelectData`. `sidebar-provider.tsx:17-18` — `useCallback` on `toggle` and `close`. Only used where needed, not everywhere. |
+| 27 | Route-level code splitting with `React.lazy` | CORRECT (gap) | No `React.lazy` usage found. Doc lists this under "Performance" aspirations but also lists it under "Current Gaps" (line 105). |
+| 28 | Stable references: module-level constants, singleton caches | CORRECT | `use-chat.ts:17` — `const messageCache = new Map()`. `data-panel.tsx:90-91` — `const coreRowModel = getCoreRowModel()`, `const sortedRowModel = getSortedRowModel()`. |
+| 29 | No `dangerouslySetInnerHTML` without sanitization (Security section) | WRONG | See issue above. `chart.tsx:81` uses it. Safe in practice but exists. |
+| 30 | Token storage comment about XSS/CSRF tradeoff | UNVERIFIABLE | Supabase JS client handles token storage internally. `supabase.ts` creates client with default config. The tradeoff is architectural knowledge, not verifiable from code alone. |
+| 31 | Tests: 4 test files for 63 source files | WRONG | 4 test files correct. But there are 58 non-test source files, not 63. The total of 63 includes 4 test files + `test-setup.ts`. |
+| 32 | Auth and component rendering not covered in tests | CORRECT | Test files: `api.test.ts`, `use-chat.test.ts`, `parse-content.test.ts`, `use-theme.test.ts`. No auth or component rendering tests. |
+| 33 | Chat streaming has basic tests | CORRECT | `use-chat.test.ts` tests the `useChat` hook with mocked `sendMessageStream`. `api.test.ts` tests SSE parsing. |
+| 34 | No `React.lazy`, entire app in one bundle | CORRECT | Grep for `React.lazy` returns zero matches. All routes in `app.tsx` use direct imports. |
+| 35 | HomePage uses hooks directly without container wrapper | CORRECT | `home-page.tsx:7` — `HomePage` calls `useSidebar()` directly (line 8). No `HomePageContainer` exists. |
+| 36 | sidebar-panel exception — splitting would create 15+ prop interface | UNVERIFIABLE | The 15+ prop count is a design judgment. The sidebar has user info, theme, instruments list, conversations list, navigation, and modal state — plausibly 15+ props if decomposed, but exact count is subjective. |
+| 37 | Focus management: focus is not lost after navigation or modal close | UNVERIFIABLE | No explicit `focus()` calls or focus trap implementations found. React Router and Radix Dialog handle focus natively. Cannot fully verify without runtime testing. |
+| 38 | User input encoded before inserting into URL | CORRECT | `api.ts:67` — `encodeURIComponent(instrument)` for query params. `api.ts:121,150` — `encodeURIComponent(symbol)` for URL path segments. |
+| 39 | Keyboard: all interactive elements reachable via Tab | CORRECT | All interactive elements use `<Button>`, `<button>`, `<input>`, `<textarea>` — natively focusable. Radix UI components (DropdownMenu, Dialog) handle keyboard navigation. |
+| 40 | Data flow is one direction | CORRECT | Container components pass data down via props. Child components use callbacks (onSend, onSelectData, onClose) to communicate up. No bidirectional data flow. |
+| 41 | `readCache`/`writeCache` pattern consistent across providers | CORRECT | All three data-fetching providers use identical pattern: `readCache` for initial state, `writeCache` after fetch, `cancelled` flag for cleanup. |
+| 42 | Error boundaries exist with recovery | CORRECT | `error-boundary.tsx:14-50` — `ErrorBoundary` class component with reload button. `RouteErrorBoundary` resets on navigation. Top-level `ErrorBoundary` wraps entire app in `app.tsx:20`. |

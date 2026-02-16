@@ -15,7 +15,7 @@ GitHub (yurashapovalov/barb)
 - Caddy reverse proxy: автоматический TLS, `api.getbarb.trade` → `api:8000`
 - Uvicorn, 2 воркера
 - Данные (Parquet) в volume `./data:/app/data`
-- Деплой: SSH → `cd /opt/barb` → `git pull` → `docker compose up -d --build` → `docker system prune -f`
+- Деплой: SSH → `cd /opt/barb` → `git pull` → `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` → `docker system prune -f`
 
 ### Фронт (Vercel)
 

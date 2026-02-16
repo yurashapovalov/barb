@@ -16,15 +16,17 @@
 ```
 Interpreter              Tool (run_query)          Chat (chat_stream)        API → UI
      │                          │                         │                      │
-     │  {summary, table,        │  model_response         │  SSE: text_delta     │
-     │   source_rows,           │  (compact string) ────► │   + data_block ────► │
-     │   source_row_count,      │  table/source_rows      │  {tool, input,       │
-     │   chart*, metadata,      │  chart                  │   result, rows,      │
-     │   query}                 │                         │   title, chart}      │
+     │  {summary, table,        │  model_response         │  SSE events:         │
+     │   source_rows,           │  (compact string) ────► │   text_delta         │
+     │   source_row_count,      │  table/source_rows      │   tool_start ──────► │
+     │   chart*, metadata,      │  chart                  │   tool_end           │
+     │   query}                 │                         │   data_block ──────► │
+     │                          │                         │   done ────────────► │
      │                          │                         │                      │
-     │                          │                         │  SSE: done           │
-     │                          │                         │  {answer, usage,     │
-     │                          │                         │   tool_calls, data}  │
+     │                          │                         │  API adds:           │
+     │                          │                         │   title_update       │
+     │                          │                         │   persist            │
+     │                          │                         │   error              │
 ```
 
 ## Структура ответа интерпретатора

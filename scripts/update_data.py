@@ -307,6 +307,27 @@ def main():
         write_state(state_path, remote_date)
         log.info("Done. Updated %d ticker-timeframe pairs. State: %s", total_updated, remote_date)
 
+    # Reload API caches (runs outside httpx client context — separate short request)
+    _reload_api_cache()
+
+
+def _reload_api_cache():
+    """Tell the API to drop lru_cache so it picks up fresh parquet files."""
+    admin_token = os.environ.get("ADMIN_TOKEN", "")
+    if not admin_token:
+        log.warning("ADMIN_TOKEN not set, skipping cache reload")
+        return
+    try:
+        resp = httpx.post(
+            "http://localhost:8000/api/admin/reload-data",
+            params={"token": admin_token},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        log.info("API cache reloaded")
+    except Exception:
+        log.warning("Failed to reload API cache (API may not be running)")
+
 
 if __name__ == "__main__":
     main()

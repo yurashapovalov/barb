@@ -40,9 +40,9 @@ OHLC candlestick chart с volume histogram на странице инструм�
 
 Модель не знает о графиках. Процесс:
 
-1. **Backend** (`barb/interpreter.py:629-638`): для `group_by` результатов генерирует chart hint — `{"category": "group_key", "value": "first_value_column"}`
+1. **Backend** (`barb/interpreter.py:630-639`): для `group_by` результатов генерирует chart hint — `{"category": "group_key", "value": "first_value_column"}`
 2. **Tool result** (`assistant/tools/__init__.py:79`): hint передаётся в `data_block` SSE event как поле `chart`
-3. **Frontend** (`data-panel.tsx:38-49`): `getChartInfo()` проверяет hint — если `category` и `value` колонки существуют в данных → рендерит `<BarChart>`
+3. **Frontend** (`data-panel.tsx:38-50`): `getChartInfo()` проверяет hint — если `category` и `value` колонки существуют в данных → рендерит `<BarChart>`
 4. Нет hint → нет графика. Нет автодетекции по типу данных.
 
 Данные для графика берутся из той же таблицы — без дополнительных API вызовов.

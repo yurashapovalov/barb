@@ -46,7 +46,7 @@ Data panel appears on click of a data card in chat. Resizable via drag handle on
 - **Panel** (`*-panel.tsx`) — props-driven UI, may use React primitives (`useState`) and component-local hooks
 - **Page** (`*-page.tsx`) — layout composition (ChatPage composes chat + data panels)
 
-Исключение: `sidebar-panel.tsx` — потребляет 7 хуков напрямую (без контейнера), т.к. разделение создало бы 15+ prop interface.
+Исключение: `sidebar-panel.tsx` — потребляет 8 хуков напрямую (без контейнера), т.к. разделение создало бы 15+ prop interface.
 
 ```
 hook → container → panel → component

@@ -98,7 +98,7 @@ POST /api/chat/stream {conversation_id, message}
 
 ## Кэширование
 
-Assistant кэшируется per instrument через `@lru_cache`. Один Assistant = один `anthropic.Client` + два DataFrame (daily + minute) + system prompt. При первом запросе с инструментом — создаётся, дальше переиспользуется.
+Assistant кэшируется per instrument через `@lru_cache`. Один Assistant = один `anthropic.Anthropic` client + instrument + sessions + два DataFrame (daily + minute) + system prompt. При первом запросе с инструментом — создаётся, дальше переиспользуется.
 
 `POST /api/admin/reload-data` очищает оба кэша — `load_data` и `_get_assistant`. Следующий запрос пересоздаст Assistant с свежими DataFrames из parquet файлов.
 
@@ -108,4 +108,4 @@ Assistant кэшируется per instrument через `@lru_cache`. Один 
 
 ## Логирование
 
-Production — JSON формат `{ts, level, logger, msg, request_id}`. Development — plaintext с `request_id` через `RequestIdMiddleware`. Каждый запрос логирует: user id, conversation id, latency, стоимость.
+Production — JSON формат `{ts, level, logger, msg, request_id}`. Development — plaintext. `RequestIdMiddleware` генерирует request_id и кладёт в ContextVar, `RequestIdFilter` инжектит его в каждый log record. Каждый запрос логирует: user id, conversation id, latency, стоимость.

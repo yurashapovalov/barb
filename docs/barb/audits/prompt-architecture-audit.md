@@ -1,389 +1,105 @@
 # Audit: prompt-architecture.md
 
-Date: 2026-02-15
-
-## Claims
-
-### Claim 1
-- **Doc**: line 9: "Текущий `prompt.py` -- 97 строк"
-- **Verdict**: OUTDATED
-- **Evidence**: `assistant/prompt.py` does not exist. Refactored into `assistant/prompt/` package with `system.py` (139 lines) and `context.py` (119 lines).
-- **Fix**: change to "assistant/prompt/ package"
-
-### Claim 2
-- **Doc**: line 11: "Синтаксис Barb Script (9 шагов пайплайна)"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:5` — `session -> period -> from -> map -> where -> group_by -> select -> sort -> limit`
-
-### Claim 3
-- **Doc**: line 22: "Пять слоёв знаний агента" (title says 5, diagram shows 6)
-- **Verdict**: WRONG
-- **Evidence**: diagram on lines 24-42 shows 6 layers (numbered 1-6), not 5
-- **Fix**: change "Пять" to "Шесть"
-
-### Claim 4
-- **Doc**: line 44: "Слои 1-3 живут в system prompt. Слой 4 и 6 -- в tool descriptions."
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/prompt/system.py:36-138` builds system prompt (layers 1-3). `assistant/tools/__init__.py:9-58` has tool description (layer 4).
-
-### Claim 5
-- **Doc**: line 44: "Слой 5 -- в tool results (автоматический пост-процессинг)"
-- **Verdict**: WRONG
-- **Evidence**: `check_dates_for_holidays` and `check_dates_for_events` are never called from assistant/tools. Annotations NOT injected into tool results.
-- **Fix**: mark layer 5 as "not implemented"
-
-### Claim 6
-- **Doc**: line 57: "Instrument -- NQ, сессии, TZ -- из instruments.py"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/prompt/context.py:14-51` — `build_instrument_context(config)` reads sessions, tick_size, exchange
-
-### Claim 7
-- **Doc**: line 64: "~1,500 tokens" for system prompt
-- **Verdict**: UNVERIFIABLE
-- **Evidence**: runtime token count, cannot verify from code
-
-### Claim 8
-- **Doc**: line 75: "Functions -- 107 signatures -- из FUNCTIONS dict"
-- **Verdict**: WRONG
-- **Evidence**: counting all registered functions across 12 modules = 106, not 107
-- **Fix**: change "107" to "106"
-
-### Claim 9
-- **Doc**: line 91: "You are Barb -- a trading data analyst for {instrument} ({name})."
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/prompt/system.py:37` — exact match
-
-### Claim 10
-- **Doc**: lines 105-112: exchanges table schema shows `code, name, timezone, image_url`
-- **Verdict**: OUTDATED
-- **Evidence**: `supabase/migrations/20260213_exchanges.sql:3-8` — also has `eth (jsonb)` and `maintenance (jsonb)` columns
-- **Fix**: add missing columns
-
-### Claim 11
-- **Doc**: lines 117-137: instruments table schema
-- **Verdict**: ACCURATE
-- **Evidence**: `supabase/migrations/20260209_instruments.sql` + subsequent migrations — all columns exist
-
-### Claim 12
-- **Doc**: lines 143-149: instrument_full view SQL
-- **Verdict**: ACCURATE
-- **Evidence**: `supabase/migrations/20260220_view_cleanup.sql:4-21` — matches
-
-### Claim 13
-- **Doc**: line 151: "Без image_url, active (не нужны модели)"
-- **Verdict**: ACCURATE
-- **Evidence**: view does not include `image_url` or `active`
-
-### Claim 14
-- **Doc**: lines 156-158: "data/1d/{symbol}.parquet" and "data/1m/{symbol}.parquet"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/data.py:20` — `path = DATA_DIR / timeframe / asset_type / f"{instrument.upper()}.parquet"`
-
-### Claim 15
-- **Doc**: line 160: "data.py выбирает датасет по таймфрейму: daily+ -> 1d/, intraday -> 1m/"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/data.py:12` and `assistant/chat.py:148-161`
-
-### Claim 16
-- **Doc**: lines 164-172: "holidays.py -- holiday rules keyed by exchange code"
-- **Verdict**: ACCURATE
-- **Evidence**: `config/market/holidays.py:61-69` — `EXCHANGE_HOLIDAYS` dict keyed by exchange codes
-
-### Claim 17
-- **Doc**: line 175: "Все CME/CBOT/NYMEX/COMEX закрыты на одни праздники"
-- **Verdict**: ACCURATE
-- **Evidence**: `config/market/holidays.py:62-65` — all four map to `_US_HOLIDAYS`
-
-### Claim 18
-- **Doc**: line 193: "API get_instrument() не меняется -- возвращает тот же dict shape"
-- **Verdict**: ACCURATE
-- **Evidence**: `config/market/instruments.py:59-61` — returns normalized dict from `_CACHE`
-
-### Claim 19
-- **Doc**: line 211: "config = get_instrument('NQ')"
-- **Verdict**: ACCURATE
-- **Evidence**: `config/market/instruments.py:33` — merges exchange holidays into instrument config
-
-### Claim 20
-- **Doc**: line 243: "holidays = get_holidays_for_year('NQ', 2024)"
-- **Verdict**: ACCURATE
-- **Evidence**: `config/market/holidays.py:231` — function exists
-
-### Claim 21
-- **Doc**: line 286: "events = get_event_types_for_instrument('NQ')"
-- **Verdict**: ACCURATE
-- **Evidence**: `config/market/events.py:180` — function exists
-
-### Claim 22
-- **Doc**: line 287: "NQ -> ['macro', 'options'] -> FOMC, NFP, CPI, OPEX, etc."
-- **Verdict**: UNVERIFIABLE
-- **Evidence**: NQ's events list depends on Supabase runtime data
-
-### Claim 23
-- **Doc**: line 327: code block shows `# barb/prompt/context.py`
-- **Verdict**: WRONG
-- **Evidence**: actual file is `assistant/prompt/context.py`
-- **Fix**: change path
-
-### Claim 24
-- **Doc**: line 329: "from config.market.instruments import get_instrument, list_sessions"
-- **Verdict**: OUTDATED
-- **Evidence**: `assistant/prompt/context.py:1-11` does NOT import `get_instrument` or `list_sessions`. Takes config dict.
-- **Fix**: update imports
-
-### Claim 25
-- **Doc**: line 331: "from config.market.events import get_event_types_for_instrument, EventImpact"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/prompt/context.py:10` — confirmed
-
-### Claim 26
-- **Doc**: line 334: "def build_instrument_context(instrument: str) -> str:"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/prompt/context.py:14` — `def build_instrument_context(config: dict) -> str:`
-- **Fix**: change parameter to `config: dict`
-
-### Claim 27
-- **Doc**: line 358: "def build_holiday_context(instrument: str) -> str:"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/prompt/context.py:54` — `def build_holiday_context(config: dict) -> str:`
-- **Fix**: change parameter to `config: dict`
-
-### Claim 28
-- **Doc**: line 380: "def build_event_context(instrument: str) -> str:"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/prompt/context.py:82` — `def build_event_context(config: dict) -> str:`
-- **Fix**: change parameter to `config: dict`
-
-### Claim 29
-- **Doc**: lines 407-452: Trading Knowledge layer with `<trading_knowledge>` XML block
-- **Verdict**: WRONG
-- **Evidence**: `assistant/prompt/system.py` — no `<trading_knowledge>`. Uses `<recipes>` instead.
-- **Fix**: mark as planned or replace with `<recipes>`
-
-### Claim 30
-- **Doc**: line 485: "def build_query_tool_description() -> str:"
-- **Verdict**: WRONG
-- **Evidence**: no such function. Tool description is inline in `assistant/tools/__init__.py:11-32` using `build_function_reference()`
-- **Fix**: replace with actual architecture
-
-### Claim 31
-- **Doc**: line 498: "_barb_script_syntax()" function
-- **Verdict**: WRONG
-- **Evidence**: no such function. Syntax is inline in `assistant/tools/__init__.py:11-28`
-- **Fix**: remove or mark as planned
-
-### Claim 32
-- **Doc**: line 503: "from: '1min', '5min', '15min', '30min', '60min', 'daily'"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/tools/__init__.py:15` — actual values: `"1m", "5m", "15m", "30m", "1h", "daily", "weekly"`
-- **Fix**: update timeframe names
-
-### Claim 33
-- **Doc**: line 508: "order_by"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/tools/__init__.py:21` — field is named `sort`, not `order_by`
-- **Fix**: change to "sort"
-
-### Claim 34
-- **Doc**: line 522: "_build_function_list()" function
-- **Verdict**: WRONG
-- **Evidence**: equivalent is `build_function_reference()` in `assistant/tools/reference.py:165`
-- **Fix**: replace
-
-### Claim 35
-- **Doc**: lines 547-576: function names like `highest`, `lowest`, `true_range`, `bb_upper`, `keltner_upper`
-- **Verdict**: OUTDATED
-- **Evidence**: actual names: `rolling_max`, `rolling_min`, `tr`, `bbands_upper`/`bbands_lower`/etc., `kc_upper`/`kc_middle`/etc.
-- **Fix**: replace with actual names from SIGNATURES
-
-### Claim 36
-- **Doc**: line 593: "map":{"atr":"atr(14)", "m":"monthname()"}
-- **Verdict**: ACCURATE
-- **Evidence**: both `atr(n=14)` and `monthname()` exist. Valid Barb Script.
-
-### Claim 37
-- **Doc**: lines 664-704: `run_query_with_context` in `barb/assistant/query_runner.py`
-- **Verdict**: WRONG
-- **Evidence**: no such file or function. Annotations not injected into tool results.
-- **Fix**: mark as planned/not implemented
-
-### Claim 38
-- **Doc**: line 793: `# barb/prompt/system.py`
-- **Verdict**: WRONG
-- **Evidence**: actual file: `assistant/prompt/system.py`
-- **Fix**: change path
-
-### Claim 39
-- **Doc**: lines 795-799: imports from `barb.prompt.context`
-- **Verdict**: WRONG
-- **Evidence**: `assistant/prompt/system.py:10-14` imports from `assistant.prompt.context`
-- **Fix**: change import path
-
-### Claim 40
-- **Doc**: line 803: "def build_system_prompt(instrument: str) -> str:"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/prompt/system.py:18` — confirmed
-
-### Claim 41
-- **Doc**: lines 807-812: calls `build_instrument_context(instrument)`
-- **Verdict**: WRONG
-- **Evidence**: `assistant/prompt/system.py:25-27` — passes `config` dict, not `instrument` string
-- **Fix**: change argument
-
-### Claim 42
-- **Doc**: lines 818-838: `<trading_knowledge>` block in system prompt
-- **Verdict**: WRONG
-- **Evidence**: system prompt has `<recipes>`, `<instructions>`, `<transparency>` instead
-- **Fix**: replace with actual sections
-
-### Claim 43
-- **Doc**: lines 840-854: `<behavior>` block with 10 rules
-- **Verdict**: OUTDATED
-- **Evidence**: `assistant/prompt/system.py:55-68` — section is `<instructions>` with 12 rules
-- **Fix**: replace with `<instructions>`
-
-### Claim 44
-- **Doc**: lines 856-862: `<acknowledgment>` "15-20 words"
-- **Verdict**: OUTDATED
-- **Evidence**: `assistant/prompt/system.py:84-90` — says "10-20 words"
-- **Fix**: update word count
-
-### Claim 45
-- **Doc**: lines 864-869: `<data_titles>` block
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/prompt/system.py:92-97` — matches
-
-### Claim 46
-- **Doc**: line 919: `barb/prompt/tools.py` with `build_tools(phases)`
-- **Verdict**: WRONG
-- **Evidence**: no such file. Tools defined in `assistant/tools/__init__.py`
-- **Fix**: replace
-
-### Claim 47
-- **Doc**: line 969: "from barb.prompt.system import build_system_prompt"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/chat.py:11` — `from assistant.prompt import build_system_prompt`
-- **Fix**: change import path
-
-### Claim 48
-- **Doc**: line 970: "from barb.prompt.tools import build_tools"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/chat.py:12` — `from assistant.tools import BARB_TOOL, run_query`
-- **Fix**: change import
-
-### Claim 49
-- **Doc**: line 974: "async def chat(user_message, instrument='NQ')"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/chat.py:21-39` — `class Assistant` with `def chat_stream(self, message, history)`
-- **Fix**: replace with class-based architecture
-
-### Claim 50
-- **Doc**: line 976: 'model="claude-sonnet-4-5-20250929"'
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/chat.py:18` — `MODEL = "claude-sonnet-4-5-20250929"`
-
-### Claim 51
-- **Doc**: line 977: "system=build_system_prompt(instrument)"
-- **Verdict**: OUTDATED
-- **Evidence**: `assistant/chat.py:63-68` — uses prompt caching wrapper
-- **Fix**: note prompt caching
-
-### Claim 52
-- **Doc**: line 978: "tools=build_tools(phases=['query'])"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/chat.py:70` — `tools=[BARB_TOOL]`. No phases system.
-- **Fix**: change to `tools=[BARB_TOOL]`
-
-### Claim 53
-- **Doc**: lines 1030-1040: file structure `barb/prompt/` with 8 files
-- **Verdict**: WRONG
-- **Evidence**: actual: `assistant/prompt/{__init__.py, system.py, context.py}` + `assistant/tools/{__init__.py, reference.py}`. Most listed files don't exist.
-- **Fix**: replace with actual structure
-
-### Claim 54
-- **Doc**: lines 1044-1052: dependency diagram with `barb/` prefix paths
-- **Verdict**: OUTDATED
-- **Evidence**: all paths should use `assistant/` prefix
-- **Fix**: update paths
-
-### Claim 55
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `assistant/prompt/system.py:43-53` — `<recipes>` section not documented
-- **Fix**: add to doc
-
-### Claim 56
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `assistant/prompt/system.py:70-82` — `<transparency>` section not documented
-- **Fix**: add to doc
-
-### Claim 57
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `assistant/tools/reference.py:1-220` — `build_function_reference()` with display groups is the actual Layer 4 implementation
-- **Fix**: document as Layer 4
-
-### Claim 58
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `assistant/prompt/context.py:31-37` — maintenance, notes, and `Today: {date.today()}` not shown in doc examples
-- **Fix**: add to instrument context docs
-
-### Claim 59
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `assistant/prompt/context.py:23-29` — tick line includes `point_value`, doc only shows `tick_value`
-- **Fix**: add point_value
-
-## Summary
-
-| Verdict | Count |
-|---------|-------|
-| ACCURATE | 18 |
-| OUTDATED | 7 |
-| WRONG | 22 |
-| MISSING | 5 |
-| UNVERIFIABLE | 2 |
-| **Total** | **54** |
-| **Accuracy** | **33%** |
-
-## Verification
-
-Date: 2026-02-15
-
-### Claims 1-8 — CONFIRMED (except 7-8 INCONCLUSIVE)
-### Claim 7 — INCONCLUSIVE
-- **Reason**: Runtime token count cannot verify from static code
-### Claim 8 — INCONCLUSIVE
-- **Reason**: Cannot count functions without running Python
-### Claims 9-22 — CONFIRMED
-### Claim 11 — INCONCLUSIVE
-- **Reason**: Cannot verify all instrument columns without reading full migration
-### Claim 18 — INCONCLUSIVE
-- **Reason**: Cannot verify without reading full instruments.py
-### Claim 19 — INCONCLUSIVE
-- **Reason**: Cannot verify without reading full instruments.py
-### Claim 20 — INCONCLUSIVE
-- **Reason**: Cannot verify without reading full holidays.py
-### Claim 21 — INCONCLUSIVE
-- **Reason**: Cannot verify without reading full events.py
-### Claim 22 — INCONCLUSIVE
-- **Reason**: Runtime Supabase data
-### Claims 23-50 — CONFIRMED
-### Claim 35 — INCONCLUSIVE
-- **Reason**: Cannot verify actual function names without reading SIGNATURES dicts
-### Claim 36 — INCONCLUSIVE
-- **Reason**: Cannot verify function existence without full registry
-### Claim 51 — INCONCLUSIVE
-- **Reason**: Cannot verify prompt caching wrapper without reading more of chat.py
-### Claim 52 — INCONCLUSIVE
-- **Reason**: Cannot verify tools parameter without reading full chat.py
-### Claims 53-59 — CONFIRMED
-
-| Result | Count |
-|--------|-------|
-| CONFIRMED | 47 |
-| DISPUTED | 0 |
-| INCONCLUSIVE | 12 |
-| **Total** | **59** |
+**Date**: 2026-02-16
+**Claims checked**: 68
+**Correct**: 63 | **Wrong**: 3 | **Outdated**: 0 | **Unverifiable**: 2
+
+## Issues
+
+### [WRONG] RTH session time in example shows 09:30-17:00
+- **Doc says**: `RTH 09:30-17:00` (line 71, instrument context example)
+- **Code says**: NQ RTH is `["09:30", "16:15"]` per test config
+- **File**: `tests/conftest.py:24`
+
+### [WRONG] Events example omits PCE from high-impact list
+- **Doc says**: High impact events listed as FOMC, NFP, CPI only (lines 94-96)
+- **Code says**: PCE is also `EventImpact.HIGH` — 4 high-impact macro events, not 3
+- **File**: `config/market/events.py:48`
+
+### [WRONG] Events example shows medium impact as "PPI, GDP, Retail Sales, ..."
+- **Doc says**: `Medium impact: PPI, GDP, Retail Sales, ...` (line 98)
+- **Code says**: There are 8 medium-impact macro events: PPI, GDP, Retail Sales, ISM Manufacturing, ISM Services, Consumer Confidence, Michigan Sentiment, Durable Goods Orders. Also includes low-impact events (Jobless Claims, Industrial Production) which are not mentioned
+- **File**: `config/market/events.py:46-57`
+
+### [UNVERIFIABLE] Exchange list includes ICEUS and EUREX
+- **Doc says**: Exchanges table contains `CME, CBOT, NYMEX, COMEX, ICEEUR, ICEUS, EUREX` (line 249)
+- **Code says**: Seed migration only inserts 5 exchanges (CME, CBOT, NYMEX, COMEX, ICEEUR). ICEUS and EUREX are referenced in `holidays.py` EXCHANGE_HOLIDAYS but not in any migration. They may have been inserted directly via Supabase
+- **File**: `supabase/migrations/20260213_exchanges.sql:20-25`, `config/market/holidays.py:61-68`
+
+### [UNVERIFIABLE] RTH session time for NQ in production
+- **Doc says**: RTH is `09:30-17:00` in the instrument context example
+- **Code says**: Test fixture uses `09:30-16:15`. Production Supabase data may differ
+- **File**: `tests/conftest.py:24`
+
+## All Claims Checked
+
+| # | Claim | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | System prompt file is `assistant/prompt/system.py` | CORRECT | `assistant/prompt/system.py` exists |
+| 2 | Identity text: "You are Barb..." | CORRECT | `assistant/prompt/system.py:37` |
+| 3 | `<instrument>` block includes symbol, sessions, tick, data range | CORRECT | `assistant/prompt/context.py:39-51` |
+| 4 | `<holidays>` block includes closed/early close days | CORRECT | `assistant/prompt/context.py:54-79` |
+| 5 | `<events>` block includes FOMC, NFP, OPEX with impact levels | CORRECT | `assistant/prompt/context.py:82-119` |
+| 6 | `<recipes>` includes MACD cross, breakout, NFP, OPEX patterns | CORRECT | `assistant/prompt/system.py:43-53` |
+| 7 | `<instructions>` has 12 behavior rules | CORRECT | `assistant/prompt/system.py:55-68` — 12 numbered rules |
+| 8 | `<transparency>` section for alternative indicators | CORRECT | `assistant/prompt/system.py:70-82` |
+| 9 | `<acknowledgment>` section for brief confirmation | CORRECT | `assistant/prompt/system.py:84-90` |
+| 10 | `<data_titles>` section requiring title for every run_query | CORRECT | `assistant/prompt/system.py:92-97` |
+| 11 | `<examples>` has 5 conversation examples | CORRECT | `assistant/prompt/system.py:99-138` — Examples 1-5 |
+| 12 | Tool description is in `assistant/tools/__init__.py` | CORRECT | `assistant/tools/__init__.py:9-58` |
+| 13 | `BARB_TOOL` dict contains Barb Script syntax | CORRECT | `assistant/tools/__init__.py:9` |
+| 14 | Expression reference is auto-generated from barb.functions | CORRECT | `assistant/tools/__init__.py:6` calls `build_function_reference()` |
+| 15 | 15 function groups in DISPLAY_GROUPS | CORRECT | `assistant/tools/reference.py:11-162` — 15 groups verified |
+| 16 | 106 functions total | CORRECT | `barb/functions/__init__.py` — verified 106 FUNCTIONS |
+| 17 | Compact groups (one line) and expanded groups (with description) | CORRECT | `assistant/tools/reference.py:189-199` |
+| 18 | `build_system_prompt(instrument: str) -> str` signature | CORRECT | `assistant/prompt/system.py:18` |
+| 19 | Called once at Assistant creation, result cached via prompt caching | CORRECT | `assistant/chat.py:39` (set in `__init__`), `chat.py:63-68` (cache_control ephemeral) |
+| 20 | Identity text matches exactly | CORRECT | `assistant/prompt/system.py:37-39` matches doc lines 47-49 |
+| 21 | Three context blocks from `assistant/prompt/context.py` | CORRECT | `assistant/prompt/context.py` exports 3 functions |
+| 22 | Each context function takes `config: dict` | CORRECT | `context.py:14,54,82` — all take `config: dict` |
+| 23 | `build_instrument_context(config)` produces `<instrument>` block | CORRECT | `context.py:39-51` |
+| 24 | Instrument context includes point_value, notes, Today | CORRECT | `context.py:23-37,44` |
+| 25 | Code checks `config.get("maintenance")` but field not populated | CORRECT | `context.py:31-33` checks it; `instruments.py` normalized dict has no maintenance key |
+| 26 | `build_holiday_context(config)` produces `<holidays>` block | CORRECT | `context.py:54-79` |
+| 27 | Holidays from `config["holidays"]` merged in `register_instrument()` | CORRECT | `instruments.py:33,53` |
+| 28 | Returns empty string if no holidays | CORRECT | `context.py:57-58` |
+| 29 | `build_event_context(config)` produces `<events>` block | CORRECT | `context.py:82-119` |
+| 30 | Events from `get_event_types_for_instrument(symbol)` in events.py | CORRECT | `context.py:88` |
+| 31 | Filters by `EventImpact.HIGH` and `EventImpact.MEDIUM` | CORRECT | `context.py:92-93` |
+| 32 | RTH session time shown as 09:30-17:00 in example | WRONG | `tests/conftest.py:24` — NQ RTH is `["09:30", "16:15"]` |
+| 33 | High impact example shows only FOMC, NFP, CPI | WRONG | `config/market/events.py:48` — PCE is also HIGH impact |
+| 34 | Medium impact example shows PPI, GDP, Retail Sales | WRONG | `events.py:46-57` — 8 medium events plus low-impact events not mentioned |
+| 35 | Recipes block content matches code | CORRECT | `assistant/prompt/system.py:43-53` matches doc lines 109-120 exactly |
+| 36 | Only multi-function patterns in recipes | CORRECT | Recipe comment: "single-function descriptions are in the tool reference" |
+| 37 | 12 instruction rules | CORRECT | `system.py:55-68` — numbered 1-12 |
+| 38 | Rule 1: Data questions -> build query | CORRECT | `system.py:56` |
+| 39 | Rule 3: Percentage -> TWO queries | CORRECT | `system.py:58` |
+| 40 | Rule 6: Answer in user's language | CORRECT | `system.py:61` |
+| 41 | Rule 9: dayname() not dayofweek() | CORRECT | `system.py:64` |
+| 42 | Transparency section text matches | CORRECT | `system.py:70-82` matches doc lines 144-157 |
+| 43 | Acknowledgment: 10-20 words before run_query | CORRECT | `system.py:85` |
+| 44 | Data titles: every run_query MUST include "title" | CORRECT | `system.py:93` |
+| 45 | 5 examples: simple filter, indicator, event, holiday, follow-up | CORRECT | `system.py:99-138` |
+| 46 | `BARB_TOOL` dict in `assistant/tools/__init__.py` | CORRECT | `tools/__init__.py:9` |
+| 47 | Tool description includes Barb Script syntax with all fields | CORRECT | `tools/__init__.py:11-31` |
+| 48 | Execution order: session -> period -> from -> map -> where -> group_by -> select -> sort -> limit | CORRECT | `tools/__init__.py:24` |
+| 49 | group_by requires column name, select supports aggregates only | CORRECT | `tools/__init__.py:27-28` |
+| 50 | `build_function_reference() -> str` in reference.py | CORRECT | `assistant/tools/reference.py:165` |
+| 51 | Auto-generated from SIGNATURES and DESCRIPTIONS | CORRECT | `reference.py:7` imports from `barb.functions` |
+| 52 | Base columns: open, high, low, close, volume | CORRECT | `reference.py:174` |
+| 53 | Operators: arithmetic, comparison, boolean, membership | CORRECT | `reference.py:179-183` |
+| 54 | Notes about OHLCV auto-use, NaN, dayofweek 0-4 | CORRECT | `reference.py:205-217` |
+| 55 | Compact groups: Scalar, Lag, Moving Averages, Window, Cumulative, Aggregate, Time | CORRECT | Verified via Python — matches exactly |
+| 56 | Expanded groups: Pattern, Price, Candle, Signal, Oscillators, Trend, Volatility, Volume | CORRECT | Verified via Python — matches exactly |
+| 57 | `Assistant.__init__` takes api_key, instrument, df_daily, df_minute, sessions | CORRECT | `chat.py:26-33` |
+| 58 | Model is `claude-sonnet-4-5-20250929` hardcoded in `MODEL` | CORRECT | `chat.py:18` |
+| 59 | Max tool rounds: 5 | CORRECT | `chat.py:17` — `MAX_TOOL_ROUNDS = 5` |
+| 60 | Prompt caching: system prompt cached as ephemeral block | CORRECT | `chat.py:63-68` |
+| 61 | Dataframe selection: intraday -> df_minute, session -> logic, else -> df_daily | CORRECT | `chat.py:148-161` |
+| 62 | Tool results: model_response to Claude, table/source_rows to UI | CORRECT | `chat.py:162-211` |
+| 63 | Exchanges table: code, name, timezone, image_url | CORRECT | After all migrations (20260213 + 20260215 + 20260216 + 20260217) |
+| 64 | Exchange codes: CME, CBOT, NYMEX, COMEX, ICEEUR, ICEUS, EUREX | UNVERIFIABLE | Seed has 5; ICEUS/EUREX may be in Supabase directly |
+| 65 | Instruments table schema matches doc | CORRECT | After all migrations — matches doc listing (minus created_at/updated_at) |
+| 66 | instrument_full view matches doc | CORRECT | `20260220_view_cleanup.sql` matches doc exactly |
+| 67 | `load_data(instrument, timeframe, asset_type)` in barb/data.py | CORRECT | `barb/data.py:12` |
+| 68 | File structure and dependency tree | CORRECT | All files exist, all imports verified |

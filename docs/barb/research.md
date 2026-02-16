@@ -145,7 +145,7 @@ This is the most complex indicator. The complete algorithm:
 
 **Step 1 — Directional Movement**: `UpMove = High[t] - High[t-1]`, `DownMove = Low[t-1] - Low[t]`. If UpMove > DownMove and UpMove > 0, then +DM = UpMove, else +DM = 0. If DownMove > UpMove and DownMove > 0, then -DM = DownMove, else -DM = 0. Only one can be positive per bar; if equal, both are zero.
 
-**Step 2 — Smooth +DM, -DM, and TR** using Wilder's smoothing over 14 periods. The first smoothed value is the SMA (mean) of the first 14 values; subsequent values use `Smoothed[t] = Smoothed[t-1] × 13/14 + Current`.
+**Step 2 — Smooth +DM, -DM, and TR** using Wilder's smoothing over 14 periods. The first smoothed value is the SMA (mean) of the first 14 values; subsequent values use `Smoothed[t] = Smoothed[t-1] × 13/14 + Current / 14`.
 
 **Step 3 — Directional Indicators**: `+DI = (Smoothed +DM / Smoothed TR) × 100`, `-DI = (Smoothed -DM / Smoothed TR) × 100`.
 

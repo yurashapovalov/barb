@@ -1,472 +1,76 @@
 # Audit: functions-architecture.md
 
-Date: 2026-02-15
-
-## Claims
-
-### Claim 1
-- **Doc**: line 19: "Один файл `barb/functions.py`"
-- **Verdict**: OUTDATED
-- **Evidence**: `barb/functions/` is a package with 14 files. Migration is complete.
-- **Fix**: update section to reflect completed migration
-
-### Claim 2
-- **Doc**: line 31: "46 функций"
-- **Verdict**: OUTDATED
-- **Evidence**: `barb/functions/__init__.py:53-66` — FUNCTIONS dict merges 12 modules, total 106 functions
-- **Fix**: change to "106 функций"
-
-### Claim 3
-- **Doc**: line 51: "`barb/functions/_smoothing.py`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/_smoothing.py:11` — `def wilder_smooth(series, n)`
-
-### Claim 4
-- **Doc**: line 57: "`def wilder_smooth(series: pd.Series, n: int) -> pd.Series:`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/_smoothing.py:11` — exact match
-
-### Claim 5
-- **Doc**: lines 60-61: "First value = SMA of first n points. Subsequent: rma formula"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/_smoothing.py:34,37-42` — SMA seed then recursive formula
-
-### Claim 6
-- **Doc**: line 112: "Wilder's / RMA используется RSI, ATR, ADX, +DI, -DI"
-- **Verdict**: ACCURATE
-- **Evidence**: `oscillators.py:3,13-14` (RSI), `volatility.py:22` (ATR), `trend.py:56-58,64` (ADX)
-
-### Claim 7
-- **Doc**: line 113: "Standard EMA | ewm(span=n, adjust=False) | MACD, Keltner center, обычные EMA"
-- **Verdict**: ACCURATE
-- **Evidence**: `trend.py:14-15`, `volatility.py:79`, `window.py:59` — all use `ewm(span=..., adjust=False)`
-
-### Claim 8
-- **Doc**: line 116: "`adjust=False` всегда"
-- **Verdict**: ACCURATE
-- **Evidence**: all EMA uses confirmed
-
-### Claim 9
-- **Doc**: line 125: "`__init__.py` -- Собирает FUNCTIONS dict, экспортирует AGGREGATE_FUNCS"
-- **Verdict**: OUTDATED
-- **Evidence**: `barb/functions/__init__.py:98` — also exports SIGNATURES and DESCRIPTIONS
-- **Fix**: add SIGNATURES and DESCRIPTIONS to description
-
-### Claim 10
-- **Doc**: line 126: "`_smoothing.py` -- wilder_smooth()"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/_smoothing.py:11`
-
-### Claim 11
-- **Doc**: line 127: "core.py -- abs, log, sqrt, sign, round, if"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/core.py:14-21` — 6 functions
-
-### Claim 12
-- **Doc**: line 128: "lag.py -- prev, next"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/lag.py:3-6` — 2 functions
-
-### Claim 13
-- **Doc**: line 129: "window.py -- rolling_mean/sum/max/min/std, rolling_count, ema, sma, wma, hma, vwma, rma"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/window.py:52-64` — 12 functions
-
-### Claim 14
-- **Doc**: line 130: "cumulative.py -- cumsum, cummax, cummin"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/cumulative.py:3-7` — 3 functions
-
-### Claim 15
-- **Doc**: line 131: "pattern.py -- streak, bars_since, rank, rising, falling, valuewhen, pivothigh, pivotlow"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/pattern.py:99-108` — 8 functions
-
-### Claim 16
-- **Doc**: line 132: "aggregate.py -- mean, sum, count, max, min, std, median, percentile, correlation, last"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/aggregate.py:5-16` — 10 functions
-
-### Claim 17
-- **Doc**: line 133: "time.py -- dayofweek, hour, month, year, etc."
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/time.py:5-16` — 10 functions
-
-### Claim 18
-- **Doc**: line 134: "convenience.py -- gap, change_pct, body, crossover, inside_bar, ..."
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/convenience.py:100-123` — 19 functions
-
-### Claim 19
-- **Doc**: line 135: "oscillators.py -- RSI, Stochastic, CCI, Williams %R, MFI, ROC, Momentum"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/oscillators.py:85-94` — 8 functions
-
-### Claim 20
-- **Doc**: line 136: "trend.py -- MACD, ADX, SuperTrend, Parabolic SAR"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/trend.py:219-229` — 9 functions
-
-### Claim 21
-- **Doc**: line 137: "volatility.py -- ATR, True Range, Bollinger, Keltner, Donchian"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/volatility.py:114-129` — 14 functions
-
-### Claim 22
-- **Doc**: line 138: "volume.py -- OBV, VWAP, A/D Line, Volume Ratio"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/volume.py:53-59` — 5 functions
-
-### Claim 23
-- **Doc**: lines 143-177: "`__init__.py` code only imports `*_FUNCTIONS` and `AGGREGATE_FUNCS`"
-- **Verdict**: OUTDATED
-- **Evidence**: `barb/functions/__init__.py:7-51` — also imports `*_SIGNATURES` and `*_DESCRIPTIONS`
-- **Fix**: update code block
-
-### Claim 24
-- **Doc**: line 187: "core.py -- 6 функций"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 25
-- **Doc**: line 205: "window.py -- 12 функций"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 26
-- **Doc**: line 221: "vwma(n) -- Volume Weighted MA -- implicit OHLCV"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/window.py:41` — uses `df["close"]` and `df["volume"]`
-
-### Claim 27
-- **Doc**: lines 228-231: "Алиасы: sma = rolling_mean, highest = rolling_max, lowest = rolling_min"
-- **Verdict**: WRONG
-- **Evidence**: `sma` exists but `highest` and `lowest` do not exist anywhere in `barb/functions/`
-- **Fix**: remove `highest` and `lowest` aliases
-
-### Claim 28
-- **Doc**: line 232: "cumulative.py -- 3 функции"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 29
-- **Doc**: line 240: "pattern.py -- 8 функций"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 30
-- **Doc**: line 253: "aggregate.py -- 10 функций"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 31
-- **Doc**: line 268: "time.py -- 10 функций"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 32
-- **Doc**: line 297: "convenience.py -- ~20 функций"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/convenience.py:100-123` — 19 entries, not 20
-- **Fix**: change to "19 функций"
-
-### Claim 33
-- **Doc**: lines 305-326: convenience function implementations
-- **Verdict**: ACCURATE
-- **Evidence**: implementations match
-
-### Claim 34
-- **Doc**: lines 332-333: "crossover(a, b) formula"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/convenience.py:93` — exact match
-
-### Claim 35
-- **Doc**: line 335: "oscillators.py (~8 функций)"
-- **Verdict**: ACCURATE
-- **Evidence**: 8 entries confirmed
-
-### Claim 36
-- **Doc**: lines 344-363: RSI implementation with wilder_smooth
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/oscillators.py:6-22` — matches
-
-### Claim 37
-- **Doc**: lines 369-378: CCI implementation
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/oscillators.py:41-51` — matches
-
-### Claim 38
-- **Doc**: lines 384-395: MFI implementation
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/oscillators.py:62-70` — matches
-
-### Claim 39
-- **Doc**: line 401: "stoch_k(n) | (df, n=14)"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/oscillators.py:25` — confirmed
-
-### Claim 40
-- **Doc**: line 406: "roc(col, n) | (df, col, n=1)"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/oscillators.py:73` — confirmed
-
-### Claim 41
-- **Doc**: line 409: "trend.py (~10 функций)"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/trend.py:219-229` — 9 entries, not 10
-- **Fix**: change to "9 функций"
-
-### Claim 42
-- **Doc**: lines 414-420: MACD implementation
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/trend.py:12-16` — matches
-
-### Claim 43
-- **Doc**: lines 428-461: ADX system implementation
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/trend.py:35-66` — matches
-
-### Claim 44
-- **Doc**: line 474: "sar(accel, max_accel) | (df, accel=0.02, max=0.2)"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/trend.py:151` — parameter is `max_accel`, not `max`
-- **Fix**: change `max=0.2` to `max_accel=0.2`
-
-### Claim 45
-- **Doc**: line 475: "wma(col, n)" listed in trend.py table
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/window.py:61` — wma is in window.py, not trend.py
-- **Fix**: remove from trend.py table
-
-### Claim 46
-- **Doc**: line 477: "volatility.py (~12 функций)"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/volatility.py:114-129` — 14 entries, not 12
-- **Fix**: change to "14 функций"
-
-### Claim 47
-- **Doc**: lines 484-497: ATR implementation with wilder_smooth
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/volatility.py:8-22` — matches
-
-### Claim 48
-- **Doc**: line 485: "function is called `_true_range(df)`"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/volatility.py:8` — function is `_tr(df)`
-- **Fix**: change to `_tr`
-
-### Claim 49
-- **Doc**: lines 503-511: Bollinger Bands with ddof=0
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/volatility.py:38` — `std(ddof=0)` confirmed
-
-### Claim 50
-- **Doc**: lines 517-524: Keltner Channel defaults (mult=2)
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/volatility.py:77` — `mult=1.5`, not 2
-- **Fix**: change to `mult=1.5`
-
-### Claim 51
-- **Doc**: line 529: "true_range() | (df)"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/volatility.py:114` — registered as `"tr"`, not `"true_range"`
-- **Fix**: change to `tr()`
-
-### Claim 52
-- **Doc**: line 532: "bb_upper(col, n, mult)"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/volatility.py:118` — registered as `"bbands_upper"`
-- **Fix**: change all bb_* to bbands_*
-
-### Claim 53
-- **Doc**: line 537: "keltner_upper(ema_n, atr_n, mult)"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/volatility.py:124` — registered as `"kc_upper"`, mult=1.5
-- **Fix**: change keltner_* to kc_*, mult to 1.5
-
-### Claim 54
-- **Doc**: line 542: "volume.py (~5 функций)"
-- **Verdict**: ACCURATE
-- **Evidence**: 5 entries confirmed
-
-### Claim 55
-- **Doc**: lines 547-555: A/D Line implementation
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/functions/volume.py:30-39` — matches
-
-### Claim 56
-- **Doc**: line 579: "Keltner mult | 2"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/volatility.py:77` — `mult=1.5`
-- **Fix**: change to 1.5
-
-### Claim 57
-- **Doc**: line 610: "`from barb.functions.volatility import _true_range`"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/trend.py:7` — `from barb.functions.volatility import _atr, _tr`
-- **Fix**: change to `_atr, _tr`
-
-### Claim 58
-- **Doc**: line 612: "`tr = _true_range(df)`"
-- **Verdict**: WRONG
-- **Evidence**: `barb/functions/trend.py:55` — `tr = _tr(df)`
-- **Fix**: change to `_tr(df)`
-
-### Claim 59
-- **Doc**: line 615: "В FUNCTIONS dict -- только публичные имена. _rsi, _atr, _true_range -- private."
-- **Verdict**: ACCURATE
-- **Evidence**: no underscore-prefixed names in any *_FUNCTIONS dict
-
-### Claim 60
-- **Doc**: lines 623-641: Test structure with conftest.py containing "make_df, load_test_data, load_reference"
-- **Verdict**: WRONG
-- **Evidence**: `tests/functions/conftest.py:7-17` — only has `df` fixture
-- **Fix**: change to "`df` fixture"
-
-### Claim 61
-- **Doc**: lines 637-640: "reference_data/ with nq_daily_rsi14.csv, etc."
-- **Verdict**: WRONG
-- **Evidence**: only `nq_oscillators_tv.csv` exists
-- **Fix**: update listing
-
-### Claim 62
-- **Doc**: lines 623-634: test files listed
-- **Verdict**: OUTDATED
-- **Evidence**: also contains test_lag.py, test_cumulative.py, test_aggregate.py, test_time.py, test_registry.py, test_tv_match.py
-- **Fix**: add missing test files
-
-### Claim 63
-- **Doc**: line 742: "core.py | Было 6 | Стало 6"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 64
-- **Doc**: line 744: "window.py | Было 7 | Стало 12 | +5"
-- **Verdict**: ACCURATE
-- **Evidence**: confirmed
-
-### Claim 65
-- **Doc**: line 749: "convenience.py | Стало 20 | +20"
-- **Verdict**: WRONG
-- **Evidence**: 19 entries, not 20
-- **Fix**: change to 19
-
-### Claim 66
-- **Doc**: line 751: "trend.py | Стало 10 | +10"
-- **Verdict**: WRONG
-- **Evidence**: 9 entries (wma is in window.py)
-- **Fix**: change to 9
-
-### Claim 67
-- **Doc**: line 752: "volatility.py | Стало 12 | +12"
-- **Verdict**: WRONG
-- **Evidence**: 14 entries
-- **Fix**: change to 14
-
-### Claim 68
-- **Doc**: line 755: "Итого | Стало 107 | +66"
-- **Verdict**: WRONG
-- **Evidence**: total is 106, not 107
-- **Fix**: change to 106
-
-### Claim 69
-- **Doc**: line 761: "13 модулей вместо 1 файла"
-- **Verdict**: ACCURATE
-- **Evidence**: 14 .py files: __init__ + _smoothing + 12 category modules
-
-### Claim 70
-- **Doc**: line 770: "expressions.py -- works with FUNCTIONS dict"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/expressions.py:84` — receives functions as parameter
-
-### Claim 71
-- **Doc**: line 771: "interpreter.py -- pipeline doesn't depend on specific functions"
-- **Verdict**: ACCURATE
-- **Evidence**: passes FUNCTIONS dict to evaluate()
-
-### Claim 72
-- **Doc**: line 772: "validation.py -- sees new functions via FUNCTIONS import"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/validation.py:17` — imports FUNCTIONS
-
-### Claim 73
-- **Doc**: line 794: "Keltner `mult=2` в 'Что стало'"
-- **Verdict**: WRONG
-- **Evidence**: actual default is `mult=1.5`
-- **Fix**: change to 1.5
-
-### Claim 74
-- **Doc**: lines 684-713: Grouped function list for prompt
-- **Verdict**: WRONG
-- **Evidence**: uses wrong names: `true_range` (→ `tr`), `bb_*` (→ `bbands_*`), `keltner_*` (→ `kc_*`), `highest`/`lowest` (don't exist)
-- **Fix**: update all names
-
-### Claim 75
-- **Doc**: line 250: "pivothigh(n_left, n_right)" without defaults
-- **Verdict**: OUTDATED
-- **Evidence**: `barb/functions/pattern.py:64` — `def _pivothigh(df, n_left=5, n_right=5)`
-- **Fix**: add defaults
-
-### Claim 76
-- **Doc**: line 695: "Time: dayofweek(), hour(), minute(), month(), year(), date(), day(), quarter()"
-- **Verdict**: OUTDATED
-- **Evidence**: TIME_FUNCTIONS also has `dayname()` and `monthname()`
-- **Fix**: add missing functions
-
-### Claim 77
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `barb/functions/volatility.py:83-85,94-98` — `kc_middle` and `kc_width` not documented
-- **Fix**: add to volatility table
-
-### Claim 78
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `barb/functions/__init__.py:68-96` — SIGNATURES/DESCRIPTIONS dicts and auto-generation pattern not documented
-- **Fix**: add section
-
-### Claim 79
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `tests/functions/test_registry.py` — registry consistency test not mentioned
-- **Fix**: add to test section
-
-### Claim 80
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `tests/functions/test_tv_match.py` — TradingView match tests not mentioned
-- **Fix**: add to test section
-
-## Summary
-
-| Verdict | Count |
-|---------|-------|
-| ACCURATE | 39 |
-| OUTDATED | 6 |
-| WRONG | 21 |
-| MISSING | 4 |
-| UNVERIFIABLE | 0 |
-| **Total** | **70** |
-| **Accuracy** | **56%** |
-
-## Verification
-
-Date: 2026-02-15
-
-### Claims 1-80 — CONFIRMED
-
-All 80 claims independently verified. Auditor accuracy: 100%.
-
-Key confirmations:
-- Wrong function names (true_range→tr, bb_*→bbands_*, keltner_*→kc_*) all verified
-- Wrong counts (46→106, 20→19, 10→9, 12→14, 107→106) all verified
-- Wrong defaults (Keltner mult 2→1.5, sar max→max_accel) all verified
-- Non-existent aliases (highest, lowest) verified absent
-- Missing exports (SIGNATURES, DESCRIPTIONS) verified present in code
-
-| Result | Count |
-|--------|-------|
-| CONFIRMED | 80 |
-| DISPUTED | 0 |
-| INCONCLUSIVE | 0 |
-| **Total** | **80** |
+**Date**: 2026-02-16
+**Claims checked**: 62
+**Correct**: 62 | **Wrong**: 0 | **Outdated**: 0 | **Unverifiable**: 0
+
+## Issues
+
+No issues found. All claims verified against the codebase.
+
+## All Claims Checked
+
+| # | Claim | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | Package `barb/functions/` — 106 functions in 12 modules | CORRECT | `len(FUNCTIONS)` = 106; 12 module .py files (excluding `__init__.py` and `_smoothing.py`) |
+| 2 | `__init__.py` exports FUNCTIONS, SIGNATURES, DESCRIPTIONS, AGGREGATE_FUNCS | CORRECT | `barb/functions/__init__.py:98` — `__all__ = ["FUNCTIONS", "AGGREGATE_FUNCS", "SIGNATURES", "DESCRIPTIONS"]` |
+| 3 | `_smoothing.py` contains `wilder_smooth()` | CORRECT | `barb/functions/_smoothing.py:11` — `def wilder_smooth(series, n)` |
+| 4 | `core.py` has 6 functions: abs, log, sqrt, sign, round, if | CORRECT | `barb/functions/core.py:14-21` — `CORE_FUNCTIONS` has exactly 6 keys |
+| 5 | `lag.py` has 2 functions: prev, next | CORRECT | `barb/functions/lag.py:3-6` — `LAG_FUNCTIONS` has exactly 2 keys |
+| 6 | `window.py` has 12 functions: rolling_*, ema, sma, wma, hma, vwma, rma | CORRECT | `barb/functions/window.py:52-65` — `WINDOW_FUNCTIONS` has 12 keys |
+| 7 | `cumulative.py` has 3 functions: cumsum, cummax, cummin | CORRECT | `barb/functions/cumulative.py:3-7` — `CUMULATIVE_FUNCTIONS` has 3 keys |
+| 8 | `pattern.py` has 8 functions: streak, bars_since, rank, rising, falling, valuewhen, pivothigh, pivotlow | CORRECT | `barb/functions/pattern.py:99-108` — `PATTERN_FUNCTIONS` has 8 keys |
+| 9 | `aggregate.py` has 10 functions: mean, sum, max, min, std, median, count, percentile, correlation, last | CORRECT | `barb/functions/aggregate.py:5-16` — `AGGREGATE_FUNCTIONS` has 10 keys |
+| 10 | `time.py` has 10 functions: dayofweek, dayname, hour, minute, month, monthname, year, date, day, quarter | CORRECT | `barb/functions/time.py:5-16` — `TIME_FUNCTIONS` has 10 keys |
+| 11 | `convenience.py` has 19 functions: gap, change_pct, body, crossover, inside_bar, ... | CORRECT | `barb/functions/convenience.py:100-123` — `CONVENIENCE_FUNCTIONS` has 19 keys |
+| 12 | `oscillators.py` has 8 functions: rsi, stoch_k, stoch_d, cci, williams_r, mfi, roc, momentum | CORRECT | `barb/functions/oscillators.py:85-94` — `OSCILLATOR_FUNCTIONS` has 8 keys |
+| 13 | `trend.py` has 9 functions: macd, macd_signal, macd_hist, adx, plus_di, minus_di, supertrend, supertrend_dir, sar | CORRECT | `barb/functions/trend.py:219-229` — `TREND_FUNCTIONS` has 9 keys |
+| 14 | `volatility.py` has 14 functions: tr, atr, natr, bbands_*, kc_*, donchian_* | CORRECT | `barb/functions/volatility.py:114-129` — `VOLATILITY_FUNCTIONS` has 14 keys |
+| 15 | `volume.py` has 5 functions: obv, vwap_day, ad_line, volume_ratio, volume_sma | CORRECT | `barb/functions/volume.py:53-59` — `VOLUME_FUNCTIONS` has 5 keys |
+| 16 | Function contract: `(df, *args) -> pd.Series \| scalar` | CORRECT | All functions take df as first arg and return Series or scalar values |
+| 17 | Functions access OHLCV from df directly (`df["high"]`, `df["close"]`) | CORRECT | e.g. `barb/functions/oscillators.py:31` — `df["low"].rolling(n).min()` |
+| 18 | Each module exports `*_FUNCTIONS`, `*_SIGNATURES`, `*_DESCRIPTIONS` | CORRECT | All 12 modules follow this pattern consistently |
+| 19 | `__init__.py` merges dicts with `**` unpacking | CORRECT | `barb/functions/__init__.py:53-66` — `FUNCTIONS = {**CORE_FUNCTIONS, **LAG_FUNCTIONS, ...}` |
+| 20 | SIGNATURES and DESCRIPTIONS used in `assistant/tools/reference.py` | CORRECT | `assistant/tools/reference.py:7` — `from barb.functions import DESCRIPTIONS, SIGNATURES` |
+| 21 | AGGREGATE_FUNCS has 6 functions for group_by: mean, sum, max, min, std, median | CORRECT | `barb/functions/aggregate.py:20-27` — exactly 6 keys |
+| 22 | RSI: `(df, col, n=14)` — explicit column | CORRECT | `barb/functions/oscillators.py:6` — `def _rsi(df, col, n=14)` |
+| 23 | EMA: `(df, col, n)` — explicit column | CORRECT | `barb/functions/window.py:59` — `lambda df, col, n: col.ewm(...)` |
+| 24 | ATR: `(df, n=14)` — implicit, always H/L/C | CORRECT | `barb/functions/volatility.py:17` — `def _atr(df, n=14)`, uses `_tr(df)` internally |
+| 25 | gap: `(df)` — implicit, always O/C | CORRECT | `barb/functions/convenience.py:12-13` — `def _gap(df): return df["open"] - df["close"].shift(1)` |
+| 26 | stoch_k: `(df, n=14)` — implicit, always H/L/C | CORRECT | `barb/functions/oscillators.py:25` — `def _stoch_k(df, n=14)` |
+| 27 | `trend.py` imports `_atr, _tr` from volatility | CORRECT | `barb/functions/trend.py:7` — `from barb.functions.volatility import _atr, _tr` |
+| 28 | `window.py`, `oscillators.py`, `volatility.py`, `trend.py` import wilder_smooth from `_smoothing` | CORRECT | grep shows all four import `wilder_smooth` from `barb.functions._smoothing` |
+| 29 | Only public names in FUNCTIONS dict; `_rsi`, `_atr`, `_tr` are private | CORRECT | FUNCTIONS dict keys are all without underscore prefix |
+| 30 | Wilder's/RMA: α=1/n, SMA seed, used by RSI, ATR, ADX, +DI, -DI | CORRECT | `_smoothing.py:37` — `alpha = 1.0 / n`; RSI/ATR use wilder_smooth; ADX uses it 3 times |
+| 31 | Standard EMA: α=2/(n+1), `ewm(span=n, adjust=False)`, used by MACD, Keltner | CORRECT | `trend.py:14` — MACD uses `ewm(span=..., adjust=False)`; `volatility.py:79` — KC uses same |
+| 32 | SMA: `rolling(n).mean()`, used by Bollinger, Stochastic %D | CORRECT | `volatility.py:36` — bbands uses `rolling(n).mean()`; `oscillators.py:38` — stoch_d uses `rolling().mean()` |
+| 33 | `adjust=False` always used with EMA | CORRECT | All 9 `ewm()` calls across codebase use `adjust=False` |
+| 34 | wilder_smooth: first value = SMA of first n non-NaN points | CORRECT | `_smoothing.py:34` — `result[seed_idx] = np.mean(non_nan)` where `non_nan` has exactly n elements |
+| 35 | wilder_smooth: recursive `rma[t] = (1/n) * val[t] + (1 - 1/n) * rma[t-1]` | CORRECT | `_smoothing.py:38-42` — exact formula match |
+| 36 | Bollinger Bands uses `ddof=0` (population std) | CORRECT | `barb/functions/volatility.py:38,51,59,68` — all use `.std(ddof=0)` |
+| 37 | CCI uses mean deviation, not std | CORRECT | `barb/functions/oscillators.py:50` — `lambda x: abs(x - x.mean()).mean()` |
+| 38 | Keltner: `kc_upper(n=20, atr_n=10, mult=1.5)` — two different periods | CORRECT | `barb/functions/volatility.py:77` — `def _kc_upper(df, n=20, atr_n=10, mult=1.5)` |
+| 39 | MFI uses `rolling(n).sum()`, not exponential smoothing | CORRECT | `barb/functions/oscillators.py:68-69` — `.rolling(n).sum()` for both pos and neg flow |
+| 40 | Stochastic %K default = 14 (TV), not 5 (ta-lib) | CORRECT | `barb/functions/oscillators.py:25` — `def _stoch_k(df, n=14)` |
+| 41 | CCI default = 20 (TV), not 14 (ta-lib) | CORRECT | `barb/functions/oscillators.py:41` — `def _cci(df, n=20)` |
+| 42 | Keltner mult default = 1.5 | CORRECT | `barb/functions/volatility.py:77` — `mult=1.5` |
+| 43 | Test structure: `tests/functions/` with conftest.py and test files per module | CORRECT | All 15 test files exist in `tests/functions/` |
+| 44 | conftest.py has shared `df` fixture: 10-bar OHLCV DataFrame with DatetimeIndex | CORRECT | `tests/functions/conftest.py:7-17` — 10 rows, OHLCV columns, DatetimeIndex |
+| 45 | Fixture dates start at `2024-01-02`, periods=10, freq="D" | CORRECT | `tests/functions/conftest.py:10` — exact match |
+| 46 | Fixture OHLCV values match doc | CORRECT | `tests/functions/conftest.py:12-16` — values identical to doc |
+| 47 | Fixture is function-scoped | CORRECT | No explicit scope parameter = pytest default `function` scope |
+| 48 | test_registry.py checks: functions without signatures, orphan signatures, orphan descriptions | CORRECT | `tests/functions/test_registry.py:7-21` — four tests cover these checks |
+| 49 | test_registry.py checks: each signature starts with `func_name(` | CORRECT | `tests/functions/test_registry.py:31-36` — `sig.startswith(name + "(")` |
+| 50 | test_registry.py checks: `len(FUNCTIONS) == len(SIGNATURES) == len(DESCRIPTIONS)` | CORRECT | `tests/functions/test_registry.py:38-40` — two assertions cover this |
+| 51 | test_tv_match.py uses real NQ daily data with `load_data("NQ", "1d")`, module-scoped | CORRECT | `tests/functions/test_tv_match.py:24-30` — `scope="module"`, `load_data("NQ", "1d")` |
+| 52 | test_tv_match.py uses CSV reference data from `tests/functions/reference_data/nq_oscillators_tv.csv` | CORRECT | `tests/functions/test_tv_match.py:21` — `REF_PATH = "tests/functions/reference_data/nq_oscillators_tv.csv"` |
+| 53 | Reference CSV has 3 dates x OHLCV + RSI/ATR/CCI/StochK/WilliamsR/MFI | CORRECT | CSV has 3 data rows with columns: date,open,high,low,close,rsi_14,atr_14,cci_20,stoch_k_14,williams_r_14,mfi_14 |
+| 54 | `_assert_close` uses relative OR absolute tolerance | CORRECT | `tests/functions/test_tv_match.py:51-60` — checks abs_tol first, then rel_tol |
+| 55 | RSI test tolerance: `rel_tol=0.01, abs_tol=0.5` | CORRECT | `tests/functions/test_tv_match.py:70` — exact values match |
+| 56 | test_tv_match.py has TestRSIMatch class | CORRECT | `tests/functions/test_tv_match.py:63` — `class TestRSIMatch:` |
+| 57 | `DISPLAY_GROUPS` exists in `assistant/tools/reference.py` | CORRECT | `assistant/tools/reference.py:11` — `DISPLAY_GROUPS = [...]` |
+| 58 | reference.py has explicit list of functions per group | CORRECT | `assistant/tools/reference.py:11-162` — all 106 functions listed by name in groups |
+| 59 | Functions not in DISPLAY_GROUPS won't appear in Claude's prompt | CORRECT | `assistant/tools/reference.py:189-199` — only names from DISPLAY_GROUPS are rendered |
+| 60 | Step 6 of adding new function: add to DISPLAY_GROUPS in reference.py | CORRECT | This is the documented process; reference.py has explicit name lists |
+| 61 | Files section lists correct paths | CORRECT | All listed paths exist and serve described purposes |
+| 62 | Dates in reference CSV chosen away from contract rolls | CORRECT | `tests/functions/test_tv_match.py:7` — docstring states "chosen away from contract rolls"; dates are 2025-12-05, 2026-01-15, 2026-02-05 (mid-quarter) |

@@ -1,243 +1,67 @@
 # Audit: result-format.md
 
-Date: 2026-02-15
+**Date**: 2026-02-16
+**Claims checked**: 42
+**Correct**: 39 | **Wrong**: 1 | **Outdated**: 0 | **Unverifiable**: 2
 
-## Claims
+## Issues
 
-### Claim 1
-- **Doc**: line 32: "`barb/interpreter.py` -> `execute()` returns:"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:90` — `def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:`
+### [WRONG] Data flow diagram omits several SSE event types
+- **Doc says**: SSE events are `text_delta`, `data_block`, and `done`
+- **Code says**: Chat stream also yields `tool_start`, `tool_end` events; API layer adds `title_update`, `persist`, and `error` SSE events
+- **File**: `/Users/yura/Development/barb/assistant/chat.py`:133-183 (tool_start/tool_end), `/Users/yura/Development/barb/api/main.py`:686,701,724 (title_update/error/persist)
 
-### Claim 2
-- **Doc**: line 37: "summary type can be `scalar | dict | table | grouped`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:694-695` — `"type": "grouped" if is_grouped else "table"`; line 652 — `"type": "dict"`; line 670 — `"type": "scalar"`
+### [UNVERIFIABLE] Example data values
+- **Doc says**: Various example values like `rows: 13`, `change_pct: min=-5.06`, `mean_gap=32.1`, etc.
+- **Reason**: These are illustrative examples, not verifiable against code logic. The structure is correct, values are plausible.
 
-### Claim 3
-- **Doc**: line 38: "summary contains `rows` count"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:696` — `"rows": len(table)`
+### [UNVERIFIABLE] Russian-language descriptions of user intent
+- **Doc says**: e.g., "сколько inside days?", "средний gap по dow", etc.
+- **Reason**: These are usage examples showing typical questions, not verifiable against code.
 
-### Claim 4
-- **Doc**: lines 39-41: "summary contains `stats` with min/max/mean"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:705-714` — stats dict with `min`, `max`, `mean` for numeric columns
+## All Claims Checked
 
-### Claim 5
-- **Doc**: lines 42-43: "summary contains `first` and `last` with `timestamp` key"
-- **Verdict**: WRONG
-- **Evidence**: `barb/interpreter.py:718-720` — `first_last_cols = ["timestamp"] + map_columns` but `table` from `_prepare_for_output` has `date` not `timestamp`, so filter removes it. Actual first/last contain only map columns.
-- **Fix**: remove `timestamp` from first/last example or note date is not captured
-
-### Claim 6
-- **Doc**: line 46: "response contains `table` key"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:641` — `"table": table`
-
-### Claim 7
-- **Doc**: line 47: "response contains `source_rows`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:604-612` — populated when `has_aggregation` is True
-
-### Claim 8
-- **Doc**: line 48: "response contains `source_row_count`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:644,663,679` — in all response branches
-
-### Claim 9
-- **Doc**: line 49: "response contains `metadata`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:589-594` — metadata dict with rows, session, from, warnings
-
-### Claim 10
-- **Doc**: line 50: "response contains `query`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:646,664,681` — in all branches
-
-### Claim 11
-- **Doc**: lines 36-51: response structure does not mention `chart` key
-- **Verdict**: MISSING
-- **Evidence**: `barb/interpreter.py:629-638,647` — `"chart": chart` returned in DataFrame branch
-- **Fix**: add `"chart"` to response structure
-
-### Claim 12
-- **Doc**: line 56: "`assistant/tools/__init__.py` -> `_format_summary_for_model()`"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/tools/__init__.py:89` — function exists
-
-### Claim 13
-- **Doc**: line 60: "scalar format: `Result: 80 (from 500 rows)`"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/tools/__init__.py:97` — exact format match
-
-### Claim 14
-- **Doc**: line 61: "dict format: `Result: count=80, mean=67.3`"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/tools/__init__.py:101-103` — format match
-
-### Claim 15
-- **Doc**: line 62: "table format: `Result: 13 rows\n  change_pct: min=...`"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/tools/__init__.py:106-123` — format match
-
-### Claim 16
-- **Doc**: line 63: "grouped format: `Result: 5 groups by dow`"
-- **Verdict**: ACCURATE
-- **Evidence**: `assistant/tools/__init__.py:126-136` — format match
-
-### Claim 17
-- **Doc**: lines 67-69: "no select, no group_by produces table type"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:152-153` — DataFrame result, type "table"
-
-### Claim 18
-- **Doc**: lines 67,70: "scalar select, no group_by produces scalar type"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:149-151` — single string select → scalar
-
-### Claim 19
-- **Doc**: lines 67,71: "list select, no group_by produces dict type"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:149-151` — list select → dict
-
-### Claim 20
-- **Doc**: lines 67,72: "any select with group_by produces grouped type"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:146-148` — group_by → grouped DataFrame
-
-### Claim 21
-- **Doc**: line 80: "scalar/dict results get source_rows"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:606` — `has_aggregation = query.get("select") is not None`, True for scalar/dict
-
-### Claim 22
-- **Doc**: line 81: "grouped results do NOT get source_rows"
-- **Verdict**: WRONG
-- **Evidence**: `barb/interpreter.py:606` — grouped queries with explicit `select` have `has_aggregation=True`, so source_rows IS populated
-- **Fix**: "grouped results get source_rows when `select` is explicitly provided"
-
-### Claim 23
-- **Doc**: line 82: "table results do NOT get source_rows"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:606` — no select → `has_aggregation=False`
-
-### Claim 24
-- **Doc**: lines 86-93: "stats calculated for columns from `map` + column from `sort`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:597-601` — `summary_columns = set(map_columns)` then adds sort_col
-
-### Claim 25
-- **Doc**: line 21: "SSE data_block contains `{table: rows}`"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/chat.py:199-211` — key is `result`, not `table`, plus `rows`, `title`, `chart`
-- **Fix**: change `{table: rows}` to `{result: rows, rows: N, title: ..., chart: ...}`
-
-### Claim 26
-- **Doc**: lines 25-27: "SSE done event sends `{data: rows}`"
-- **Verdict**: WRONG
-- **Evidence**: `assistant/chat.py:253-261` — done event has `{answer, usage, tool_calls, data}`
-- **Fix**: update diagram to show full done event structure
-
-### Claim 27
-- **Doc**: line 99: "scalar example produces `{type: scalar, value: 65}`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:670-671` — format match
-
-### Claim 28
-- **Doc**: line 100: "grouped example produces `{type: grouped, rows: 5}`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:694-696` — format match
-
-### Claim 29
-- **Doc**: line 101: "table example produces `{type: table, rows: 13}`"
-- **Verdict**: ACCURATE
-- **Evidence**: `barb/interpreter.py:694-696` — format match
-
-### Claim 30
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `barb/interpreter.py:697` — summary includes `"columns": list(df.columns)`
-- **Fix**: add `"columns"` to summary structure
-
-### Claim 31
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `barb/interpreter.py:700-702` — grouped summary includes `"by": group_by`
-- **Fix**: add `"by"` to grouped summary
-
-### Claim 32
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `barb/interpreter.py:736-744` — grouped summary includes `"min_row"` and `"max_row"`
-- **Fix**: add min_row/max_row to grouped summary docs
-
-### Claim 33
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `barb/interpreter.py:652-655` — dict summary has `"values"`, `"rows_scanned"`; scalar has `"value"`, `"rows_scanned"`
-- **Fix**: document dict and scalar summary sub-structures
-
-### Claim 34
-- **Doc**: not mentioned
-- **Verdict**: MISSING
-- **Evidence**: `assistant/tools/__init__.py:74-80` — `run_query()` return format bridges interpreter and chat
-- **Fix**: add section describing `run_query()` return format
-
-## Summary
-
-| Verdict | Count |
-|---------|-------|
-| ACCURATE | 22 |
-| OUTDATED | 0 |
-| WRONG | 4 |
-| MISSING | 6 |
-| UNVERIFIABLE | 0 |
-| **Total** | **32** |
-| **Accuracy** | **69%** |
-
-## Verification
-
-Date: 2026-02-15
-
-### Claim 1 — CONFIRMED
-### Claim 2 — CONFIRMED
-### Claim 3 — CONFIRMED
-### Claim 4 — CONFIRMED
-### Claim 5 — CONFIRMED
-### Claim 6 — CONFIRMED
-### Claim 7 — CONFIRMED
-### Claim 8 — CONFIRMED
-### Claim 9 — CONFIRMED
-### Claim 10 — CONFIRMED
-### Claim 11 — CONFIRMED
-### Claim 12 — CONFIRMED
-### Claim 13 — CONFIRMED
-### Claim 14 — CONFIRMED
-### Claim 15 — CONFIRMED
-### Claim 16 — CONFIRMED
-### Claim 17 — CONFIRMED
-### Claim 18 — CONFIRMED
-### Claim 19 — CONFIRMED
-### Claim 20 — CONFIRMED
-### Claim 21 — CONFIRMED
-### Claim 22 — CONFIRMED
-### Claim 23 — CONFIRMED
-### Claim 24 — CONFIRMED
-### Claim 25 — CONFIRMED
-### Claim 26 — CONFIRMED
-### Claim 27 — CONFIRMED
-### Claim 28 — CONFIRMED
-### Claim 29 — CONFIRMED
-### Claim 30 — CONFIRMED
-### Claim 31 — CONFIRMED
-### Claim 32 — CONFIRMED
-### Claim 33 — CONFIRMED
-### Claim 34 — CONFIRMED
-
-| Result | Count |
-|--------|-------|
-| CONFIRMED | 34 |
-| DISPUTED | 0 |
-| INCONCLUSIVE | 0 |
-| **Total** | **34** |
+| # | Claim | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | Interpreter response is built in `barb/interpreter.py` -> `execute()` -> `_build_response()` | CORRECT | `interpreter.py`:90,588 |
+| 2 | DataFrame result summary has `type: "table"` or `"grouped"` | CORRECT | `interpreter.py`:696 — `"type": "grouped" if is_grouped else "table"` |
+| 3 | Summary includes `rows` field with row count | CORRECT | `interpreter.py`:697 — `"rows": len(table)` |
+| 4 | Summary includes `columns` field from DataFrame columns | CORRECT | `interpreter.py`:698 — `"columns": list(df.columns)` |
+| 5 | Summary includes `stats` with `min`, `max`, `mean` per numeric column | CORRECT | `interpreter.py`:706-715 |
+| 6 | Summary includes `first` and `last` row data | CORRECT | `interpreter.py`:718-729 |
+| 7 | Grouped summary adds `by` field | CORRECT | `interpreter.py`:703 — `summary["by"] = group_by if isinstance(group_by, str) else group_by[0]` |
+| 8 | Grouped summary adds `min_row` and `max_row` | CORRECT | `interpreter.py`:732-740 |
+| 9 | `table` field contains full serialized data for UI | CORRECT | `interpreter.py`:618 — `table = _serialize_records(prepared.to_dict("records"))` |
+| 10 | `source_rows` contains rows before aggregation | CORRECT | `interpreter.py`:605-613 |
+| 11 | `source_row_count` counts rows that participated | CORRECT | `interpreter.py`:611 — `source_row_count = len(source_df)` |
+| 12 | `chart` is `{"category": ..., "value": ...}` only for grouped | CORRECT | `interpreter.py`:631-639 |
+| 13 | `chart` is `None` for non-grouped table results | CORRECT | `interpreter.py`:631 — `chart = None` stays None when not grouped |
+| 14 | `chart` key is absent for scalar/dict results | CORRECT | `interpreter.py`:658-665 (dict), 676-683 (scalar) — no `chart` key |
+| 15 | `metadata` includes `rows`, `session`, `from`, `warnings` | CORRECT | `interpreter.py`:590-595 |
+| 16 | Scalar result has `summary.type = "scalar"`, `value`, `rows_scanned` | CORRECT | `interpreter.py`:671-675 |
+| 17 | Scalar result has `table: None` | CORRECT | `interpreter.py`:678 |
+| 18 | Dict result has `summary.type = "dict"`, `values`, `rows_scanned` | CORRECT | `interpreter.py`:653-657 |
+| 19 | Dict result has `table: None` | CORRECT | `interpreter.py`:660 |
+| 20 | `run_query()` is in `assistant/tools/__init__.py` | CORRECT | `assistant/tools/__init__.py`:61 |
+| 21 | `run_query()` returns `model_response`, `table`, `source_rows`, `source_row_count`, `chart` | CORRECT | `assistant/tools/__init__.py`:74-80 |
+| 22 | `_format_summary_for_model()` exists and formats summary to string | CORRECT | `assistant/tools/__init__.py`:89 |
+| 23 | Scalar format: `Result: {value} (from {rows_scanned} rows)` | CORRECT | `assistant/tools/__init__.py`:97 |
+| 24 | Dict format: `Result: count=80, mean=67.3, max=156.2` | CORRECT | `assistant/tools/__init__.py`:101-103 |
+| 25 | Table format: `Result: N rows` + stats + first/last | CORRECT | `assistant/tools/__init__.py`:106-123 |
+| 26 | Grouped format: `Result: N groups by {col}` + min/max | CORRECT | `assistant/tools/__init__.py`:125-136 |
+| 27 | No select + no group_by = table type | CORRECT | `interpreter.py`:153-154 — `result_df = df` |
+| 28 | scalar select + no group_by = scalar type | CORRECT | `interpreter.py`:150-152 — `_aggregate` returns scalar for string select |
+| 29 | list select + no group_by = dict type | CORRECT | `interpreter.py`:150-152 — `_aggregate` returns dict for list select |
+| 30 | Any select + group_by = grouped type | CORRECT | `interpreter.py`:147-149 — `_group_aggregate` returns DataFrame |
+| 31 | `source_rows` populated when `select` is present (`has_aggregation = True`) | CORRECT | `interpreter.py`:607-613 |
+| 32 | Grouped without explicit select (auto count) has no source_rows | CORRECT | `interpreter.py`:607 — `query.get("select") is not None` is False |
+| 33 | Table without select has no source_rows | CORRECT | `interpreter.py`:607 — `query.get("select") is not None` is False |
+| 34 | Stats columns = map keys + sort column | CORRECT | `interpreter.py`:598-602 |
+| 35 | First/last rows use `["date", "time"] + map_columns` | CORRECT | `interpreter.py`:719 |
+| 36 | `last` excluded when only 1 row | CORRECT | `interpreter.py`:728 — `if last_row and len(table) > 1` |
+| 37 | Chart hint: `{"category": group_by_column, "value": first_aggregate_column}` | CORRECT | `interpreter.py`:634-639 |
+| 38 | SSE data_block contains `{tool, input, result, rows, title, chart}` | CORRECT | `chat.py`:199-206 |
+| 39 | SSE done contains `{answer, usage, tool_calls, data}` | CORRECT | `chat.py`:253-261 |
+| 40 | SSE text_delta contains `{delta: text}` | CORRECT | `chat.py`:91 |
+| 41 | Data flow diagram shows only text_delta, data_block, done SSE events | WRONG | `chat.py`:133,176 also yield `tool_start`, `tool_end`; `api/main.py`:686,701,724 add `title_update`, `error`, `persist` |
+| 42 | `query` field included in interpreter response | CORRECT | `interpreter.py`:648,664,682 |

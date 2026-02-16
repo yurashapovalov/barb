@@ -69,7 +69,7 @@ Sliding window + summarization для длинных разговоров.
 
 ## Prompt Caching
 
-System prompt кэшируется через `cache_control: {"type": "ephemeral"}`. После первого запроса ~90% токенов читаются из кэша (0.30$/MTok вместо 3$/MTok).
+System prompt кэшируется через `cache_control: {"type": "ephemeral"}`. Повторные запросы к тому же инструменту получают system prompt из кэша. Pricing (Sonnet 4.5): $3/MTok input, $0.30/MTok cached read, $3.75/MTok cache write, $15/MTok output.
 
 ## Tool Calls
 
