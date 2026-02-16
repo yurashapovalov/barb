@@ -85,3 +85,9 @@ class TestToolDescription:
         assert "rsi" in desc
         assert "atr" in desc
         assert "sma" in desc
+
+    def test_has_output_format_rules(self):
+        desc = BARB_TOOL["description"]
+        assert "auto-generated" in desc
+        assert "Do NOT map date()" in desc
+        assert "OHLCV" in desc

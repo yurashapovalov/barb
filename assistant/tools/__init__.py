@@ -28,6 +28,13 @@ IMPORTANT:
 - select only supports aggregate functions: count(), sum(col), mean(col), min(col), max(col), std(col), median(col), percentile(col, p), correlation(col1, col2), last(col)
 - For percentage calculations, run TWO queries: total count and filtered count.
 
+Output format:
+- "date" column is auto-generated from index. Do NOT map date() for display.
+- For intraday, "time" column is also auto-generated.
+- OHLCV columns (open, high, low, close, volume) are always included. Do NOT map them.
+- Column order: date, time, group keys, OHLCV, volume, then your map columns.
+- Name map columns in user's language, short and clear.
+
 <patterns>
 Common multi-function patterns:
   MACD cross      → crossover(macd(close,12,26), macd_signal(close,12,26,9))
