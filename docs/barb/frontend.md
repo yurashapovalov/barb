@@ -100,6 +100,7 @@ front/src/
   lib/
     api.ts                               — all API calls, SSE streaming, 401 handling
     cache.ts                             — localStorage cache (readCache/writeCache)
+    date.ts                              — relative date formatting (Today, Yesterday, Feb 10)
     format.ts                            — column label and number formatting
     parse-content.ts                     — parse message content → text + data block segments
     supabase.ts                          — Supabase client
