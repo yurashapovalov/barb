@@ -14,10 +14,7 @@
 │  <instrument>     — symbol, sessions, tick, data range             │
 │  <holidays>       — closed/early close days                        │
 │  <events>         — FOMC, NFP, OPEX + impact levels                │
-│  <instructions>   — 12 behavior rules                              │
-│  <transparency>   — mention alternative indicators                 │
-│  <acknowledgment> — brief confirmation before tool call            │
-│  <data_titles>    — require title for every run_query              │
+│  <behavior>       — 8 behavior rules                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Tool Description (assistant/tools/__init__.py)                     │
 │                                                                     │
@@ -105,45 +102,18 @@ When user asks about event days → calculate dates and query those dates.
 
 События из `get_event_types_for_instrument(symbol)` в `config/market/events.py`. Фильтрует по `EventImpact.HIGH` и `EventImpact.MEDIUM`.
 
-### Instructions
+### Behavior
 
-`<instructions>` — 12 правил поведения:
+`<behavior>` — 8 правил поведения (объединяет бывшие `<instructions>`, `<transparency>`, `<acknowledgment>`, `<data_titles>`):
 
-1. Data questions → build query, call run_query, comment (1-2 sentences)
-2. Knowledge questions → answer directly, no tools, 2-4 sentences
-3. Percentage questions → TWO queries (total + filtered)
-4. Without session → settlement. With session → session-specific
-5. No period specified → all data (don't invent defaults)
-6. Answer in user's language
-7. Only cite numbers from tool result, never invent
-8. Don't repeat raw data — shown to user automatically
-9. dayname() not dayofweek(), monthname() not month()
-10. Use built-in functions, don't calculate manually
-11. Holiday awareness
-12. Context annotations → explain how they affect data
-
-### Transparency
-
-```xml
-<transparency>
-After showing results, briefly explain what you measured and how.
-
-When the question maps to multiple indicators (check function descriptions in the tool reference),
-mention the alternative so the user can explore. Keep it casual — one sentence, no jargon.
-
-If you chose a specific threshold (e.g. RSI < 30), state it so the user can adjust.
-
-Examples:
-- "Measured momentum by MACD crossing its signal line. Rate of Change (ROC) is another way to spot shifts."
-- "Used Stochastic below 20 as oversold. Williams %R measures the same idea — below -80."
-- "Filtered volume spikes by volume_ratio > 2. OBV trend is another angle — it shows accumulation over time."
-</transparency>
-```
-
-### Acknowledgment и Data Titles
-
-- `<acknowledgment>`: 10-20 слов перед вызовом run_query
-- `<data_titles>`: каждый run_query MUST include "title" — 3-6 слов, язык пользователя
+1. Data questions → run_query + comment. Knowledge questions → answer directly
+2. Percentage questions → TWO queries (total + filtered)
+3. Without session → settlement. With session → session-specific
+4. No period → all data. Keep period context from conversation
+5. Answer in user's language. Only cite numbers from tool result
+6. Don't repeat raw data — shown automatically. Use dayname()/monthname()
+7. Brief confirmation before run_query. Every call needs "title" (3-6 words)
+8. After results, explain what you measured. Mention alternative indicators. State thresholds
 
 ---
 

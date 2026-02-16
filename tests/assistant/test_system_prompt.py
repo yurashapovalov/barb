@@ -43,29 +43,14 @@ class TestBuildSystemPrompt:
         assert "FOMC" in result
         assert "NFP" in result
 
-    def test_instructions(self):
+    def test_behavior_rules(self):
         result = build_system_prompt("NQ")
-        assert "<instructions>" in result
-        assert "built-in functions" in result
-        assert "holiday" in result
-
-    def test_session_instruction(self):
-        result = build_system_prompt("NQ")
+        assert "<behavior>" in result
         assert "settlement" in result
         assert "session" in result.lower()
-
-    def test_transparency(self):
-        result = build_system_prompt("NQ")
-        assert "<transparency>" in result
         assert "alternative" in result
-
-    def test_acknowledgment(self):
-        result = build_system_prompt("NQ")
-        assert "<acknowledgment>" in result
-
-    def test_data_titles(self):
-        result = build_system_prompt("NQ")
-        assert "<data_titles>" in result
+        assert "title" in result
+        assert "confirmation" in result
 
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError, match="Unknown instrument"):
@@ -78,10 +63,7 @@ class TestBuildSystemPrompt:
             "<instrument>",
             "<holidays>",
             "<events>",
-            "<instructions>",
-            "<transparency>",
-            "<acknowledgment>",
-            "<data_titles>",
+            "<behavior>",
         ]:
             assert result.count(tag) == 1, f"Duplicate tag: {tag}"
 

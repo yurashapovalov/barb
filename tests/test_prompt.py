@@ -32,14 +32,12 @@ class TestBuildSystemPrompt:
 
     def test_data_shown_separately(self):
         prompt = build_system_prompt("NQ")
-        assert "data is shown" in prompt.lower()
+        assert "shown to user automatically" in prompt.lower()
 
     def test_has_structured_sections(self):
         prompt = build_system_prompt("NQ")
         assert "<instrument>" in prompt
-        assert "<instructions>" in prompt
-        assert "<transparency>" in prompt
-        assert "<acknowledgment>" in prompt
+        assert "<behavior>" in prompt
 
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError, match="Unknown instrument"):
