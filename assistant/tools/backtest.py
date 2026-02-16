@@ -28,6 +28,20 @@ Strategy fields:
 Entry: signal on bar N → enter at bar N+1's open.
 Exit priority: stop → take_profit → exit_target → exit_bars timeout → end of data.
 
+<patterns>
+Common entry patterns:
+  N consecutive red candles   → streak(red()) >= N (each bar: close < open)
+  N consecutive falling days  → streak(close < prev(close)) >= N (each close lower than previous)
+  price below last N closes   → falling(close, N) (current close below ALL of last N)
+  gap up                      → open - prev(close) > 0
+  gap down                    → prev(close) - open > 0
+  inside day                  → high < prev(high) and low > prev(low)
+  NR7 (narrowest range 7d)    → range() == rolling_min(range(), 7)
+  above moving average        → close > sma(close, 200)
+  oversold bounce             → rsi(close, 14) < 30
+  breakout                    → close > rolling_max(high, 20)
+</patterns>
+
 <examples>
 Example 1 — RSI oversold mean reversion:
 User: "Протестируй лонг когда RSI ниже 30, стоп 2%, тейк 3%, макс 5 дней"
