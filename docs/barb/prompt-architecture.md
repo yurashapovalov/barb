@@ -14,24 +14,24 @@
 │  <instrument>     — symbol, sessions, tick, data range             │
 │  <holidays>       — closed/early close days                        │
 │  <events>         — FOMC, NFP, OPEX + impact levels                │
-│  <recipes>        — multi-function patterns (MACD cross, breakout) │
 │  <instructions>   — 12 behavior rules                              │
 │  <transparency>   — mention alternative indicators                 │
 │  <acknowledgment> — brief confirmation before tool call            │
 │  <data_titles>    — require title for every run_query              │
-│  <examples>       — 5 conversation examples                       │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Tool Description (assistant/tools/__init__.py)                     │
 │                                                                     │
 │  BARB_TOOL dict:                                                   │
 │    Barb Script syntax (fields, execution order, notes)             │
+│    <patterns>     — multi-function patterns (MACD cross, NFP)      │
+│    <examples>     — 5 query examples                               │
 │    Expression reference (auto-generated from barb.functions)       │
 │      15 function groups, 106 functions                             │
 │      compact groups (one line) + expanded groups (with description)│
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-System prompt — контекст и поведение. Tool description — как пользоваться `run_query`. Знание о tool'е живёт рядом с tool'ом — Claude видит синтаксис и функции когда решает вызвать инструмент.
+System prompt — контекст и поведение. Tool description — как пользоваться `run_query` (синтаксис, паттерны, примеры, справочник функций). Знание о tool'е живёт рядом с tool'ом — Claude видит всё нужное когда решает вызвать инструмент.
 
 ---
 
@@ -105,24 +105,6 @@ When user asks about event days → calculate dates and query those dates.
 
 События из `get_event_types_for_instrument(symbol)` в `config/market/events.py`. Фильтрует по `EventImpact.HIGH` и `EventImpact.MEDIUM`.
 
-### Recipes
-
-```xml
-<recipes>
-Common multi-function patterns (single-function descriptions are in the tool reference):
-
-  MACD cross      → crossover(macd(close,12,26), macd_signal(close,12,26,9))
-  breakout up     → close > rolling_max(high, 20)
-  breakdown       → close < rolling_min(low, 20)
-  NFP days        → dayofweek() == 4 and day() <= 7
-  OPEX            → 3rd Friday: dayofweek() == 4 and day() >= 15 and day() <= 21
-  opening range   → first 30-60 min of RTH session
-  closing range   → last 60 min of RTH session
-</recipes>
-```
-
-Только multi-function patterns. Single-function описания — в tool reference (auto-generated).
-
 ### Instructions
 
 `<instructions>` — 12 правил поведения:
@@ -163,10 +145,6 @@ Examples:
 - `<acknowledgment>`: 10-20 слов перед вызовом run_query
 - `<data_titles>`: каждый run_query MUST include "title" — 3-6 слов, язык пользователя
 
-### Examples
-
-5 примеров: simple filter, natural language → indicator, event-based, holiday awareness, follow-up context.
-
 ---
 
 ## Tool Description
@@ -177,7 +155,9 @@ Inline tool description содержит:
 1. Barb Script syntax (все поля с типами)
 2. Execution order: `session → period → from → map → where → group_by → select → sort → limit`
 3. Important notes (group_by requires column name, select supports aggregates only)
-4. Expression reference (auto-generated)
+4. `<patterns>` — multi-function patterns (MACD cross, breakout, NFP, OPEX, opening/closing range)
+5. `<examples>` — 5 query examples (simple filter, indicator, group_by, event-based, follow-up)
+6. Expression reference (auto-generated)
 
 ### Expression Reference
 
@@ -347,7 +327,7 @@ INSERT instrument в Supabase → context auto-generated → Claude знает.
 assistant/
   prompt/
     __init__.py           — exports build_system_prompt
-    system.py             — build_system_prompt() (layers 1-3 + rules + examples)
+    system.py             — build_system_prompt() (identity, context, behavior rules)
     context.py            — build_instrument/holiday/event_context(config)
   tools/
     __init__.py           — BARB_TOOL dict, run_query(), _format_summary_for_model()

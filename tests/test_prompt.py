@@ -1,12 +1,13 @@
-"""Tests for system prompt generation.
+"""Tests for system prompt and tool description.
 
-Detailed tests live in tests/assistant/test_system_prompt.py and
-tests/assistant/test_context.py. This file has basic smoke tests.
+System prompt: identity, instrument context, behavioral rules.
+Tool description: query syntax, patterns, examples, function reference.
 """
 
 import pytest
 
 from assistant.prompt import build_system_prompt
+from assistant.tools import BARB_TOOL
 
 
 class TestBuildSystemPrompt:
@@ -29,13 +30,6 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt("NQ")
         assert "2008" in prompt
 
-    def test_has_few_shot_examples(self):
-        prompt = build_system_prompt("NQ")
-        assert "<examples>" in prompt
-        assert "run_query" in prompt
-        assert "session" in prompt
-        assert "map" in prompt
-
     def test_data_shown_separately(self):
         prompt = build_system_prompt("NQ")
         assert "data is shown" in prompt.lower()
@@ -44,7 +38,8 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt("NQ")
         assert "<instrument>" in prompt
         assert "<instructions>" in prompt
-        assert "<examples>" in prompt
+        assert "<transparency>" in prompt
+        assert "<acknowledgment>" in prompt
 
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError, match="Unknown instrument"):
@@ -57,15 +52,38 @@ class TestBuildSystemPrompt:
 
     def test_has_session_instruction(self):
         prompt = build_system_prompt("NQ")
-        assert "session" in prompt.lower()
-        assert "daily" in prompt.lower()
-
-    def test_has_follow_up_example(self):
-        prompt = build_system_prompt("NQ")
-        assert "Example 5" in prompt
-        assert "2023" in prompt
+        assert "without session" in prompt.lower()
+        assert "settlement" in prompt.lower()
 
     def test_has_barb_script_fields(self):
-        prompt = build_system_prompt("NQ")
-        assert "session" in prompt
-        assert "map" in prompt
+        """Tool description has query field names."""
+        desc = BARB_TOOL["description"]
+        assert "session" in desc
+        assert "map" in desc
+        assert "where" in desc
+        assert "group_by" in desc
+
+
+class TestToolDescription:
+    def test_has_examples(self):
+        desc = BARB_TOOL["description"]
+        assert "<examples>" in desc
+        assert "run_query" in desc
+        assert "Example 5" in desc
+
+    def test_has_patterns(self):
+        desc = BARB_TOOL["description"]
+        assert "<patterns>" in desc
+        assert "MACD cross" in desc
+        assert "NFP" in desc
+
+    def test_has_follow_up_example(self):
+        desc = BARB_TOOL["description"]
+        assert "follow-up" in desc.lower()
+        assert "2023" in desc
+
+    def test_has_function_reference(self):
+        desc = BARB_TOOL["description"]
+        assert "rsi" in desc
+        assert "atr" in desc
+        assert "sma" in desc

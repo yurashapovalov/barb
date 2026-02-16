@@ -1,8 +1,13 @@
-"""Tests for assistant/prompt/system.py — full system prompt builder."""
+"""Tests for assistant/prompt/system.py — full system prompt builder.
+
+System prompt has: identity, instrument context, behavioral rules.
+Query knowledge (patterns, examples) lives in tool description — tested in test_prompt.py.
+"""
 
 import pytest
 
 from assistant.prompt.system import build_system_prompt
+from assistant.tools import BARB_TOOL
 
 
 class TestBuildSystemPrompt:
@@ -38,14 +43,6 @@ class TestBuildSystemPrompt:
         assert "FOMC" in result
         assert "NFP" in result
 
-    def test_recipes(self):
-        result = build_system_prompt("NQ")
-        assert "<recipes>" in result
-        assert "MACD cross" in result
-        assert "crossover" in result
-        assert "breakout" in result
-        assert "NFP" in result
-
     def test_instructions(self):
         result = build_system_prompt("NQ")
         assert "<instructions>" in result
@@ -56,15 +53,6 @@ class TestBuildSystemPrompt:
         result = build_system_prompt("NQ")
         assert "settlement" in result
         assert "session" in result.lower()
-
-    def test_examples(self):
-        result = build_system_prompt("NQ")
-        assert "<examples>" in result
-        assert "change_pct" in result
-        assert "rsi(close,14)" in result
-        assert "range()" in result
-        # Holiday example
-        assert "Christmas" in result
 
     def test_transparency(self):
         result = build_system_prompt("NQ")
@@ -90,11 +78,35 @@ class TestBuildSystemPrompt:
             "<instrument>",
             "<holidays>",
             "<events>",
-            "<recipes>",
             "<instructions>",
             "<transparency>",
             "<acknowledgment>",
             "<data_titles>",
-            "<examples>",
         ]:
             assert result.count(tag) == 1, f"Duplicate tag: {tag}"
+
+    def test_no_query_knowledge_in_system_prompt(self):
+        """Patterns and examples belong in tool description, not system prompt."""
+        result = build_system_prompt("NQ")
+        assert "<recipes>" not in result
+        assert "<patterns>" not in result
+        assert "<examples>" not in result
+
+
+class TestToolDescriptionContent:
+    """Query-specific knowledge lives in tool description."""
+
+    def test_has_patterns(self):
+        desc = BARB_TOOL["description"]
+        assert "<patterns>" in desc
+        assert "MACD cross" in desc
+        assert "crossover" in desc
+        assert "breakout" in desc
+        assert "NFP" in desc
+
+    def test_has_examples(self):
+        desc = BARB_TOOL["description"]
+        assert "<examples>" in desc
+        assert "change_pct" in desc
+        assert "rsi(close,14)" in desc
+        assert "range()" in desc

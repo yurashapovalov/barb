@@ -240,19 +240,109 @@ System prompt кешируется (первый блок, статичен ме
 
 Если промптовых правил недостаточно (модель всё равно дублирует колонки или показывает лишнее), следующий шаг — поле `display` в запросе, которое даёт модели явный контроль над отображением. Это отдельная задача, но промпт-рефакторинг закладывает фундамент.
 
-## План миграции
+## План реализации
 
-### Шаг 1: Перенести examples + recipes в tool description
-Без изменения поведения. Просто перемещение контента. Проверить что Claude генерирует правильные запросы.
+### Файлы
 
-### Шаг 2: Консолидировать system prompt
-Объединить transparency/acknowledgment/data_titles в правила поведения. С 12+3 секций до 8 правил. Проверить что Claude по-прежнему подтверждает перед запросом, даёт заголовки, упоминает альтернативы.
+| Файл | Что делаем |
+|------|-----------|
+| `assistant/prompt/system.py` | Переписать `build_system_prompt()` — убрать recipes, examples, transparency, acknowledgment, data_titles. Оставить identity + контекст + `<behavior>` |
+| `assistant/tools/__init__.py` | Расширить tool description — добавить `<rules>`, `<patterns>`, `<examples>`, правила про автоколонки |
+| `assistant/tools/reference.py` | Без изменений (function reference остаётся) |
+| `assistant/prompt/context.py` | Без изменений (instrument/holidays/events остаются) |
+| `docs/barb/prompt-architecture.md` | Обновить документацию |
+| `tests/test_prompt.py` | Обновить тесты |
 
-### Шаг 3: Добавить ПОЧЕМУ к правилам запросов
-Для неочевидных правил — одно предложение с причиной.
+### Шаг 1: System prompt (`system.py`)
 
-### Шаг 4: Оценить
-Сравнить before/after на существующих тестовых разговорах:
-- Claude следует всем правилам поведения?
-- Claude генерирует правильные запросы на те же вопросы?
-- Что-то стало хуже или лучше?
+**Убираем** из system prompt (переезжают в tool description):
+- `<recipes>` (строки 43-53) → `<patterns>` в tool description
+- `<examples>` (строки 99-138) → `<examples>` в tool description
+- Из `<instructions>`: правила 3, 4, 5, 9, 10, 12 (логика запросов) → `<rules>` в tool description
+
+**Убираем** из system prompt (сжимаем в `<behavior>`):
+- `<transparency>` (строки 70-82) → правило 8 в `<behavior>`
+- `<acknowledgment>` (строки 84-90) → правило 6 в `<behavior>`
+- `<data_titles>` (строки 92-97) → правило 7 в `<behavior>`
+
+**Оставляем** в system prompt:
+- Identity (строки 37-39) — без изменений
+- `<instrument>`, `<holidays>`, `<events>` — без изменений (динамический контекст)
+- `<instructions>` → переименовать в `<behavior>`, оставить правила 1, 2, 6, 7, 8 (поведение)
+
+**Новый system prompt** (~30 строк + контекст):
+
+```python
+f"""\
+You are Barb — a trading data analyst for {instrument} ({config["name"]}).
+You help traders explore historical market data through natural conversation.
+Users don't need to know technical indicators — you translate their questions into data.
+
+{context_section}
+
+<behavior>
+1. Data questions → call run_query, then comment on results (1-2 sentences).
+2. Knowledge questions ("what is RSI?") → answer directly, no tools. 2-4 sentences, offer to explore.
+3. Answer in the same language the user writes in.
+4. Only cite numbers from tool results. Never invent values.
+5. Don't repeat raw numbers — the data table is shown to the user automatically.
+6. Before calling run_query, write a brief confirmation (10-20 words) so user sees you understood.
+7. Every run_query call must include "title" — a short label for the data card (3-6 words, same language as user).
+8. After showing results, briefly mention what you measured and any alternative approaches.
+</behavior>"""
+```
+
+### Шаг 2: Tool description (`tools/__init__.py`)
+
+Расширить описание `BARB_TOOL["description"]`. Текущий контент (синтаксис + IMPORTANT) остаётся, добавляем:
+
+```
+<rules>
+- group_by requires COLUMN NAME. Create in map first, then group.
+- Without period → ALL available data. Don't invent defaults. Keep period context from conversation.
+- Percentage questions → TWO queries (total count + filtered count). Engine can't calculate percentages.
+- Without session → settlement data. With session → session-specific.
+- Use dayname()/monthname() for readable output, not dayofweek()/month().
+- Use built-in functions (rsi, atr, macd, crossover) — don't calculate manually.
+- If user asks about a holiday → tell them market was closed and why.
+
+Output format:
+- Results always include: date column (auto-generated), OHLCV, volume, then map columns.
+- Do NOT map date() for display — the date column is created automatically.
+- Do NOT map open/high/low/close/volume — they are always included.
+- Name map columns in the user's language, short and clear.
+- For general questions ("show trading days"), add useful map columns (change_pct, range) — not just bare OHLCV.
+</rules>
+
+<patterns>
+Common multi-function patterns:
+  MACD cross      → crossover(macd(close,12,26), macd_signal(close,12,26,9))
+  breakout up     → close > rolling_max(high, 20)
+  breakdown       → close < rolling_min(low, 20)
+  NFP days        → dayofweek() == 4 and day() <= 7
+  OPEX            → dayofweek() == 4 and day() >= 15 and day() <= 21
+  opening range   → first 30-60 min of RTH session
+  closing range   → last 60 min of RTH session
+</patterns>
+
+<examples>
+... (5 примеров, переносятся из system.py без изменений)
+</examples>
+
+{_EXPRESSIONS_MD}
+```
+
+### Шаг 3: Обновить документацию и тесты
+
+- `docs/barb/prompt-architecture.md` — обновить описание структуры
+- `tests/test_prompt.py` — обновить assertions (секции изменились)
+
+### Проверка
+
+1. `pytest tests/test_prompt.py` — тесты промпта
+2. `pytest tests/` — все тесты
+3. Деплой → задать тестовые вопросы:
+   - "сколько торговых дней в январе 2026" → нет дублирования `date`/`дата`, map-колонки на русском
+   - "покажи RSI ниже 30" → правильный запрос, acknowledgment перед вызовом
+   - "средний gap по дням недели за 2024" → group_by с колонкой из map
+   - "что такое ATR?" → ответ без tool call

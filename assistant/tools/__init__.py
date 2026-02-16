@@ -28,6 +28,50 @@ IMPORTANT:
 - select only supports aggregate functions: count(), sum(col), mean(col), min(col), max(col), std(col), median(col), percentile(col, p), correlation(col1, col2), last(col)
 - For percentage calculations, run TWO queries: total count and filtered count.
 
+<patterns>
+Common multi-function patterns:
+  MACD cross      → crossover(macd(close,12,26), macd_signal(close,12,26,9))
+  breakout up     → close > rolling_max(high, 20)
+  breakdown       → close < rolling_min(low, 20)
+  NFP days        → dayofweek() == 4 and day() <= 7
+  OPEX            → 3rd Friday: dayofweek() == 4 and day() >= 15 and day() <= 21
+  opening range   → first 30-60 min of RTH session
+  closing range   → last 60 min of RTH session
+</patterns>
+
+<examples>
+Example 1 — simple filter:
+User: Show me days when the market dropped 2.5%+ in 2024
+→ run_query(query={{"from":"daily","period":"2024",
+  "map":{{"chg":"change_pct(close,1)"}}, "where":"chg <= -2.5"}},
+  title="Days down >2.5%")
+
+Example 2 — natural language to indicator (no period = all data):
+User: When was the market oversold?
+→ run_query(query={{"from":"daily",
+  "map":{{"rsi":"rsi(close,14)"}}, "where":"rsi < 30"}},
+  title="Oversold days")
+
+Example 3 — group_by (column in map, then group):
+User: Average range by day of week for 2024?
+→ run_query(query={{"from":"daily","period":"2024",
+  "map":{{"r":"range()","dow":"dayname()"}}, "group_by":"dow", "select":"mean(r)"}},
+  title="Range by day")
+
+Example 4 — event-based filter:
+User: What's the average range on NFP days?
+→ run_query(query={{"from":"daily","period":"2024",
+  "map":{{"r":"range()","dow":"dayofweek()","d":"day()"}},
+  "where":"dow == 4 and d <= 7", "select":"mean(r)"}},
+  title="Avg range on NFP")
+
+Example 5 — follow-up (keep period context):
+User: Average ATR for 2024?
+→ run_query(query={{"from":"daily","period":"2024","map":{{"a":"atr()"}}, "select":"mean(a)"}}, title="ATR 2024")
+User: And 2023?
+→ run_query(query={{"from":"daily","period":"2023","map":{{"a":"atr()"}}, "select":"mean(a)"}}, title="ATR 2023")
+</examples>
+
 {_EXPRESSIONS_MD}
 """,
     "input_schema": {
