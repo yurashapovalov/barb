@@ -62,7 +62,7 @@ event: tool_end
 data: {"tool_name": "run_query", "duration_ms": 1234, "error": null}
 
 event: data_block
-data: {"tool": "run_query", "input": {"query": {...}}, "result": [...], "rows": 13, "title": "...", "chart": {"category": "...", "value": "..."}}
+data: {"query": {...}, "result": [...], "rows": 13, "session": "RTH", "timeframe": "daily", "source_rows": [...], "source_row_count": 80, "title": "...", "chart": {"category": "...", "value": "..."}}
 
 event: done
 data: {"answer": "...", "usage": {...}, "tool_calls": [...], "data": [...]}

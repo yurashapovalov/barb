@@ -143,6 +143,7 @@ class Assistant:
                 model_response = ""
                 table_data = None
                 source_rows = None
+                result = {}
 
                 try:
                     timeframe = query.get("from", "daily")
@@ -195,12 +196,16 @@ class Assistant:
                 # Send data block to UI (table or source_rows as evidence)
                 ui_data = table_data or source_rows
                 chart_hint = result.get("chart")
+                metadata = result.get("metadata", {})
                 if not call_error and ui_data:
                     block = {
-                        "tool": tu["name"],
-                        "input": {"query": query},
+                        "query": query,
                         "result": ui_data,
                         "rows": len(ui_data) if isinstance(ui_data, list) else None,
+                        "session": metadata.get("session"),
+                        "timeframe": metadata.get("from"),
+                        "source_rows": result.get("source_rows"),
+                        "source_row_count": result.get("source_row_count"),
                         "title": title,
                         "chart": chart_hint,
                     }

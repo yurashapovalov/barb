@@ -5,6 +5,7 @@ Executes a flat JSON query against a pandas DataFrame.
   session → period → from → map → where → group_by → select → sort → limit
 """
 
+import datetime
 import re
 
 import pandas as pd
@@ -567,6 +568,8 @@ def _serialize_records(records: list[dict]) -> list[dict]:
             if pd.isna(value):
                 row[key] = None
             elif isinstance(value, pd.Timestamp):
+                row[key] = value.isoformat()
+            elif isinstance(value, datetime.date):
                 row[key] = value.isoformat()
             elif hasattr(value, "item"):  # numpy types
                 v = value.item()
