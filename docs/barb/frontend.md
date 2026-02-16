@@ -131,7 +131,9 @@ front/src/
       sidebar-provider.tsx               — open/close state (viewport-based)
     panels/
       sidebar-panel.tsx                  — instruments list, chats list, user menu, theme
-      instrument-panel.tsx               — instrument header, candlestick chart, conversation list, prompt
+      instrument/
+        instrument-panel.tsx             — candlestick chart, conversation list, prompt
+        conversation-item.tsx            — conversation row with dropdown menu
       chat-panel.tsx                     — messages, prompt input, empty state
       data-panel.tsx                     — table + chart from query result
       panel-header.tsx                   — shared header bar
