@@ -74,10 +74,11 @@ Expression, вычисляется ОДИН РАЗ при входе в сдел
     ↓
 1. filter_session(df, session, sessions)     — из barb/interpreter
 2. filter_period(df, period)                 — из barb/interpreter
-3. resample(df, "daily")                     — из barb/interpreter
-4. evaluate(strategy.entry, daily, FUNCTIONS) — из barb/expressions
-5. _simulate(daily, entry_mask, strategy)    — бар за баром
-6. calculate_metrics(trades) + build_equity_curve(trades) — метрики и equity
+3. group minute bars by date                 — сохраняем минутки для exit resolution
+4. resample(df, "daily")                     — из barb/interpreter
+5. evaluate(strategy.entry, daily, FUNCTIONS) — из barb/expressions
+6. _simulate(daily, entry_mask, strategy, minute_by_date) — бар за баром
+7. calculate_metrics(trades) + build_equity_curve(trades) — метрики и equity
     ↓
 BacktestResult(trades, metrics, equity_curve)
 ```
@@ -95,15 +96,33 @@ Bar N:   entry condition = True (evaluated with full OHLCV of bar N)
 Bar N+1: entry at open (adjusted for slippage)
 ```
 
-### Exit Logic (по приоритету)
+### Exit Logic
 
+Два уровня разрешения: минутный (точный) и дневной (fallback).
+
+**Минутный уровень** (когда есть минутные данные):
+
+Движок проходит по минутным барам дня хронологически и проверяет на каждом баре:
 1. **Stop loss** — low (long) / high (short) пересекает стоп-цену
 2. **Take profit** — high (long) / low (short) пересекает тейк-цену
 3. **Exit target** — цена достигает target price
-4. **Exit bars** — timeout, выход по close
+
+Первый сработавший уровень = выход. Это устраняет conservative assumption — если TP сработал в 09:45, а стоп в 10:15, движок корректно фиксирует TP.
+
+**Дневной уровень** (fallback, когда минутных данных нет):
+
+Те же проверки на дневном баре. Приоритет: stop → take_profit → target. Если оба могли сработать на одном баре — стоп первый (conservative assumption).
+
+**После price-based проверок** (оба уровня):
+4. **Exit bars** — timeout, выход по close (считается в днях, не в минутах)
 5. **End of data** — принудительное закрытие на последнем баре
 
-При проверке стопа/тейка на дневном баре: если оба могли сработать — стоп первый (conservative assumption). Реальные результаты могут быть лучше.
+```
+_resolve_exit(daily_bar, day_minutes, ...)
+    ├─ minute data available → _find_exit_in_minutes()  — walks chronologically
+    └─ no minute data        → _check_exit_levels()     — conservative daily check
+    then: timeout check (exit_bars)
+```
 
 ### Slippage
 
@@ -275,21 +294,25 @@ Query блоки — нет поля `type`. Backtest блоки — `type: "bac
 | Решение | Почему |
 |---------|--------|
 | Entry на open следующего бара | Условия часто используют close, который известен только по завершении бара |
-| Conservative assumption (стоп первый) | При неопределённости на дневном баре — пессимистичная оценка |
+| Минутки для exit, дневки для entry | Entry evaluation на дневных (быстро, все индикаторы). Exit resolution на минутных (точно, устраняет conservative assumption) |
+| Fallback на дневной бар | Синтетические тесты и данные без минуток → `_check_exit_levels()` с conservative assumption (стоп первый) |
 | Одна позиция одновременно | Простота. Position sizing — v2 |
-| Дневные бары (не минутные) для симуляции | x100 быстрее. Минутная симуляция стопов — v2 |
+| exit_bars в днях | Timeout считает дневные бары, не минуты. 5 дней = 5 дней |
 | Slippage default 0 | Не навязываем, но Claude может предложить |
 | Expressions = те же что run_query | 106 функций переиспользуются. Не нужен отдельный expression language |
 
 ## Тесты
 
-`tests/test_backtest.py` — 28 тестов:
+`tests/test_backtest.py` — 40 тестов:
 
 - **TestStrategy** — dataclass creation
 - **TestResolveLevel** — points, percentage conversion
 - **TestMetrics** — calculate_metrics, build_equity_curve, edge cases (0 trades, all wins, all losses)
-- **TestEngineBasic** — синтетические данные (10-day predictable OHLCV), entry/exit logic, slippage, exit_bars timeout, same-bar exit
-- **TestEngineRealData** — реальные NQ minute данные, RSI strategy, period filter, 0 trades case
+- **TestEngineBasic** — синтетические данные (10-day predictable OHLCV), entry/exit logic, slippage, exit_bars timeout, same-bar exit. Без минутных данных → fallback на `_check_exit_levels()`
+- **TestEngineRealData** — реальные NQ minute данные, RSI strategy, period filter, 0 trades case. Минутные данные → `_find_exit_in_minutes()`
+- **TestFindExitInMinutes** — unit tests для минутного разрешения: stop first, TP first, both on same bar, no exit, target, short positions
+- **TestResolveExit** — dispatch: минутки vs дневной fallback, timeout после price check
+- **TestMinuteResolutionIntegration** — integration test: одинаковые данные, разный результат с/без минуток (TP first vs conservative stop first)
 
 ```bash
 .venv/bin/pytest tests/test_backtest.py -v
@@ -301,14 +324,14 @@ Query блоки — нет поля `type`. Backtest блоки — `type: "bac
 barb/backtest/
   __init__.py         — exports Strategy, run_backtest
   strategy.py         — Strategy dataclass, resolve_level()
-  engine.py           — run_backtest(), _simulate(), _check_exit()
+  engine.py           — run_backtest(), _simulate(), _find_exit_in_minutes(), _check_exit_levels()
   metrics.py          — Trade, BacktestMetrics, BacktestResult, calculate_metrics()
 
 assistant/tools/
   backtest.py         — BACKTEST_TOOL schema, run_backtest_tool(), _format_summary()
 
 tests/
-  test_backtest.py    — 28 tests (synthetic + real data)
+  test_backtest.py    — 40 tests (synthetic + real + minute resolution)
 ```
 
 ### Dependencies

@@ -7,7 +7,9 @@ and real NQ data (smoke tests on real market data).
 import pandas as pd
 import pytest
 
-from barb.backtest.engine import run_backtest
+from barb.backtest.engine import (
+    run_backtest,
+)
 from barb.backtest.metrics import Trade, build_equity_curve, calculate_metrics
 from barb.backtest.strategy import Strategy, resolve_level
 
@@ -313,3 +315,228 @@ class TestEngineRealData:
         for trade in result.trades:
             if trade.exit_reason == "target":
                 assert trade.pnl != 0  # Should have some P&L
+
+
+# --- Minute-level exit resolution ---
+
+
+def _make_minutes(prices):
+    """Build minute DataFrame from (open, high, low, close) tuples."""
+    times = pd.date_range("2024-01-02 09:30", periods=len(prices), freq="min")
+    return pd.DataFrame(
+        {
+            "open": [p[0] for p in prices],
+            "high": [p[1] for p in prices],
+            "low": [p[2] for p in prices],
+            "close": [p[3] for p in prices],
+            "volume": [100] * len(prices),
+        },
+        index=times,
+        dtype=float,
+    )
+
+
+class TestFindExitInMinutes:
+    def test_stop_hit_first(self):
+        """Stop triggers before take profit in minute sequence."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        # Minute 1: price drops to stop, minute 2: price rises to TP
+        minutes = _make_minutes(
+            [
+                (100, 100, 95, 96),  # low=95 hits stop at 97
+                (96, 106, 96, 105),  # high=106 would hit TP at 105, but stop already hit
+            ]
+        )
+        price, reason = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
+        assert reason == "stop"
+        assert price == 97.0
+
+    def test_tp_hit_first(self):
+        """Take profit triggers before stop in minute sequence."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        # Minute 1: price rises to TP, minute 2: price drops to stop
+        minutes = _make_minutes(
+            [
+                (100, 106, 99, 105),  # high=106 hits TP at 105
+                (105, 105, 94, 95),  # low=94 would hit stop at 97, but TP already hit
+            ]
+        )
+        price, reason = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
+        assert reason == "take_profit"
+        assert price == 105.0
+
+    def test_both_on_same_bar_stop_wins(self):
+        """When both levels hit on same minute bar, stop checked first."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        # Single bar where both stop and TP could trigger
+        minutes = _make_minutes(
+            [
+                (100, 106, 95, 100),  # low=95 < stop=97, high=106 > tp=105
+            ]
+        )
+        price, reason = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
+        assert reason == "stop"
+        assert price == 97.0
+
+    def test_no_exit(self):
+        """Neither level hit."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        minutes = _make_minutes(
+            [
+                (100, 103, 98, 101),
+                (101, 104, 99, 102),
+            ]
+        )
+        price, reason = _find_exit_in_minutes(minutes, True, 95.0, 110.0, None)
+        assert price is None
+        assert reason is None
+
+    def test_target_exit(self):
+        """Exit target hit in minutes."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        minutes = _make_minutes(
+            [
+                (100, 100, 98, 99),
+                (99, 103, 99, 102),  # high=103 hits target at 102
+            ]
+        )
+        price, reason = _find_exit_in_minutes(minutes, True, None, None, 102.0)
+        assert reason == "target"
+        assert price == 102.0
+
+    def test_short_stop_hit(self):
+        """Short position: stop hit when price goes above stop level."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        minutes = _make_minutes(
+            [
+                (100, 104, 98, 99),  # high=104 hits stop at 103
+            ]
+        )
+        price, reason = _find_exit_in_minutes(minutes, False, 103.0, None, None)
+        assert reason == "stop"
+        assert price == 103.0
+
+    def test_short_tp_hit(self):
+        """Short position: TP hit when price drops below TP level."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        minutes = _make_minutes(
+            [
+                (100, 101, 96, 97),  # low=96 hits TP at 97
+            ]
+        )
+        price, reason = _find_exit_in_minutes(minutes, False, None, 97.0, None)
+        assert reason == "take_profit"
+        assert price == 97.0
+
+
+class TestResolveExit:
+    def test_prefers_minutes_over_daily(self):
+        """When minute data available, uses it instead of daily bar."""
+        from barb.backtest.engine import _resolve_exit
+
+        daily_bar = pd.Series({"open": 100, "high": 106, "low": 95, "close": 100})
+        # Minutes show TP hit first (opposite of conservative assumption)
+        minutes = _make_minutes(
+            [
+                (100, 106, 99, 105),  # high=106 hits TP
+                (105, 105, 94, 95),  # low=94 would hit stop
+            ]
+        )
+        price, reason = _resolve_exit(daily_bar, minutes, True, 97.0, 105.0, None, None, 1)
+        assert reason == "take_profit"  # Minute-level: TP first
+
+    def test_daily_fallback_conservative(self):
+        """Without minute data, uses conservative daily assumption (stop first)."""
+        from barb.backtest.engine import _resolve_exit
+
+        daily_bar = pd.Series({"open": 100, "high": 106, "low": 95, "close": 100})
+        price, reason = _resolve_exit(daily_bar, None, True, 97.0, 105.0, None, None, 1)
+        assert reason == "stop"  # Conservative: stop checked first
+
+    def test_timeout_after_price_check(self):
+        """Timeout triggers when no price exit and bars_held >= exit_bars."""
+        from barb.backtest.engine import _resolve_exit
+
+        daily_bar = pd.Series({"open": 100, "high": 103, "low": 98, "close": 101})
+        price, reason = _resolve_exit(daily_bar, None, True, 95.0, 110.0, None, 3, 3)
+        assert reason == "timeout"
+        assert price == 101.0
+
+    def test_no_exit_when_nothing_triggers(self):
+        """No exit when levels not hit and not timed out."""
+        from barb.backtest.engine import _resolve_exit
+
+        daily_bar = pd.Series({"open": 100, "high": 103, "low": 98, "close": 101})
+        price, reason = _resolve_exit(daily_bar, None, True, 95.0, 110.0, None, 5, 2)
+        assert price is None
+        assert reason is None
+
+
+class TestMinuteResolutionIntegration:
+    """Integration test: minute data changes trade outcome vs daily-only."""
+
+    def test_minute_data_changes_outcome(self):
+        """Key test: same daily bar, different outcome with minute data.
+
+        Setup: long entry at 100, stop=97, TP=105.
+        Daily bar: open=100, high=106, low=95 → both could trigger.
+        Minutes show TP hit at 09:45, stop hit at 10:15 → TP wins.
+        Without minutes: conservative → stop wins.
+        """
+        # Build minute data for 2 days: day 1 = signal, day 2 = exit
+        day1_minutes = pd.date_range("2024-01-02 09:30", periods=60, freq="min")
+        day2_minutes = pd.date_range("2024-01-03 09:30", periods=60, freq="min")
+
+        # Day 1: flat around 100, close > 99 (signal triggers)
+        d1_data = {
+            "open": [100] * 60,
+            "high": [101] * 60,
+            "low": [99] * 60,
+            "close": [100] * 60,
+            "volume": [100] * 60,
+        }
+
+        # Day 2: first TP hit (price rises to 106), then drops to 95
+        # Minutes 0-14: price rises to TP
+        # Minutes 15-59: price drops past stop
+        d2_open = [100] * 15 + [105] * 15 + [98] * 30
+        d2_high = [106] * 15 + [106] * 15 + [98] * 30
+        d2_low = [99] * 15 + [104] * 15 + [94] * 30
+        d2_close = [105] * 15 + [104] * 15 + [95] * 30
+        d2_data = {
+            "open": d2_open,
+            "high": d2_high,
+            "low": d2_low,
+            "close": d2_close,
+            "volume": [100] * 60,
+        }
+
+        # Combine into a single minute DataFrame
+        all_idx = day1_minutes.append(day2_minutes)
+        df_minute = pd.DataFrame(
+            {k: d1_data[k] + d2_data[k] for k in d1_data},
+            index=all_idx,
+            dtype=float,
+        )
+
+        sessions = {"RTH": ("09:30", "16:15")}
+        strategy = Strategy(
+            entry="close > 99",
+            direction="long",
+            stop_loss=3,  # stop at 97 (entry 100 - 3)
+            take_profit=5,  # TP at 105 (entry 100 + 5)
+        )
+        result = run_backtest(df_minute, strategy, sessions)
+
+        # With minute data: TP should be hit first (in first 15 minutes)
+        assert len(result.trades) >= 1
+        trade = result.trades[0]
+        assert trade.exit_reason == "take_profit"
+        assert trade.pnl > 0

@@ -51,13 +51,19 @@ def run_backtest(
     if df.empty:
         return BacktestResult(trades=[], metrics=calculate_metrics([]), equity_curve=[])
 
-    # Step 3: Resample to daily
+    # Step 3: Group minute bars by date for exit resolution
+    # Must happen before resample — after resample minute data is lost.
+    minute_by_date = {}
+    if hasattr(df.index, "time") and len(df) > 0:
+        minute_by_date = {d: g for d, g in df.groupby(df.index.date)}
+
+    # Step 4: Resample to daily
     daily = resample(df, "daily")
 
     if len(daily) < 2:
         return BacktestResult(trades=[], metrics=calculate_metrics([]), equity_curve=[])
 
-    # Step 4: Evaluate entry condition on all bars
+    # Step 5: Evaluate entry condition on all bars
     entry_mask = evaluate(strategy.entry, daily, FUNCTIONS)
     if isinstance(entry_mask, pd.Series):
         entry_mask = entry_mask.fillna(False).astype(bool)
@@ -65,10 +71,10 @@ def run_backtest(
         # Scalar — applies to all or none
         entry_mask = pd.Series(bool(entry_mask), index=daily.index)
 
-    # Step 5: Simulate trades
-    trades = _simulate(daily, entry_mask, strategy)
+    # Step 6: Simulate trades
+    trades = _simulate(daily, entry_mask, strategy, minute_by_date)
 
-    # Step 6: Calculate metrics
+    # Step 7: Calculate metrics
     metrics = calculate_metrics(trades)
     equity = build_equity_curve(trades)
 
@@ -79,8 +85,13 @@ def _simulate(
     daily: pd.DataFrame,
     entry_mask: pd.Series,
     strategy: Strategy,
+    minute_by_date: dict | None = None,
 ) -> list[Trade]:
-    """Bar-by-bar simulation loop."""
+    """Bar-by-bar simulation loop.
+
+    Uses minute bars for precise exit resolution when available.
+    Falls back to daily bar checks (conservative assumption) otherwise.
+    """
     trades = []
     in_position = False
     entry_price = 0.0
@@ -90,6 +101,8 @@ def _simulate(
     target_price = None
     tp_price = None
     is_long = strategy.direction == "long"
+    if minute_by_date is None:
+        minute_by_date = {}
 
     for i in range(len(daily)):
         bar = daily.iloc[i]
@@ -97,8 +110,13 @@ def _simulate(
 
         if in_position:
             bars_held = i - entry_bar_idx
-            exit_price, exit_reason = _check_exit(
+
+            # Use minute bars for precise exit, fall back to daily
+            day_key = bar_date.date() if hasattr(bar_date, "date") else bar_date
+            day_minutes = minute_by_date.get(day_key)
+            exit_price, exit_reason = _resolve_exit(
                 bar,
+                day_minutes,
                 is_long,
                 stop_price,
                 tp_price,
@@ -113,28 +131,16 @@ def _simulate(
                 exit_reason = "end"
 
             if exit_price is not None:
-                # Apply slippage to exit
-                if is_long:
-                    exit_price -= strategy.slippage
-                else:
-                    exit_price += strategy.slippage
-
-                # Calculate P&L
-                if is_long:
-                    pnl = exit_price - entry_price
-                else:
-                    pnl = entry_price - exit_price
-
                 trades.append(
-                    Trade(
-                        entry_date=entry_date.date() if hasattr(entry_date, "date") else entry_date,
-                        entry_price=round(entry_price, 4),
-                        exit_date=bar_date.date() if hasattr(bar_date, "date") else bar_date,
-                        exit_price=round(exit_price, 4),
-                        direction=strategy.direction,
-                        pnl=round(pnl, 4),
-                        exit_reason=exit_reason,
-                        bars_held=bars_held,
+                    _build_trade(
+                        entry_date,
+                        bar_date,
+                        entry_price,
+                        exit_price,
+                        strategy,
+                        is_long,
+                        bars_held,
+                        exit_reason,
                     )
                 )
                 in_position = False
@@ -159,35 +165,30 @@ def _simulate(
             in_position = True
 
             # Check if exit happens on the same bar we entered
-            bars_held = 0
-            exit_price, exit_reason = _check_exit(
+            day_key = bar_date.date() if hasattr(bar_date, "date") else bar_date
+            day_minutes = minute_by_date.get(day_key)
+            exit_price, exit_reason = _resolve_exit(
                 bar,
+                day_minutes,
                 is_long,
                 stop_price,
                 tp_price,
                 target_price,
                 strategy.exit_bars,
-                bars_held,
+                0,
             )
 
             if exit_price is not None:
-                if is_long:
-                    exit_price -= strategy.slippage
-                    pnl = exit_price - entry_price
-                else:
-                    exit_price += strategy.slippage
-                    pnl = entry_price - exit_price
-
                 trades.append(
-                    Trade(
-                        entry_date=entry_date.date() if hasattr(entry_date, "date") else entry_date,
-                        entry_price=round(entry_price, 4),
-                        exit_date=bar_date.date() if hasattr(bar_date, "date") else bar_date,
-                        exit_price=round(exit_price, 4),
-                        direction=strategy.direction,
-                        pnl=round(pnl, 4),
-                        exit_reason=exit_reason,
-                        bars_held=bars_held,
+                    _build_trade(
+                        entry_date,
+                        bar_date,
+                        entry_price,
+                        exit_price,
+                        strategy,
+                        is_long,
+                        0,
+                        exit_reason,
                     )
                 )
                 in_position = False
@@ -195,8 +196,40 @@ def _simulate(
     return trades
 
 
-def _check_exit(
-    bar: pd.Series,
+def _build_trade(
+    entry_date,
+    exit_date_raw,
+    entry_price: float,
+    exit_price: float,
+    strategy: Strategy,
+    is_long: bool,
+    bars_held: int,
+    exit_reason: str,
+) -> Trade:
+    """Create Trade with slippage and P&L calculation."""
+    # Apply slippage to exit
+    if is_long:
+        exit_price -= strategy.slippage
+        pnl = exit_price - entry_price
+    else:
+        exit_price += strategy.slippage
+        pnl = entry_price - exit_price
+
+    return Trade(
+        entry_date=entry_date.date() if hasattr(entry_date, "date") else entry_date,
+        entry_price=round(entry_price, 4),
+        exit_date=exit_date_raw.date() if hasattr(exit_date_raw, "date") else exit_date_raw,
+        exit_price=round(exit_price, 4),
+        direction=strategy.direction,
+        pnl=round(pnl, 4),
+        exit_reason=exit_reason,
+        bars_held=bars_held,
+    )
+
+
+def _resolve_exit(
+    daily_bar: pd.Series,
+    day_minutes: pd.DataFrame | None,
     is_long: bool,
     stop_price: float | None,
     tp_price: float | None,
@@ -204,9 +237,89 @@ def _check_exit(
     exit_bars: int | None,
     bars_held: int,
 ) -> tuple[float | None, str | None]:
-    """Check exit conditions in priority order.
+    """Find exit using minute bars if available, otherwise daily bar.
 
-    Returns (exit_price, reason) or (None, None) if no exit.
+    Minute-level resolution eliminates the conservative assumption
+    (stop-first when both stop and TP could trigger on same daily bar).
+    With minute data, we walk bar by bar and find which level was hit first.
+    """
+    # Price-based exits: use minute bars when available
+    if day_minutes is not None and len(day_minutes) > 0:
+        exit_price, exit_reason = _find_exit_in_minutes(
+            day_minutes,
+            is_long,
+            stop_price,
+            tp_price,
+            target_price,
+        )
+    else:
+        exit_price, exit_reason = _check_exit_levels(
+            daily_bar,
+            is_long,
+            stop_price,
+            tp_price,
+            target_price,
+        )
+
+    if exit_price is not None:
+        return exit_price, exit_reason
+
+    # Timeout — daily-level concept (exit_bars counts days, not minutes)
+    if exit_bars is not None and bars_held >= exit_bars:
+        return daily_bar["close"], "timeout"
+
+    return None, None
+
+
+def _find_exit_in_minutes(
+    minutes: pd.DataFrame,
+    is_long: bool,
+    stop_price: float | None,
+    tp_price: float | None,
+    target_price: float | None,
+) -> tuple[float | None, str | None]:
+    """Walk minute bars chronologically to find first exit trigger.
+
+    Eliminates the conservative assumption — instead of guessing which
+    level was hit first on a daily bar, we check actual minute-by-minute
+    price action.
+    """
+    for _, bar in minutes.iterrows():
+        # Stop loss
+        if stop_price is not None:
+            if is_long and bar["low"] <= stop_price:
+                return stop_price, "stop"
+            if not is_long and bar["high"] >= stop_price:
+                return stop_price, "stop"
+
+        # Take profit
+        if tp_price is not None:
+            if is_long and bar["high"] >= tp_price:
+                return tp_price, "take_profit"
+            if not is_long and bar["low"] <= tp_price:
+                return tp_price, "take_profit"
+
+        # Exit target
+        if target_price is not None:
+            if is_long and bar["high"] >= target_price:
+                return target_price, "target"
+            if not is_long and bar["low"] <= target_price:
+                return target_price, "target"
+
+    return None, None
+
+
+def _check_exit_levels(
+    bar: pd.Series,
+    is_long: bool,
+    stop_price: float | None,
+    tp_price: float | None,
+    target_price: float | None,
+) -> tuple[float | None, str | None]:
+    """Check price-based exit levels on a single bar (daily fallback).
+
+    Used when minute data is not available. Conservative assumption:
+    stop checked before take-profit (pessimistic).
     """
     # 1. Stop loss
     if stop_price is not None:
@@ -228,10 +341,6 @@ def _check_exit(
             return target_price, "target"
         if not is_long and bar["low"] <= target_price:
             return target_price, "target"
-
-    # 4. Exit bars (timeout)
-    if exit_bars is not None and bars_held >= exit_bars:
-        return bar["close"], "timeout"
 
     return None, None
 
