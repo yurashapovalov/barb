@@ -20,7 +20,7 @@
 1. date        — всегда первая
 2. time        — только для intraday
 3. group keys  — если есть group_by
-4. calculated  — колонки из map, в порядке объявления
+4. calculated  — колонки из map, в порядке объявления (перед OHLC — derived data важнее сырых свечей)
 5. OHLC        — open, high, low, close
 6. volume
 7. remaining   — все остальные
@@ -69,7 +69,7 @@
 
 Результат: `date | chg | open | high | low | close | volume` — fallback ordering.
 
-### Группировка — columns не применяется
+### Группировка — без columns, fallback
 
 ```json
 {"group_by": "dow", "select": "mean(gap)"}
@@ -85,7 +85,7 @@
 2. Если `columns` есть → projection (фильтр + порядок по массиву)
 3. Иначе → fallback ordering (фиксированный приоритет)
 
-Вызывается в `_build_response()` перед сериализацией.
+Вызывается в `_build_response()` перед сериализацией. Валидация формата `columns` (должен быть массив строк) — в `barb/validation.py`.
 
 ### Сохранение порядка через JSONB
 
