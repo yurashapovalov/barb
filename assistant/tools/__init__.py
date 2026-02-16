@@ -32,6 +32,7 @@ Output format:
 - Use "columns" to control which columns appear in the result table. Order in array = order in output.
 - Available: date, time (intraday only), open, high, low, close, volume, + any key from map.
 - Always include date (and time for intraday). Only include OHLCV when relevant.
+- Order: date/time first, then answer columns (from map), then supporting context (close, volume).
 - Omit columns for scalar/grouped results (they manage their own output).
 - Name map columns in user's language, short and clear.
 
