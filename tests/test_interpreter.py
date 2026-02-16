@@ -345,10 +345,177 @@ class TestSortLimit:
             )
         assert exc_info.value.step == "sort"
 
+    def test_sort_by_date_alias(self, nq_minute_slice, sessions):
+        """'date' in sort is aliased to 'timestamp' (date column created later)."""
+        result = execute(
+            {
+                "from": "daily",
+                "map": {"chg": "change_pct(close, 1)"},
+                "sort": "date desc",
+                "limit": 5,
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        assert len(rows) == 5
+        # Verify descending date order
+        dates = [r["date"] for r in rows]
+        assert dates == sorted(dates, reverse=True)
+
     def test_join_field_rejected(self, nq_minute_slice, sessions):
         """'join' is not a valid field (unimplemented)."""
         with pytest.raises(QueryError, match="Unknown fields"):
             execute({"join": "events", "from": "daily"}, nq_minute_slice, sessions)
+
+
+# --- Columns projection ---
+
+
+class TestColumns:
+    def test_columns_projection(self, nq_minute_slice, sessions):
+        """columns controls which columns appear in output."""
+        result = execute(
+            {
+                "from": "daily",
+                "period": "2024-01",
+                "map": {"rsi": "rsi(close, 14)"},
+                "columns": ["date", "rsi"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        assert len(rows) > 0
+        assert list(rows[0].keys()) == ["date", "rsi"]
+
+    def test_columns_order_matters(self, nq_minute_slice, sessions):
+        """Column order in output matches order in columns array."""
+        result = execute(
+            {
+                "from": "daily",
+                "period": "2024-01",
+                "columns": ["close", "date", "volume"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        assert list(rows[0].keys()) == ["close", "date", "volume"]
+
+    def test_columns_hides_ohlcv(self, nq_minute_slice, sessions):
+        """columns can exclude OHLCV from output."""
+        result = execute(
+            {
+                "from": "daily",
+                "period": "2024-01",
+                "map": {"день": "dayname()"},
+                "columns": ["date", "день"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        assert set(rows[0].keys()) == {"date", "день"}
+
+    def test_columns_hides_helper(self, nq_minute_slice, sessions):
+        """Helper column used only in where is hidden by columns."""
+        result = execute(
+            {
+                "from": "daily",
+                "map": {"chg": "change_pct(close, 1)"},
+                "where": "chg <= -1",
+                "columns": ["date", "close"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        assert len(rows) > 0
+        assert list(rows[0].keys()) == ["date", "close"]
+
+    def test_columns_nonexistent_ignored(self, nq_minute_slice, sessions):
+        """Nonexistent columns in list are silently ignored."""
+        result = execute(
+            {
+                "from": "daily",
+                "period": "2024-01",
+                "columns": ["date", "nonexistent", "close"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        assert list(rows[0].keys()) == ["date", "close"]
+
+    def test_columns_fallback_when_all_missing(self, nq_minute_slice, sessions):
+        """All columns missing → fallback to default ordering."""
+        result = execute(
+            {
+                "from": "daily",
+                "period": "2024-01",
+                "columns": ["bogus1", "bogus2"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        assert len(rows) > 0
+        # Fallback includes date and OHLCV
+        assert "date" in rows[0]
+        assert "close" in rows[0]
+
+    def test_columns_not_applied_to_scalar(self, nq_minute_slice, sessions):
+        """columns is ignored for scalar results."""
+        result = execute(
+            {
+                "from": "daily",
+                "map": {"a": "atr()"},
+                "select": "mean(a)",
+                "columns": ["date", "a"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        # Scalar result — no table
+        assert result["table"] is None
+
+    def test_columns_not_applied_to_grouped(self, nq_minute_slice, sessions):
+        """columns is ignored for grouped results."""
+        result = execute(
+            {
+                "from": "daily",
+                "period": "2024-01",
+                "map": {"dow": "dayname()", "r": "range()"},
+                "group_by": "dow",
+                "select": "mean(r)",
+                "columns": ["date", "close"],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        rows = result["table"]
+        # Grouped result keeps its own columns (dow, mean_r), not columns list
+        assert "dow" in rows[0]
+        assert "mean_r" in rows[0]
+
+    def test_columns_validation_not_list(self, nq_minute_slice, sessions):
+        """columns must be a list."""
+        with pytest.raises(ValidationError, match="columns must be a list"):
+            execute(
+                {"from": "daily", "columns": "date"},
+                nq_minute_slice,
+                sessions,
+            )
+
+    def test_columns_validation_not_strings(self, nq_minute_slice, sessions):
+        """columns items must be strings."""
+        with pytest.raises(ValidationError, match="columns must be a list"):
+            execute(
+                {"from": "daily", "columns": [1, 2]},
+                nq_minute_slice,
+                sessions,
+            )
 
 
 # --- Period ---

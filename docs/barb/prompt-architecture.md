@@ -125,9 +125,9 @@ Inline tool description содержит:
 1. Barb Script syntax (все поля с типами)
 2. Execution order: `session → period → from → map → where → group_by → select → sort → limit`
 3. Important notes (group_by requires column name, select supports aggregates only)
-4. Output format rules — auto-columns (date, time), OHLCV always included, map column naming
+4. Output format rules — `columns` field for projection, naming conventions
 5. `<patterns>` — multi-function patterns (MACD cross, breakout, NFP, OPEX, opening/closing range)
-6. `<examples>` — 5 query examples (simple filter, indicator, group_by, event-based, follow-up)
+6. `<examples>` — 5 query examples (filter, indicator, raw data, hidden helper, group_by)
 7. Expression reference (auto-generated)
 
 ### Expression Reference

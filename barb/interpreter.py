@@ -69,6 +69,7 @@ _VALID_FIELDS = {
     "select",
     "sort",
     "limit",
+    "columns",
 }
 
 
@@ -477,6 +478,10 @@ def sort_df(df: pd.DataFrame, sort: str) -> pd.DataFrame:
 
     # After group_by, the group column becomes the index
     index_names = [n for n in df.index.names if n is not None]
+
+    # "date" is created later in _prepare_for_output(); alias to timestamp
+    if col == "date" and ("timestamp" in df.columns or "timestamp" in index_names):
+        col = "timestamp"
     if col in index_names:
         return df.sort_index(ascending=ascending)
     if col in df.columns:
@@ -516,41 +521,35 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
             df["time"] = ts.dt.strftime("%H:%M")
         df = df.drop(columns=["timestamp"])
 
-    # Build ordered column list
+    # Projection: model controls which columns to show
+    columns = query.get("columns")
+    if columns:
+        cols = [c for c in columns if c in df.columns]
+        if cols:
+            return df[cols]
+
+    # Fallback: model didn't send columns — current ordering logic
     map_columns = list(query.get("map", {}).keys())
     group_by = query.get("group_by")
     group_cols = [group_by] if isinstance(group_by, str) else (group_by or [])
 
     ordered = []
 
-    # 1. date
     if "date" in df.columns:
         ordered.append("date")
-
-    # 2. time (if intraday)
     if "time" in df.columns:
         ordered.append("time")
-
-    # 3. group keys
     for col in group_cols:
         if col in df.columns and col not in ordered:
             ordered.append(col)
-
-    # 4. calculated columns (from map) — before OHLC
     for col in map_columns:
         if col in df.columns and col not in ordered:
             ordered.append(col)
-
-    # 5. OHLC
     for col in _OHLC_COLUMNS:
         if col in df.columns:
             ordered.append(col)
-
-    # 6. volume
     if "volume" in df.columns:
         ordered.append("volume")
-
-    # 7. remaining columns
     for col in df.columns:
         if col not in ordered:
             ordered.append(col)

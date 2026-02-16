@@ -75,10 +75,10 @@ class TestToolDescription:
         assert "MACD cross" in desc
         assert "NFP" in desc
 
-    def test_has_follow_up_example(self):
+    def test_has_columns_example(self):
         desc = BARB_TOOL["description"]
-        assert "follow-up" in desc.lower()
-        assert "2023" in desc
+        assert '"columns"' in desc
+        assert "last week" in desc.lower()
 
     def test_has_function_reference(self):
         desc = BARB_TOOL["description"]
@@ -88,6 +88,6 @@ class TestToolDescription:
 
     def test_has_output_format_rules(self):
         desc = BARB_TOOL["description"]
-        assert "auto-generated" in desc
-        assert "Do NOT map date()" in desc
-        assert "OHLCV" in desc
+        assert '"columns"' in desc
+        assert "Available columns:" in desc or "Available:" in desc
+        assert "date" in desc

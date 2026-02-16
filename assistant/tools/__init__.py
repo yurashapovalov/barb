@@ -29,10 +29,10 @@ IMPORTANT:
 - For percentage calculations, run TWO queries: total count and filtered count.
 
 Output format:
-- "date" column is auto-generated from index. Do NOT map date() for display.
-- For intraday, "time" column is also auto-generated.
-- OHLCV columns (open, high, low, close, volume) are always included. Do NOT map them.
-- Column order: date, time, group keys, your map columns, then OHLCV.
+- Use "columns" to control which columns appear in the result table. Order in array = order in output.
+- Available: date, time (intraday only), open, high, low, close, volume, + any key from map.
+- Always include date (and time for intraday). Only include OHLCV when relevant.
+- Omit columns for scalar/grouped results (they manage their own output).
 - Name map columns in user's language, short and clear.
 
 <patterns>
@@ -47,36 +47,41 @@ Common multi-function patterns:
 </patterns>
 
 <examples>
-Example 1 — simple filter:
+Example 1 — filter (date + close for context):
 User: Show me days when the market dropped 2.5%+ in 2024
 → run_query(query={{"from":"daily","period":"2024",
-  "map":{{"chg":"change_pct(close,1)"}}, "where":"chg <= -2.5"}},
+  "map":{{"chg":"change_pct(close,1)"}}, "where":"chg <= -2.5",
+  "columns":["date","close","chg"]}},
   title="Days down >2.5%")
 
-Example 2 — natural language to indicator (no period = all data):
+Example 2 — indicator (date + indicator only):
 User: When was the market oversold?
 → run_query(query={{"from":"daily",
-  "map":{{"rsi":"rsi(close,14)"}}, "where":"rsi < 30"}},
+  "map":{{"rsi":"rsi(close,14)"}}, "where":"rsi < 30",
+  "columns":["date","rsi"]}},
   title="Oversold days")
 
-Example 3 — group_by (column in map, then group):
+Example 3 — raw data (OHLCV when relevant):
+User: Show me last week's data
+→ run_query(query={{"from":"daily","period":"last_week",
+  "map":{{"chg":"change_pct(close,1)"}},
+  "columns":["date","open","high","low","close","volume","chg"]}},
+  title="Last week")
+
+Example 4 — helper column hidden:
+User: Golden cross dates in 2024?
+→ run_query(query={{"from":"daily","period":"2024",
+  "map":{{"sma50":"sma(close,50)","sma200":"sma(close,200)",
+  "cross":"crossover(sma(close,50),sma(close,200))"}},
+  "where":"cross",
+  "columns":["date","close","sma50","sma200"]}},
+  title="Golden crosses")
+
+Example 5 — group_by (no columns needed):
 User: Average range by day of week for 2024?
 → run_query(query={{"from":"daily","period":"2024",
   "map":{{"r":"range()","dow":"dayname()"}}, "group_by":"dow", "select":"mean(r)"}},
   title="Range by day")
-
-Example 4 — event-based filter:
-User: What's the average range on NFP days?
-→ run_query(query={{"from":"daily","period":"2024",
-  "map":{{"r":"range()","dow":"dayofweek()","d":"day()"}},
-  "where":"dow == 4 and d <= 7", "select":"mean(r)"}},
-  title="Avg range on NFP")
-
-Example 5 — follow-up (keep period context):
-User: Average ATR for 2024?
-→ run_query(query={{"from":"daily","period":"2024","map":{{"a":"atr()"}}, "select":"mean(a)"}}, title="ATR 2024")
-User: And 2023?
-→ run_query(query={{"from":"daily","period":"2023","map":{{"a":"atr()"}}, "select":"mean(a)"}}, title="ATR 2023")
 </examples>
 
 {_EXPRESSIONS_MD}
@@ -97,6 +102,11 @@ User: And 2023?
                     "select": {},
                     "sort": {"type": "string"},
                     "limit": {"type": "integer", "minimum": 1},
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Columns to show in result. Order matters.",
+                    },
                 },
             },
             "title": {
