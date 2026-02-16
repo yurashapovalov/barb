@@ -29,7 +29,7 @@ OHLC candlestick chart с volume histogram на странице инструм�
 - Up: `#26a69a`, Down: `#ef5350` (TradingView standard)
 - Volume: histogram overlay внизу (20% доступной высоты), прозрачные бары
 - Высота: 400px (`h-[400px]`)
-- Dark/light: detect `.dark` class, hex colors (zinc palette) — lightweight-charts не поддерживает CSS variables
+- Background: transparent (inherits from parent panel). Dark/light: detect `.dark` class, hex colors (zinc palette) for text/grid/crosshair — lightweight-charts не поддерживает CSS variables
 - Zoom/pan/crosshair — встроено
 - `ResizeObserver` для responsive sizing
 - `MutationObserver` на `<html class>` для реактивной смены темы

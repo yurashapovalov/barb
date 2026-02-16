@@ -15,7 +15,7 @@ function isDark() {
 function getTheme(dark: boolean) {
   return {
     layout: {
-      background: { type: ColorType.Solid as const, color: dark ? "#09090b" : "#ffffff" },
+      background: { type: ColorType.Solid as const, color: "transparent" },
       textColor: dark ? "#a1a1aa" : "#71717a",
     },
     grid: {
