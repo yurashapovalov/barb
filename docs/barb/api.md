@@ -61,10 +61,14 @@ data: {"tool_name": "run_query", "input": {"query": {...}, "title": "..."}}
 event: tool_end
 data: {"tool_name": "run_query", "duration_ms": 1234, "error": null}
 
-event: data_block
+event: data_block (run_query)
 data: {"query": {...}, "result": [...], "rows": 13, "columns": ["date", "open", "high", "low", "close", "volume"], "session": "RTH", "timeframe": "daily", "source_rows": [...] | null, "source_row_count": 80 | null, "title": "...", "chart": {"category": "...", "value": "..."}}
 // source_rows: separate evidence only for aggregations with table_data.
 // When result already IS the evidence (no table_data) — source_rows is null.
+
+event: data_block (run_backtest)
+data: {"type": "backtest", "title": "...", "strategy": {...}, "metrics": {"total_trades": 53, "win_rate": 49.1, "profit_factor": 1.32, ...}, "trades": [{"entry_date": "2024-01-15", "exit_date": "2024-01-16", "pnl": 52.5, ...}], "equity_curve": [52.5, 17.8, ...]}
+// Type discrimination: query blocks have no "type" field, backtest blocks have type: "backtest".
 
 event: done
 data: {"answer": "...", "usage": {...}, "tool_calls": [...], "data": [...]}

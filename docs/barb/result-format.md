@@ -149,10 +149,50 @@ Stats включает `min`, `max`, `mean` для каждой числовой
 
 Только для grouped результатов: `{"category": group_by_column, "value": first_aggregate_column}`. UI использует для рендера bar chart.
 
+## Backtest Result
+
+`assistant/tools/backtest.py` → `run_backtest_tool()`. Отдельный поток данных от run_query.
+
+### Формат для модели
+
+```
+Backtest: 53 trades | Win Rate 49.1% | PF 1.32 | Total +1087.0 pts | Max DD 1675.7 pts
+Avg win: +171.2 | Avg loss: -124.6 | Avg bars: 1.1 | Consec W/L: 5/6
+```
+
+0 сделок: `Backtest: 0 trades — entry condition never triggered in this period.`
+
+### Формат для UI (SSE data_block)
+
+```json
+{
+    "type": "backtest",
+    "title": "RSI Mean Reversion",
+    "strategy": {"entry": "rsi(close,14) < 30", "direction": "long", "stop_loss": "2%", ...},
+    "metrics": {"total_trades": 53, "win_rate": 49.1, "profit_factor": 1.32, ...},
+    "trades": [{"entry_date": "2024-01-15", "exit_date": "2024-01-16", "pnl": 52.5, ...}],
+    "equity_curve": [52.5, 17.8, ...]
+}
+```
+
+Дискриминация: query блоки — нет поля `type`. Backtest блоки — `type: "backtest"`.
+
+Даты в trades — ISO строки (`str(datetime.date)`). Сериализация в wrapper, не в engine.
+
 ## Примеры
+
+### run_query
 
 | Вопрос | summary (модель) | table/source (UI) |
 |--------|------------------|-------------------|
 | "сколько inside days?" | `{type: scalar, value: 65, rows_scanned: 500}` | 500 строк в source_rows (до агрегации) |
 | "средний gap по dow" | `{type: grouped, rows: 5, by: "dow", min_row: {...}, max_row: {...}}` | 5 строк в table |
 | "дни где упало >2.5%" | `{type: table, rows: 13, stats: {...}, first: {...}, last: {...}}` | 13 строк в table |
+
+### run_backtest
+
+| Вопрос | model_response | UI data |
+|--------|---------------|---------|
+| "лонг RSI < 30, стоп 2%" | `Backtest: 53 trades \| WR 49.1% \| PF 1.32 \| +1087 pts` | metrics + 53 trades + equity curve |
+| "шорт после гэпа, 2024" | `Backtest: 12 trades \| WR 58.3% \| PF 2.68 \| +430 pts` | metrics + 12 trades + equity curve |
+| "лонг RSI < 10" | `Backtest: 0 trades — entry condition never triggered` | нет data_block |

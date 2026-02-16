@@ -424,10 +424,12 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 - [x] `barb/backtest/metrics.py` — Trade, BacktestMetrics, BacktestResult + calculate_metrics + build_equity_curve
 - [x] `tests/test_backtest.py` — 28 тестов (синтетические + реальные NQ данные)
 
-### Phase 2: Tool Integration
-- [ ] `assistant/tools/backtest.py` — Tool wrapper + format for model
-- [ ] System prompt: инструкции + примеры бэктестов
-- [ ] SSE event: data_block с type "backtest"
+### Phase 2: Tool Integration ✓
+- [x] `assistant/tools/backtest.py` — BACKTEST_TOOL schema + run_backtest_tool wrapper + date serialization
+- [x] `assistant/chat.py` — dispatch refactor (_exec_query + _exec_backtest), two tools
+- [x] `assistant/prompt/system.py` — behavior rule #9 (strategy testing)
+- [x] SSE event: data_block с type "backtest"
+- [x] E2E тесты: сценарий RSI + multi-turn hammer strategy
 
 ### Phase 3: Frontend
 - [ ] Strategy Results Card component

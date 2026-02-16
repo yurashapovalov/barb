@@ -357,11 +357,20 @@ onToolStart(event) {
 
 ## Порядок реализации
 
+### Phase 2: Backend ✓
+
 ```
-Step 1: assistant/tools/backtest.py     — tool schema + wrapper + date serialization
-Step 2: assistant/chat.py              — refactor dispatch + add backtest branch
-Step 3: assistant/prompt/system.py     — behavior rule #9
-Step 4: тест через Python              — вызвать run_backtest_tool() напрямую
+Step 1: ✅ assistant/tools/backtest.py     — tool schema + wrapper + date serialization
+Step 2: ✅ assistant/chat.py              — refactor dispatch + add backtest branch
+Step 3: ✅ assistant/prompt/system.py     — behavior rule #9
+Step 4: ✅ тест через Python + E2E        — lint, unit tests, e2e scenarios 11-12
+```
+
+Commits: `d55f060` (docs), `eedae2b` (tool integration), `429103d` (e2e tests).
+
+### Phase 3: Frontend
+
+```
 Step 5: front/src/types/index.ts       — BacktestBlock, AnyBlock, isBacktestBlock
 Step 6: front/src/components/ai/backtest-card.tsx — card component
 Step 7: front/src/components/panels/backtest-panel.tsx — panel component
@@ -370,8 +379,6 @@ Step 9: front/src/pages/chat/chat-page.tsx — panel routing
 Step 10: front/src/hooks/use-chat.ts    — loading block by tool name
 Step 11: front/src/lib/parse-content.ts — AnyBlock type
 ```
-
-Steps 1-4 = Phase 2 (backend). Steps 5-11 = Phase 3 (frontend).
 
 ## Файлы
 

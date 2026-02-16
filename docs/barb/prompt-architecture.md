@@ -14,17 +14,22 @@
 │  <instrument>     — symbol, sessions, tick, data range             │
 │  <holidays>       — closed/early close days                        │
 │  <events>         — FOMC, NFP, OPEX + impact levels                │
-│  <behavior>       — 8 behavior rules                               │
+│  <behavior>       — 9 behavior rules                               │
 ├─────────────────────────────────────────────────────────────────────┤
-│ Tool Description (assistant/tools/__init__.py)                     │
+│ Tool Descriptions                                                  │
 │                                                                     │
-│  BARB_TOOL dict:                                                   │
+│  BARB_TOOL (assistant/tools/__init__.py):                          │
 │    Barb Script syntax (fields, execution order, notes)             │
 │    <patterns>     — multi-function patterns (MACD cross, NFP)      │
 │    <examples>     — 5 query examples                               │
 │    Expression reference (auto-generated from barb.functions)       │
 │      15 function groups, 106 functions                             │
 │      compact groups (one line) + expanded groups (with description)│
+│                                                                     │
+│  BACKTEST_TOOL (assistant/tools/backtest.py):                      │
+│    Strategy fields (entry, direction, stop_loss, take_profit, etc) │
+│    3 examples (RSI, gap fade, trend following)                     │
+│    Same expression syntax as run_query                             │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -104,7 +109,7 @@ When user asks about event days → calculate dates and query those dates.
 
 ### Behavior
 
-`<behavior>` — 8 правил поведения (объединяет бывшие `<instructions>`, `<transparency>`, `<acknowledgment>`, `<data_titles>`):
+`<behavior>` — 9 правил поведения (объединяет бывшие `<instructions>`, `<transparency>`, `<acknowledgment>`, `<data_titles>`):
 
 1. Data questions → run_query + comment. Knowledge questions → answer directly
 2. Percentage questions → TWO queries (total + filtered)
@@ -114,6 +119,7 @@ When user asks about event days → calculate dates and query those dates.
 6. Don't repeat raw data — shown automatically. Use dayname()/monthname()
 7. Brief confirmation before run_query. Every call needs "title" (3-6 words)
 8. After results, explain what you measured. Mention alternative indicators. State thresholds
+9. Strategy testing → run_backtest. Always include stop_loss. Comment on win rate, PF, drawdown. If 0 trades — explain why
 
 ---
 
@@ -180,7 +186,7 @@ class Assistant:
             model="claude-sonnet-4-5-20250929",
             system=[{"type": "text", "text": self.system_prompt,
                      "cache_control": {"type": "ephemeral"}}],
-            tools=[BARB_TOOL],
+            tools=[BARB_TOOL, BACKTEST_TOOL],
             messages=messages,
         )
 ```
@@ -188,8 +194,10 @@ class Assistant:
 - Model: `claude-sonnet-4-5-20250929` (hardcoded в `MODEL`)
 - Max tool rounds: 5 (multi-turn tool use)
 - Prompt caching: system prompt cached as ephemeral block
-- Dataframe selection: intraday timeframes → df_minute, RTH-like sessions → df_minute, else → df_daily
-- Tool results: `model_response` (summary) goes to Claude, `table`/`source_rows` go to UI
+- Two tools: `BARB_TOOL` (run_query) + `BACKTEST_TOOL` (run_backtest)
+- Tool dispatch: by `tu["name"]` → `_exec_query()` or `_exec_backtest()`
+- Dataframe selection: run_query — intraday/RTH → df_minute, else → df_daily. run_backtest — always df_minute (engine resamples to daily)
+- Tool results: `model_response` (summary) goes to Claude, data block goes to UI
 
 ---
 
@@ -298,12 +306,13 @@ INSERT instrument в Supabase → context auto-generated → Claude знает.
 assistant/
   prompt/
     __init__.py           — exports build_system_prompt
-    system.py             — build_system_prompt() (identity, context, behavior rules)
+    system.py             — build_system_prompt() (identity, context, 9 behavior rules)
     context.py            — build_instrument/holiday/event_context(config)
   tools/
     __init__.py           — BARB_TOOL dict, run_query(), _format_summary_for_model()
+    backtest.py           — BACKTEST_TOOL dict, run_backtest_tool(), _format_summary()
     reference.py          — build_function_reference(), DISPLAY_GROUPS
-  chat.py                 — Assistant class, chat_stream(), prompt caching
+  chat.py                 — Assistant class, chat_stream(), tool dispatch, prompt caching
 ```
 
 ### Dependencies
@@ -316,6 +325,9 @@ prompt/system.py  ← config/market/instruments.py (get_instrument)
 tools/__init__.py ← tools/reference.py ← barb/functions (SIGNATURES + DESCRIPTIONS)
                   ← barb/interpreter    (execute, QueryError)
 
+tools/backtest.py ← barb/backtest      (run_backtest, Strategy, BacktestMetrics)
+
 chat.py           ← prompt/__init__.py  (build_system_prompt)
                   ← tools/__init__.py   (BARB_TOOL, run_query)
+                  ← tools/backtest.py   (BACKTEST_TOOL, run_backtest_tool)
 ```
