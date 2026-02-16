@@ -5,9 +5,9 @@
 ## User Experience
 
 ```
-User: "Протестируй стратегию: шорт на гэпах вверх >50, стоп 20, тейк на gap fill. 2024 год."
+User: "Протестируй стратегию: лонг когда RSI ниже 30, стоп 2%, тейк 3%, максимум 5 дней. 2024."
 
-Barb: Тестирую стратегию на гэпах вверх...
+Barb: Тестирую стратегию на RSI oversold...
 
 [Strategy Results Card]
 Trades: 93
@@ -47,7 +47,7 @@ assistant/
 class Strategy:
     entry: str                  # Expression: "gap > 50"
     direction: str              # "long" | "short"
-    exit_target: str | None     # Expression: "prev(close)" or None
+    exit_target: str | None     # Expression evaluated ONCE at entry → fixed price. E.g. "prev(close)" for gap fill
     stop_loss: float | None     # Points (or percentage if ends with %)
     take_profit: float | None   # Points (or percentage if ends with %)
     exit_bars: int | None       # Max bars in trade or None
@@ -100,7 +100,7 @@ Stop/target accept points (number) or percentage (string with %).
                     },
                     "exit_target": {
                         "type": "string",
-                        "description": "Exit price expression, e.g. 'prev(close)' for gap fill"
+                        "description": "Expression evaluated ONCE at entry to get target price. E.g. 'prev(close)' for gap fill"
                     },
                     "stop_loss": {
                         "description": "Stop loss. Number = points, string with % = percentage. E.g. 20 or '1%'"
@@ -169,29 +169,33 @@ def run_backtest(
 
 ### Entry Logic
 
-- Условие входа вычисляется на дневных барах
-- **Вход на open СЛЕДУЮЩЕГО бара** после сигнала — это стандарт в бэктестинге. На signal bar условие видно только по close, войти по нему нереалистично
-- Одна сделка одновременно (нет overlapping positions)
+- Условие входа вычисляется на дневных барах (все OHLCV бара доступны)
+- **Вход на open СЛЕДУЮЩЕГО бара** после сигнала — стандарт в бэктестинге. Условия часто используют `close`, который известен только по завершении бара
+- Одна сделка одновременно (нет overlapping positions). Сигналы во время открытой позиции пропускаются
 
 ```
-Bar N: entry condition = True (evaluated on close)
+Bar N: entry condition = True (evaluated with full OHLCV of bar N)
 Bar N+1: entry at open (adjusted for slippage)
 ```
+
+Примечание: для gap-стратегий (условие на `open`) вход на следующем баре означает "шорт день после гэпа", а не "шорт в момент гэпа". Это осознанное решение — единый timing для всех стратегий. Intraday entry (same-bar) — потенциально v2.
 
 ### Exit Logic (по приоритету)
 
 1. **Stop loss** — low (long) или high (short) пересекает стоп-цену
 2. **Take profit** — high (long) или low (short) пересекает тейк-цену
-3. **Exit expression** — выражение становится true
+3. **Exit target** — цена достигает target price (вычисляется ОДИН РАЗ при входе из `exit_target` expression)
 4. **Exit bars** — максимальная длительность сделки
 5. **End of data** — принудительное закрытие на последнем баре
 
-### Intraday Simulation на дневных барах
+### Stop/Target Resolution на дневных барах
 
-Для точной симуляции стопа/тейка внутри дневного бара:
+Для симуляции стопа/тейка внутри дневного бара:
 - Проверяем, мог ли стоп ИЛИ тейк сработать (по high/low)
 - Если оба могли сработать — считаем что стоп сработал первым (conservative assumption)
 - Это пессимистичная оценка — реальные результаты могут быть лучше
+
+У нас есть минутные данные — можно точно определить что сработало первым. Но это x100 медленнее (проход по минутным барам вместо дневных). V1 использует дневные бары с conservative assumption. Минутная симуляция — потенциально v2 для точных результатов.
 
 ### Slippage
 
@@ -309,23 +313,25 @@ Area chart (Shadcn/Recharts). Строится из `equity_curve` — cumulativ
 
 ## Примеры
 
-### Gap Fill Strategy
+### Mean Reversion After Gap Up
 
 ```
-"Шорт на гэпах вверх >50, тейк на закрытии гэпа, стоп 20. 2024."
+"После гэпа вверх >50, шорт на следующий день, тейк на уровне закрытия гэп-дня, стоп 20. 2024."
 
 → run_backtest({
     strategy: {
       entry: "open - prev(close) > 50",
       direction: "short",
-      exit_target: "prev(close)",
+      exit_target: "close",
       stop_loss: 20
     },
     period: "2024",
     session: "RTH",
-    title: "Gap Fill Short >50pts"
+    title: "Short After Gap Up >50pts"
   })
 ```
+
+Логика: bar N — гэп вверх >50. Bar N+1 — вход short на open. Target = bar N's close (вычисляется при входе из `exit_target: "close"`, т.е. close signal bar'а). Стоп 20 пунктов.
 
 ### Reversal After Big Down Day
 
@@ -369,7 +375,7 @@ Area chart (Shadcn/Recharts). Строится из `equity_curve` — cumulativ
 
 → run_backtest({
     strategy: {
-      entry: "rolling_mean(if(close < prev(close), prev(close) - close, 0), 14) / rolling_mean(abs(close - prev(close)), 14) * 100 < 30",
+      entry: "rsi(close, 14) < 30",
       direction: "long",
       stop_loss: "2%",
       take_profit: "3%",
@@ -402,9 +408,9 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 
 | Вопрос | Решение | Почему |
 |--------|---------|--------|
-| Entry timing | Open следующего бара | На signal bar условие видно только по close — вход по нему нереалистичен |
+| Entry timing | Open следующего бара | Единый timing для всех стратегий. Условия часто используют close. Same-bar entry — v2 |
 | Пункты vs проценты | Оба: число = пункты, "N%" = проценты | 10K инструментов с разными ценами — проценты универсальнее |
-| Multiple timeframes | Только один (daily) | Усложнение x5 ради edge case. Entry и exit на одном TF |
+| Multiple timeframes | Только один (daily) | Усложнение x5. Минутная симуляция стопов — v2 |
 | Equity curve | v1 | 3 строки кода (`cumsum`), но визуально самый мощный элемент |
 | Slippage | Опционально, default 0 | Без slippage — нереалистично хорошие результаты, но навязывать не стоит |
 | Conservative assumption | Стоп первый при неопределённости | Честно. Пользователь должен доверять результатам |
