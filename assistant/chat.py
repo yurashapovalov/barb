@@ -10,6 +10,7 @@ import pandas as pd
 
 from assistant.prompt import build_system_prompt
 from assistant.tools import BARB_TOOL, run_query
+from assistant.tools.backtest import BACKTEST_TOOL, run_backtest_tool
 from barb.interpreter import _INTRADAY_TIMEFRAMES as _INTRADAY
 
 log = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ class Assistant:
                         "cache_control": {"type": "ephemeral"},
                     }
                 ],
-                tools=[BARB_TOOL],
+                tools=[BARB_TOOL, BACKTEST_TOOL],
                 messages=messages,
             ) as stream:
                 # Collect response
@@ -125,45 +126,27 @@ class Assistant:
             # Execute tools and collect results
             tool_results = []
             for tu in tool_uses:
-                query = tu["input"].get("query", {})
-                log.info("Tool call: %s(%s)", tu["name"], query)
-
                 title = tu["input"].get("title", "")
+                log.info("Tool call: %s (title=%s)", tu["name"], title)
 
                 yield {
                     "event": "tool_start",
                     "data": {
                         "tool_name": tu["name"],
-                        "input": {"query": query, "title": title},
+                        "input": tu["input"],
                     },
                 }
 
                 call_start = time.time()
                 call_error = None
                 model_response = ""
-                table_data = None
-                source_rows = None
-                result = {}
+                block = None
 
                 try:
-                    timeframe = query.get("from", "daily")
-                    session_name = query.get("session")
-                    if timeframe in _INTRADAY:
-                        df = self.df_minute
-                    elif session_name:
-                        # RTH-like sessions (within one day) need minute data
-                        # ETH-like sessions (wrap midnight) ≈ settlement, use daily
-                        times = self.sessions.get(session_name.upper())
-                        if times and pd.Timestamp(times[0]).time() < pd.Timestamp(times[1]).time():
-                            df = self.df_minute
-                        else:
-                            df = self.df_daily
+                    if tu["name"] == "run_backtest":
+                        model_response, block = self._exec_backtest(tu["input"], title)
                     else:
-                        df = self.df_daily
-                    result = run_query(query, df, self.sessions)
-                    model_response = result.get("model_response", "")
-                    table_data = result.get("table")
-                    source_rows = result.get("source_rows")
+                        model_response, block = self._exec_query(tu["input"], title)
 
                     if model_response.startswith("Error:"):
                         call_error = model_response[7:].strip()
@@ -186,37 +169,15 @@ class Assistant:
                 tool_call_log.append(
                     {
                         "tool_name": tu["name"],
-                        "input": {"query": query, "title": title},
+                        "input": tu["input"],
                         "output": model_response,
                         "error": call_error,
                         "duration_ms": duration_ms,
                     }
                 )
 
-                # Send data block to UI (table or source_rows as evidence)
-                ui_data = table_data or source_rows
-                chart_hint = result.get("chart")
-                metadata = result.get("metadata", {})
-                if not call_error and ui_data:
-                    # Column order from _order_columns() — JSONB doesn't preserve key order
-                    columns = (
-                        list(ui_data[0].keys()) if isinstance(ui_data, list) and ui_data else None
-                    )
-                    block = {
-                        "query": query,
-                        "result": ui_data,
-                        "rows": len(ui_data) if isinstance(ui_data, list) else None,
-                        "columns": columns,
-                        "session": metadata.get("session"),
-                        "timeframe": metadata.get("from"),
-                        # source_rows as separate evidence only when result is table_data.
-                        # When result already IS source_rows — don't duplicate.
-                        "source_rows": source_rows if table_data else None,
-                        "source_row_count": result.get("source_row_count") if table_data else None,
-                        "title": title,
-                        "chart": chart_hint,
-                    }
-                    # Insert marker into answer for proper positioning
+                # Send data block to UI
+                if not call_error and block:
                     block_index = len(data_blocks)
                     answer += f"\n\n{{{{data:{block_index}}}}}\n\n"
                     data_blocks.append(block)
@@ -271,6 +232,65 @@ class Assistant:
                 "data": data_blocks,
             },
         }
+
+    def _exec_query(self, input_data: dict, title: str) -> tuple[str, dict | None]:
+        """Execute run_query tool. Returns (model_response, data_block)."""
+        query = input_data.get("query", {})
+        timeframe = query.get("from", "daily")
+        session_name = query.get("session")
+
+        if timeframe in _INTRADAY:
+            df = self.df_minute
+        elif session_name:
+            # RTH-like sessions (within one day) need minute data
+            # ETH-like sessions (wrap midnight) ≈ settlement, use daily
+            times = self.sessions.get(session_name.upper())
+            if times and pd.Timestamp(times[0]).time() < pd.Timestamp(times[1]).time():
+                df = self.df_minute
+            else:
+                df = self.df_daily
+        else:
+            df = self.df_daily
+
+        result = run_query(query, df, self.sessions)
+        model_response = result.get("model_response", "")
+
+        table_data = result.get("table")
+        source_rows = result.get("source_rows")
+        ui_data = table_data or source_rows
+
+        if not ui_data:
+            return model_response, None
+
+        # Column order from _order_columns() — JSONB doesn't preserve key order
+        columns = list(ui_data[0].keys()) if isinstance(ui_data, list) and ui_data else None
+        metadata = result.get("metadata", {})
+        block = {
+            "query": query,
+            "result": ui_data,
+            "rows": len(ui_data) if isinstance(ui_data, list) else None,
+            "columns": columns,
+            "session": metadata.get("session"),
+            "timeframe": metadata.get("from"),
+            # source_rows as separate evidence only when result is table_data.
+            # When result already IS source_rows — don't duplicate.
+            "source_rows": source_rows if table_data else None,
+            "source_row_count": result.get("source_row_count") if table_data else None,
+            "title": title,
+            "chart": result.get("chart"),
+        }
+        return model_response, block
+
+    def _exec_backtest(self, input_data: dict, title: str) -> tuple[str, dict | None]:
+        """Execute run_backtest tool. Returns (model_response, data_block)."""
+        result = run_backtest_tool(input_data, self.df_minute, self.sessions)
+        model_response = result.get("model_response", "")
+        backtest = result.get("backtest")
+
+        if not backtest:
+            return model_response, None
+
+        return model_response, backtest
 
 
 def _build_messages(history: list[dict], message: str) -> list[dict]:
