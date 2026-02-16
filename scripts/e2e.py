@@ -159,6 +159,23 @@ SCENARIOS = [
         "expect_data": True,
     },
     {
+        "name": "Backtest — RSI mean reversion",
+        "messages": [
+            "протестируй стратегию: покупай когда RSI ниже 30, стоп 2%, тейк 3%, максимум 5 дней",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
+        "name": "Backtest — hammer after selloff, multi-turn",
+        "messages": [
+            "протестируй стратегию: лонг после 3 дней падения подряд если закрытие в верхней половине диапазона дня. стоп 1.5%, тейк 3%, максимум 5 дней, проскальзывание 0.5. RTH, вся история",
+            "а теперь прогони только на 2022-2025 чтобы проверить out-of-sample",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
         "name": "Затишье перед бурей — squeeze detection",
         "messages": [
             "бывает что рынок затихает а потом резко двигается? как часто это происходит?",
