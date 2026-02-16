@@ -9,6 +9,7 @@
  */
 export function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
   const now = new Date();
 
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());

@@ -50,4 +50,8 @@ describe("formatRelativeDate", () => {
     freeze("2026-01-01T12:00:00");
     expect(formatRelativeDate("2025-12-30T12:00:00")).toBe("Dec 30, 2025");
   });
+
+  it("returns input string for invalid date", () => {
+    expect(formatRelativeDate("not-a-date")).toBe("not-a-date");
+  });
 });
