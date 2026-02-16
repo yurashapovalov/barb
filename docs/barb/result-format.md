@@ -195,4 +195,4 @@ Avg win: +171.2 | Avg loss: -124.6 | Avg bars: 1.1 | Consec W/L: 5/6
 |--------|---------------|---------|
 | "лонг RSI < 30, стоп 2%" | `Backtest: 53 trades \| WR 49.1% \| PF 1.32 \| +1087 pts` | metrics + 53 trades + equity curve |
 | "шорт после гэпа, 2024" | `Backtest: 12 trades \| WR 58.3% \| PF 2.68 \| +430 pts` | metrics + 12 trades + equity curve |
-| "лонг RSI < 10" | `Backtest: 0 trades — entry condition never triggered` | нет data_block |
+| "лонг RSI < 10" | `Backtest: 0 trades — entry condition never triggered` | data_block с пустыми trades и нулевыми metrics |

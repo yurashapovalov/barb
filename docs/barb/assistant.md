@@ -59,7 +59,8 @@ Sliding window + summarization для длинных разговоров.
 - `source_rows` — исходные строки (для агрегаций)
 - `source_row_count` — количество исходных строк
 - `chart` — chart hints (category, value columns) для фронтенда
-- `metadata` — session, timeframe (извлекается из interpreter result, включается в UI block)
+
+`chat.py._exec_query()` дополнительно извлекает `metadata` (session, timeframe) из interpreter result и включает в UI block.
 
 **run_backtest** (`tools/backtest.py`) — тестирование торговой стратегии. Принимает strategy (entry expression, direction, stop/take/target/exit_bars/slippage), session, period, title. Возвращает:
 - `model_response` — компактная строка с метриками (trades, win rate, PF, P&L, drawdown)
