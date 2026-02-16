@@ -32,7 +32,7 @@ Output format:
 - "date" column is auto-generated from index. Do NOT map date() for display.
 - For intraday, "time" column is also auto-generated.
 - OHLCV columns (open, high, low, close, volume) are always included. Do NOT map them.
-- Column order: date, time, group keys, OHLCV, volume, then your map columns.
+- Column order: date, time, group keys, your map columns, then OHLCV.
 - Name map columns in user's language, short and clear.
 
 <patterns>

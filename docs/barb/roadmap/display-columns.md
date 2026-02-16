@@ -113,9 +113,42 @@ _serialize_records()
 Плюсы: ноль изменений в коде.
 Минусы: модель не может убрать OHLCV. Всё равно будут лишние колонки.
 
-## Открытые вопросы
+## Решения (принятые)
 
-- Должна ли модель решать какие колонки полезны (контекст вопроса) или это правила движка?
-- Как быть с агрегированными результатами (group_by) — там OHLCV и так не появляются?
-- Нужен ли один механизм для всех типов результатов (table, grouped, scalar)?
-- Стоит ли менять query schema (добавлять `display`/`columns`) или достаточно промпта?
+### Шаг 1: reorder (сделано)
+
+Map-колонки перед OHLCV в `_prepare_for_output()`:
+```
+date → time → group_keys → map_columns → OHLC → volume → remaining
+```
+Derived data важнее сырых свечей. Безопасно, не ломает вычисления.
+
+### Шаг 2: projection через `columns` (план)
+
+Optional поле `columns: string[]` в query. Модель перечисляет какие колонки показать, в каком порядке.
+
+```json
+{
+  "map": {"день_недели": "dayname()", "изменение": "change_pct(close,1)"},
+  "columns": ["date", "день_недели", "close", "изменение"]
+}
+```
+
+**Реализация:**
+- `barb/validation.py` — валидация: `columns` = optional list of strings
+- `barb/interpreter.py` `_prepare_for_output()` — если `columns` есть, filter + reorder по нему. Unknown column → ignore (не ломать запрос)
+- `assistant/tools/__init__.py` — добавить `columns` в input_schema
+- Промпт — правило: использовать `columns` для контроля отображения. OHLCV только когда вопрос про свечи
+
+**Зачем:**
+- UX — показывать только релевантные колонки
+- Лицензия — FirstRate запрещает перепродажу raw data. OHLCV в чистом виде = raw candle data. Enriched результат (date + indicators) = derived data
+
+**Когда:** после оценки шага 1 в проде. Если reorder + промптовые правила покрывают 90% кейсов — можно отложить.
+
+## Закрытые вопросы
+
+- **Кто решает что показывать?** Модель. Она понимает контекст вопроса. Движок не может угадать.
+- **Smart defaults (авто-скрытие OHLCV)?** Отвергнуто. Edge cases (gap → нужен open, range → нужны high/low) делают smart defaults хрупкими без парсинга AST.
+- **group_by?** Там OHLCV и так не появляются — проблема только для table результатов.
+- **Промпт без `columns`?** Частично работает (модель не маппит date(), добавляет dayname()). Но не может убрать OHLCV.

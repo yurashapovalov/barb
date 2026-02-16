@@ -127,6 +127,22 @@ SCENARIOS = [
         "expect_data": True,
     },
     {
+        "name": "Торговые дни — count",
+        "messages": [
+            "сколько торговых дней в марте 2025?",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
+        "name": "Торговые дни — покажи",
+        "messages": [
+            "покажи торговые дни в марте 2025",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
         "name": "Knowledge — NR7",
         "messages": [
             "What is NR7?",

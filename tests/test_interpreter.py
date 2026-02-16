@@ -652,7 +652,7 @@ class TestSerialization:
             assert len(row["d"]) == 10  # "YYYY-MM-DD"
 
     def test_column_order_preserved_in_table(self, nq_daily, sessions):
-        """Table rows preserve column order: date, OHLCV, then map columns."""
+        """Table rows preserve column order: date, map columns, then OHLCV."""
         result = execute(
             {"from": "daily", "map": {"range": "high - low"}, "limit": 1},
             nq_daily,
@@ -660,8 +660,8 @@ class TestSerialization:
         )
         keys = list(result["table"][0].keys())
         assert keys[0] == "date"
-        assert keys[1:6] == ["open", "high", "low", "close", "volume"]
-        assert keys[6] == "range"
+        assert keys[1] == "range"
+        assert keys[2:7] == ["open", "high", "low", "close", "volume"]
 
     def test_column_order_intraday(self, nq_minute_slice, sessions):
         """Intraday results have date, time, then OHLCV."""

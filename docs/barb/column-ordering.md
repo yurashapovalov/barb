@@ -21,11 +21,13 @@
 1. date        — всегда первая (идентификатор строки)
 2. time        — только для intraday таймфреймов
 3. group keys  — если есть group_by
-4. OHLC        — open, high, low, close (стандартный порядок)
-5. volume      — после OHLC
-6. calculated  — колонки из map, в порядке объявления
+4. calculated  — колонки из map, в порядке объявления
+5. OHLC        — open, high, low, close (стандартный порядок)
+6. volume      — после OHLC
 7. remaining   — все остальные
 ```
+
+Map-колонки перед OHLC: derived data (то что модель посчитала) важнее сырых свечей.
 
 ## Примеры
 
@@ -37,7 +39,7 @@
 
 Результат:
 ```
-date | open | high | low | close | volume | drop_pct
+date | drop_pct | open | high | low | close | volume
 ```
 
 ### Intraday данные

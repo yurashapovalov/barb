@@ -498,10 +498,12 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
       1. date (always first)
       2. time (only for intraday timeframes)
       3. group_by keys (if grouped)
-      4. OHLC columns (open, high, low, close)
-      5. volume
-      6. calculated columns (from map, in declaration order)
+      4. calculated columns (from map, in declaration order)
+      5. OHLC columns (open, high, low, close)
+      6. volume
       7. any remaining columns
+
+    Map columns before OHLC: derived data is more relevant than raw candles.
     """
     df = df.reset_index()
 
@@ -534,19 +536,19 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
         if col in df.columns and col not in ordered:
             ordered.append(col)
 
-    # 4. OHLC
+    # 4. calculated columns (from map) — before OHLC
+    for col in map_columns:
+        if col in df.columns and col not in ordered:
+            ordered.append(col)
+
+    # 5. OHLC
     for col in _OHLC_COLUMNS:
         if col in df.columns:
             ordered.append(col)
 
-    # 5. volume
+    # 6. volume
     if "volume" in df.columns:
         ordered.append("volume")
-
-    # 6. calculated columns (from map)
-    for col in map_columns:
-        if col in df.columns and col not in ordered:
-            ordered.append(col)
 
     # 7. remaining columns
     for col in df.columns:
