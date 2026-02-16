@@ -23,7 +23,7 @@ data/
   stocks/                  — (будущее)
 ```
 
-Parquet: `[timestamp, open, high, low, close, volume]`, compression=zstd.
+Parquet: `[timestamp, open, high, low, close, volume]`, compression=zstd. Daily CSV from provider has 7 columns (includes OI) — OI dropped at parse time.
 
 Parquet — бинарный файл, не база данных. Нет транзакций, нет partial update, нет concurrent access. Добавить строку = перезаписать весь файл. Если процесс упал mid-write — файл corrupt.
 
@@ -34,14 +34,15 @@ FirstRateData (`firstratedata.com/api`). Подписка per asset type.
 Ключевое ограничение: **один zip со ВСЕМИ тикерами** данного типа. Нельзя запросить один тикер — получаешь все ~130 фьючерсов (или все ~10K акций) в одном архиве.
 
 ```
-GET /api/last_update?type=futures          → "2026-02-10"
-GET /api/data_file?type=futures&period=day&timeframe=1day&adjustment=contin_UNadj  → zip
-GET /api/data_file?type=futures&period=day&timeframe=1min&adjustment=contin_UNadj  → zip
+GET /api/last_update?type=futures&userid={userid}          → "2026-02-10"
+GET /api/data_file?type=futures&period=day&timeframe=1day&adjustment=contin_UNadj&userid={userid}  → zip
+GET /api/data_file?type=futures&period=day&timeframe=1min&adjustment=contin_UNadj&userid={userid}  → zip
 ```
 
+- `userid` — hardcoded в скрипте (`API_USERID`)
 - `period=day` — данные за последний торговый день (готово в 1:00 AM ET)
 - `period=full` — полный архив (готово в 2:00 AM ET)
-- Ответ — zip с txt файлами, по одному на тикер
+- Ответ — redirect на Backblaze B2 → zip с txt файлами, по одному на тикер (timeout 300s)
 
 ## Unit of Work = Asset Type
 
@@ -73,8 +74,7 @@ update_data.py --type stocks (будущее)
 6. Для каждого нашего тикера:
    a. read existing parquet (pandas)
    b. parse new txt from zip
-   c. validate new data (timestamps, OHLC > 0, no NaN)
-   d. concat + deduplicate by timestamp
+   c. concat + deduplicate by timestamp
    e. write to .tmp file → rename (atomic)
 7. PATCH Supabase instruments.data_end
 8. Записать date → data/{type}/.last_update
@@ -85,10 +85,7 @@ update_data.py --type stocks (будущее)
 **Атомарная запись** — самая важная защита. Write to `NQ.parquet.tmp`, then `rename()` to `NQ.parquet`. `rename()` атомарен на уровне ФС. Crash mid-write не повреждает оригинал.
 
 **Валидация перед записью:**
-- Новые timestamps > last existing timestamp
-- OHLC > 0, no NaN
-- Expected columns present
-- Non-empty data
+- Non-empty data (пропускает пустые файлы)
 
 **Идемпотентность** — дедупликация по timestamp, повторный запуск безопасен.
 
@@ -156,11 +153,7 @@ Credentials из `.env` (SUPABASE_URL, SUPABASE_SERVICE_KEY).
 
 После append данных — API должен сбросить `lru_cache` в `barb/data.py`.
 
-Варианты:
-1. **Restart контейнер** — просто, но даунтайм ~2 сек
-2. **POST /api/reload** — endpoint вызывает `load_data.cache_clear()`, zero downtime
-
-Начинаем с варианта 2 (reload endpoint). TODO.
+`POST /api/admin/reload-data?token=ADMIN_TOKEN` — вызывает `load_data.cache_clear()` + `_get_assistant.cache_clear()`, zero downtime. Cron вызывает после update_data.py.
 
 ## CLI
 

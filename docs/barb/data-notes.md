@@ -10,8 +10,10 @@
 - Timestamps in US/Eastern (naive, no tz info)
 
 ## Two Datasets, Two Purposes
-- **Daily bars** (`1d/`) — for `"from": "daily"` and longer timeframes (weekly, monthly)
-- **Minute bars** (`1m/`) — for intraday queries (`"from": "1m"`, `"5m"`, `"1h"`, etc.)
+- **Daily bars** (`1d/`) — for `"from": "daily"` and longer timeframes (weekly, monthly, quarterly, yearly)
+- **Minute bars** (`1m/`) — for intraday queries (`"from": "1m"`, `"5m"`, `"1h"`, etc.) and session-specific daily queries (RTH-like sessions where start < end use minute data)
+
+`barb/data.py` loads data via `load_data(instrument, timeframe, asset_type)` — `@lru_cache`, loaded once per combination. At load time, selects only `["open", "high", "low", "close", "volume"]` columns. Routing (which dataset for which query) lives in `assistant/chat.py`.
 
 Daily bars use **exchange settlement close** (official CME/COMEX/NYMEX/ICE price).
 Minute bars use **last trade close** per minute.

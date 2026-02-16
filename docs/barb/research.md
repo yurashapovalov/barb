@@ -1,4 +1,6 @@
-# Canonical trading indicator implementations across platforms
+# Research: Canonical Indicator Implementations
+
+> Pre-implementation research. See `functions-architecture.md` for current Barb implementation details.
 
 **Every major platform — TradingView, ta-lib, and pandas-ta — uses Wilder's smoothing (α = 1/n) for RSI, ATR, and ADX, and standard EMA (α = 2/(n+1)) for MACD.** The differences that trip up developers are not in the core formulas but in initialization seeding, default parameter values, and pandas's `adjust=True` default. This report covers all 14 requested indicators with exact formulas, verified default parameters, known cross-platform discrepancies, and the precise pandas equivalents needed to replicate each one.
 
@@ -98,15 +100,15 @@ Lower  = Middle - 2 × σ
 
 All three platforms use **population standard deviation (ddof=0)**, dividing by N rather than N-1. This is consistent with Bollinger's original formulation. In pandas, you must use `rolling(20).std(ddof=0)` — the default `ddof=1` (sample std dev) will produce slightly wider bands. TradingView's `ta.stdev()` has a `biased` parameter defaulting to `true` (population). ta-lib also uses ddof=0.
 
-### Keltner Channels — Defaults: EMA=20, ATR=10, multiplier=2
+### Keltner Channels — Defaults: EMA=20, ATR=10, multiplier=1.5
 
 ```
 Middle = EMA(close, 20)
-Upper  = Middle + 2 × ATR(10)
-Lower  = Middle - 2 × ATR(10)
+Upper  = Middle + 1.5 × ATR(10)
+Lower  = Middle - 1.5 × ATR(10)
 ```
 
-The center line is an **EMA** (not SMA — this distinguishes Keltner from Bollinger). The EMA period and ATR period are **separate parameters**. ATR uses Wilder's smoothing. Keltner bands are generally smoother than Bollinger Bands because ATR-based width changes more gradually than standard-deviation-based width. Note: pandas-ta may default the multiplier to 1.5 rather than 2.0, so always specify explicitly.
+The center line is an **EMA** (not SMA — this distinguishes Keltner from Bollinger). The EMA period and ATR period are **separate parameters**. ATR uses Wilder's smoothing. Keltner bands are generally smoother than Bollinger Bands because ATR-based width changes more gradually than standard-deviation-based width. TradingView defaults to mult=1.5 (Barb follows this).
 
 ### SuperTrend — Defaults: ATR period=10, multiplier=3
 
@@ -143,7 +145,7 @@ This is the most complex indicator. The complete algorithm:
 
 **Step 1 — Directional Movement**: `UpMove = High[t] - High[t-1]`, `DownMove = Low[t-1] - Low[t]`. If UpMove > DownMove and UpMove > 0, then +DM = UpMove, else +DM = 0. If DownMove > UpMove and DownMove > 0, then -DM = DownMove, else -DM = 0. Only one can be positive per bar; if equal, both are zero.
 
-**Step 2 — Smooth +DM, -DM, and TR** using Wilder's smoothing over 14 periods. The first smoothed value is a simple sum of the first 14 values; subsequent values use `Smoothed[t] = Smoothed[t-1] × 13/14 + Current`.
+**Step 2 — Smooth +DM, -DM, and TR** using Wilder's smoothing over 14 periods. The first smoothed value is the SMA (mean) of the first 14 values; subsequent values use `Smoothed[t] = Smoothed[t-1] × 13/14 + Current`.
 
 **Step 3 — Directional Indicators**: `+DI = (Smoothed +DM / Smoothed TR) × 100`, `-DI = (Smoothed -DM / Smoothed TR) × 100`.
 
@@ -187,17 +189,17 @@ CLV ranges from -1 (close at low) to +1 (close at high). When **High == Low** (z
 
 ---
 
-## What's missing from your list of 14 indicators
+## Not yet implemented
 
-The PineScript `ta.*` namespace contains roughly **50+ functions** beyond your 14. The most important omissions for a trading library fall into three categories.
+Most functions from the original research list are now in `barb/functions/`. Remaining candidates:
 
-**Moving averages you need**: `ta.sma()`, `ta.ema()`, `ta.wma()`, `ta.vwma()`, `ta.rma()`, `ta.hma()` (Hull), `ta.alma()` (Arnaud Legoux), and `ta.swma()`. These are foundational — SMA and EMA alone underpin the majority of retail trading strategies (50/200-day MA crossovers, golden/death cross signals).
+**Oscillators**: `ta.cmo()` (Chande Momentum Oscillator), `ta.tsi()` (True Strength Index), `ta.cog()` (Center of Gravity).
 
-**Indicators to add**: `ta.sar()` (Parabolic SAR) is widely used for trailing stops and is a Tier 2 indicator among retail traders. `ta.mom()` (Momentum), `ta.roc()` (Rate of Change), `ta.cmo()` (Chande Momentum Oscillator), `ta.tsi()` (True Strength Index), and `ta.cog()` (Center of Gravity) are commonly requested oscillators. `ta.bbw()` and `ta.kcw()` compute Bollinger/Keltner band width (key for the squeeze setup). Volume indicators `ta.pvt` (Price Volume Trend), `ta.nvi`/`ta.pvi` (Negative/Positive Volume Index), and `ta.iii` (Intraday Intensity Index) round out the volume analysis toolkit. `ta.linreg()` provides linear regression overlays.
+**Moving averages**: `ta.alma()` (Arnaud Legoux), `ta.swma()`.
 
-**Utility functions you'll want**: `ta.crossover()` / `ta.crossunder()` / `ta.cross()` for signal detection, `ta.highest()` / `ta.lowest()` and their `bars` variants, `ta.pivothigh()` / `ta.pivotlow()` for structure detection, `ta.valuewhen()`, `ta.barssince()`, `ta.rising()` / `ta.falling()`, `ta.percentrank()`, `ta.cum()`, `ta.correlation()`, and `ta.tr()` for True Range. These utility functions appear in virtually every PineScript strategy.
+**Volume**: `ta.pvt` (Price Volume Trend), `ta.nvi`/`ta.pvi` (Negative/Positive Volume Index), `ta.iii` (Intraday Intensity Index).
 
-The must-have indicator set for retail traders, ranked by usage: **SMA/EMA, RSI, MACD, Bollinger Bands, Stochastic, ATR, VWAP, SuperTrend, ADX, Parabolic SAR, OBV, CCI, Keltner Channels, Ichimoku Cloud** (not in `ta.*` but widely used), and **Fibonacci retracement levels**.
+**Other**: `ta.linreg()` (linear regression), Ichimoku Cloud, Fibonacci retracement levels.
 
 ---
 
@@ -229,6 +231,9 @@ The `tradingview-ta-lib` Python library (github.com/akumidv/tradingview-ta-lib) 
 
 ---
 
-## Conclusion
+## Key takeaways
 
-Building a correct trading indicator library requires attention to three things: the right smoothing method (Wilder's vs standard EMA vs SMA), the right initialization (SMA-seeded then recursive), and the right pandas parameters (`adjust=False`, correct `com`/`span`/`alpha`, explicit `min_periods`). The formulas themselves are well-standardized across platforms — the discrepancies live in the implementation details. For maximum compatibility with TradingView, seed your exponential averages with SMA values, use population standard deviation (ddof=0) for Bollinger Bands, and always specify default parameters explicitly rather than relying on library defaults, since ta-lib and TradingView disagree on CCI (14 vs 20) and Stochastic %K (5 vs 14). Your list of 14 indicators covers the core set well but should be augmented with the basic moving average family (SMA, EMA, WMA, RMA, HMA, VWMA), Parabolic SAR, and the utility functions (crossover detection, highest/lowest, pivot detection) that form the building blocks of virtually every trading strategy.
+1. **Smoothing**: Wilder's (α=1/n, SMA seed) for RSI/ATR/ADX, standard EMA (α=2/(n+1)) for MACD/Keltner, SMA for Bollinger
+2. **Initialization**: SMA seed then recursive — `ewm(alpha=1/n)` without seed diverges in first ~100 bars
+3. **Pandas**: always `adjust=False`, `ddof=0` for Bollinger, `com=n-1` for Wilder's
+4. **Defaults**: specify explicitly — ta-lib and TradingView disagree on CCI (14 vs 20) and Stochastic %K (5 vs 14)
