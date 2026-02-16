@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { formatRelativeDate } from "@/lib/date";
 import type { Conversation } from "@/types";
 
 export function ConversationItem({
@@ -21,12 +22,13 @@ export function ConversationItem({
   return (
     <div className="flex items-center gap-2 rounded-lg p-3 hover:bg-accent">
       <button className="min-w-0 flex-1 cursor-pointer text-left" onClick={onSelect}>
-        <div className="truncate text-sm font-medium">{conversation.title}</div>
-        <div className="text-xs text-muted-foreground">
-          {new Date(conversation.updated_at).toLocaleDateString()}
-        </div>
+        <div className="truncate text-base tracking-tight">{conversation.title}</div>
       </button>
-      <DropdownMenu>
+      <div className="flex items-center gap-1">
+        <span className="text-sm text-muted-foreground">
+          {formatRelativeDate(conversation.updated_at)}
+        </span>
+        <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label="Chat options">
             <EllipsisIcon />
@@ -46,7 +48,8 @@ export function ConversationItem({
             Remove chat
           </DropdownMenuItem>
         </DropdownMenuContent>
-      </DropdownMenu>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
