@@ -10,7 +10,7 @@
 
 Правило порядка в промпте: `date/time first, then answer columns (from map), then supporting context (close, volume)`. Идентификация → ответ → контекст.
 
-Применяется только к table-результатам. Scalar и grouped результаты управляют своими колонками — `columns` к ним не применяется.
+Технически projection применяется ко всем DataFrame результатам (включая grouped). Но для grouped результатов колонки из `columns` обычно не совпадают с реальными (group key + aggregate) → fallback. Промпт говорит: "Omit columns for scalar/grouped results."
 
 ### 2. Fallback — модель не прислала `columns`
 
@@ -75,7 +75,7 @@
 {"group_by": "dow", "select": "mean(gap)"}
 ```
 
-Результат: `dow | mean_gap` — управляется group_by логикой.
+Результат: `dow | mean_gap` — без `columns`, fallback порядок (group key + aggregate).
 
 ## Реализация
 
@@ -89,7 +89,7 @@
 
 ### Сохранение порядка через JSONB
 
-PostgreSQL JSONB не сохраняет порядок ключей. Фронтенд использует порядок из первой строки результата, с fallback на `Object.keys(rows[0])` для старых данных.
+PostgreSQL JSONB не сохраняет порядок ключей. Бэкенд (`assistant/chat.py`) извлекает порядок колонок из сериализованных записей и передаёт как `columns` в data_block. Фронтенд (`data-panel.tsx`) использует `columnOrder ?? Object.keys(rows[0])` — приоритет у `columns` из бэкенда, fallback на порядок ключей для старых данных.
 
 ## Точность значений
 
