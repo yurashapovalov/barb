@@ -228,7 +228,7 @@ class Trade:
     exit_price: float
     direction: str          # "long" | "short"
     pnl: float              # points (after slippage)
-    exit_reason: str        # "stop" | "target" | "expression" | "timeout" | "end"
+    exit_reason: str        # "stop" | "take_profit" | "target" | "timeout" | "end"
     bars_held: int          # сколько баров в позиции
 ```
 
@@ -418,11 +418,11 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 
 ## Implementation Plan
 
-### Phase 1: Core Engine
-- [ ] `barb/backtest/strategy.py` — Strategy dataclass + resolve_stop/resolve_target
-- [ ] `barb/backtest/engine.py` — Backtest loop (entry next bar, exit priority chain)
-- [ ] `barb/backtest/metrics.py` — Metrics + equity curve
-- [ ] Unit tests с заранее известными результатами
+### Phase 1: Core Engine ✓
+- [x] `barb/backtest/strategy.py` — Strategy dataclass + resolve_level
+- [x] `barb/backtest/engine.py` — Backtest loop (entry next bar, exit priority chain)
+- [x] `barb/backtest/metrics.py` — Trade, BacktestMetrics, BacktestResult + calculate_metrics + build_equity_curve
+- [x] `tests/test_backtest.py` — 28 тестов (синтетические + реальные NQ данные)
 
 ### Phase 2: Tool Integration
 - [ ] `assistant/tools/backtest.py` — Tool wrapper + format for model
@@ -434,7 +434,62 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 - [ ] Equity Curve (Shadcn area chart)
 - [ ] Trades Table (expandable)
 
-### Phase 4: Enhancements
+### Phase 4: Validation & Robustness
+
+Бэктестинг без валидации — self-deception. Пользователь прогоняет 20 стратегий, выбирает лучшую — и получает overfit. Результат красивый на истории, бесполезный на реале. Задача этой фазы — дать инструменты, которые помогают отличить реальное edge от подгонки.
+
+Референс: Marcos López de Prado, "Advances in Financial Machine Learning" — triple barrier method (уже реализован), walk-forward analysis, deflated Sharpe ratio.
+
+#### Train/Test Split
+
+Ключевая идея: стратегию придумываешь на одних данных (in-sample), проверяешь на других (out-of-sample). Если результат сильно хуже — overfit.
+
+```python
+run_backtest(df, strategy, sessions,
+    train_period="2015:2022",
+    test_period="2023:2025"
+)
+```
+
+Результат — **две колонки метрик**. Claude видит обе и комментирует деградацию:
+
+```
+                Train (2015-2022)    Test (2023-2025)
+Trades          127                  31
+Win Rate        54.3%                41.9%
+Profit Factor   1.45                 0.89
+Total P&L       +2340 pts            -180 pts
+Sharpe          0.82                 -0.15
+→ "Стратегия показывает значительную деградацию на тестовом периоде — вероятно переоптимизирована"
+```
+
+Если пользователь не указывает split — движок прогоняет на всех данных (текущее поведение). Split — опциональный, но Claude может предложить его для стратегий с большой историей.
+
+#### Sharpe Ratio
+
+Стандартная метрика risk-adjusted return. Отсутствует в v1 — нужно добавить.
+
+```
+Sharpe = mean(trade_pnl) / std(trade_pnl) * sqrt(252)
+```
+
+Annualized, daily. При Sharpe < 0.5 стратегия сомнительна. При Sharpe > 2.0 — скорее всего overfit или мало данных.
+
+#### Minimum Sample Warning
+
+Если trades < 30 — предупреждение. Статистически результаты ненадёжны. 53 сделки за 17 лет (как RSI < 30 на NQ) — на грани.
+
+#### Walk-Forward (v2)
+
+Нарезать историю на окна, прогнать каждое:
+- Train 2010-2014, test 2015
+- Train 2010-2016, test 2017
+- Train 2010-2018, test 2019
+- ...
+
+Если стратегия стабильно работает на каждом out-of-sample окне — это сильнее чем один split. Но сложнее в реализации и объяснении пользователю.
+
+### Phase 5: Enhancements
 - [ ] Multiple strategies comparison (side by side)
 - [ ] Commission modeling
 - [ ] Position sizing options
