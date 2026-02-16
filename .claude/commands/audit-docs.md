@@ -20,15 +20,17 @@ Each agent saves results to `docs/barb/audits/{filename}-audit.md`.
 
 After all audits complete, read the audit files from `docs/barb/audits/` and produce a combined summary:
 - Total claims across all docs
-- Accuracy per document
+- Accuracy per document (sorted worst to best)
 - Top issues (sorted by severity: WRONG first, then OUTDATED)
 
 ### Step 3: Verify (if `--verify` in arguments)
 
 If the user passed `--verify`:
 1. Read each audit file from `docs/barb/audits/`
-2. Extract all non-ACCURATE claims (WRONG, OUTDATED, MISSING)
-3. For each claim, invoke the **audit-verifier** agent to independently verify
-4. Collect results and report conflicts (where verifier DISPUTED the auditor)
+2. For each audit file, invoke one **audit-verifier** agent (14 agents in parallel, one per file)
+3. Each verifier checks ALL claims in its file and appends a `## Verification` section
+4. After all verifiers complete, read the verification results and report:
+   - How many claims were CONFIRMED vs DISPUTED vs INCONCLUSIVE
+   - List all DISPUTED claims (where the verifier disagreed with the auditor)
 
-This step is optional because it's expensive (one agent per claim). Use it when accuracy matters.
+This step is optional because it doubles the cost. Use it when accuracy matters.
