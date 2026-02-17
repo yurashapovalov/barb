@@ -215,6 +215,8 @@ def _build_trade(
         exit_price += strategy.slippage
         pnl = entry_price - exit_price
 
+    pnl -= strategy.commission
+
     return Trade(
         entry_date=entry_date.date() if hasattr(entry_date, "date") else entry_date,
         entry_price=round(entry_price, 4),

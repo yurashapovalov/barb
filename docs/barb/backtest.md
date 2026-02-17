@@ -43,6 +43,7 @@ class Strategy:
     take_profit: float | str | None = None  # 50 (points) or "3%" (percentage)
     exit_bars: int | None = None    # force exit after N bars
     slippage: float = 0.0          # points per side
+    commission: float = 0.0        # points per round-trip
 ```
 
 ### Stop/Target: пункты vs проценты
@@ -124,7 +125,7 @@ _resolve_exit(daily_bar, day_minutes, ...)
     then: timeout check (exit_bars)
 ```
 
-### Slippage
+### Slippage & Commission
 
 Фиксированное проскальзывание в пунктах на каждую сторону:
 
@@ -134,6 +135,8 @@ Long exit:   actual = exit_price - slippage
 Short entry: actual = open - slippage
 Short exit:  actual = exit_price + slippage
 ```
+
+Commission — фиксированная в пунктах за round-trip, вычитается из P&L каждой сделки после slippage. Оба в тех же единицах что P&L (пункты).
 
 ### Same-Bar Exit
 
@@ -174,6 +177,9 @@ class BacktestMetrics:
     avg_bars_held: float
     max_consecutive_wins: int
     max_consecutive_losses: int
+    recovery_factor: float          # total_pnl / max_drawdown (inf if no drawdown)
+    gross_profit: float             # sum of winning trade pnls
+    gross_loss: float               # sum of losing trade pnls (negative number)
 ```
 
 ### BacktestResult
@@ -229,12 +235,21 @@ trades = [
 
 ### Формат для модели
 
-Компактная строка:
+5-строчная сводка — каждая строка служит для анализа Claude:
 
 ```
-Backtest: 53 trades | Win Rate 49.1% | PF 1.32 | Total +1087.0 pts | Max DD 1675.7 pts
-Avg win: +171.2 | Avg loss: -124.6 | Avg bars: 1.1 | Consec W/L: 5/6
+Backtest: 90 trades | Win Rate 52.2% | PF 1.48 | Total +2555.0 pts | Max DD 1675.7 pts
+Avg win: +171.2 | Avg loss: -124.6 | Avg bars: 1.1 | Recovery: 1.52
+By year: 2020 +1200.5 (25) | 2021 +408.2 (22) | 2022 -102.0 (18) | 2023 +893.1 (16) | 2024 +155.2 (9)
+Exits: stop 43 (-1800.5) | take_profit 38 (+4200.0) | timeout 9 (+155.5)
+Top 3 trades: +1850.0 pts (72.4% of total PnL)
 ```
+
+- Line 1: headline metrics + recovery factor
+- Line 2: trade-level stats (avg win/loss, avg bars, recovery factor)
+- Line 3: yearly P&L breakdown — stability/regime dependency
+- Line 4: exit type P&L — which mechanism drives profit
+- Line 5: concentration — dependency on outlier trades
 
 0 сделок: `Backtest: 0 trades — entry condition never triggered in this period.`
 
@@ -285,8 +300,14 @@ Query блоки — нет поля `type`. Backtest блоки — `type: "bac
 
 ```
 9. Strategy testing → call run_backtest. Always include stop_loss (suggest 1-2% if user didn't specify).
-   After results: comment on win rate, profit factor, and max drawdown.
-   If 0 trades — explain why condition may be too restrictive.
+   After results — analyze strategy QUALITY, don't just repeat numbers:
+   a) Yearly stability: consistent across years, or depends on one period?
+   b) Exit analysis: which exit type drives profits? Are stops destroying gains?
+   c) Concentration: if top 3 trades dominate total PnL — flag fragility.
+   d) Trade count: below 30 trades = insufficient data, warn explicitly.
+   e) Suggest one specific variation (tighter stop, trend filter, session filter).
+   f) If PF > 2.0 or win rate > 70% — express skepticism, suggest stress testing.
+   If 0 trades — explain why condition may be too restrictive and suggest relaxing it.
 ```
 
 ## Design Decisions
@@ -299,11 +320,13 @@ Query блоки — нет поля `type`. Backtest блоки — `type: "bac
 | Одна позиция одновременно | Простота. Position sizing — v2 |
 | exit_bars в днях | Timeout считает дневные бары, не минуты. 5 дней = 5 дней |
 | Slippage default 0 | Не навязываем, но Claude может предложить |
+| Commission в пунктах | Те же единицы что P&L и slippage. Вычитается из P&L после slippage |
+| Recovery Factor, не Sharpe | RF = profit per unit of pain, понятен трейдерам. Sharpe нужна annualization и % returns — Phase 2 |
 | Expressions = те же что run_query | 106 функций переиспользуются. Не нужен отдельный expression language |
 
 ## Тесты
 
-`tests/test_backtest.py` — 40 тестов:
+`tests/test_backtest.py` — 54 теста:
 
 - **TestStrategy** — dataclass creation
 - **TestResolveLevel** — points, percentage conversion
@@ -313,6 +336,9 @@ Query блоки — нет поля `type`. Backtest блоки — `type: "bac
 - **TestFindExitInMinutes** — unit tests для минутного разрешения: stop first, TP first, both on same bar, no exit, target, short positions
 - **TestResolveExit** — dispatch: минутки vs дневной fallback, timeout после price check
 - **TestMinuteResolutionIntegration** — integration test: одинаковые данные, разный результат с/без минуток (TP first vs conservative stop first)
+- **TestNewMetrics** — recovery_factor, gross_profit/gross_loss, edge cases (0 trades, no drawdown)
+- **TestCommission** — commission reduces PnL, default zero, works with slippage
+- **TestFormatSummary** — 5-line output, yearly breakdown, exit types, concentration, recovery factor
 
 ```bash
 .venv/bin/pytest tests/test_backtest.py -v

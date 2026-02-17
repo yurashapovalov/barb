@@ -540,3 +540,184 @@ class TestMinuteResolutionIntegration:
         trade = result.trades[0]
         assert trade.exit_reason == "take_profit"
         assert trade.pnl > 0
+
+
+# --- New metrics ---
+
+
+class TestNewMetrics:
+    def test_recovery_factor(self):
+        """Recovery factor = total_pnl / max_drawdown."""
+        trades = [
+            Trade("2024-01-01", 100, "2024-01-02", 120, "long", 20, "target", 1),
+            Trade("2024-01-03", 115, "2024-01-04", 105, "long", -10, "stop", 1),
+            Trade("2024-01-05", 108, "2024-01-06", 100, "long", -8, "stop", 1),
+            Trade("2024-01-07", 102, "2024-01-08", 115, "long", 13, "target", 1),
+        ]
+        m = calculate_metrics(trades)
+        # total_pnl = 15, max_dd = 18
+        assert m.recovery_factor == pytest.approx(15 / 18)
+
+    def test_recovery_factor_no_drawdown(self):
+        """All winning trades → max_dd = 0 → recovery_factor = inf."""
+        trades = [
+            Trade("2024-01-01", 100, "2024-01-02", 110, "long", 10, "target", 1),
+            Trade("2024-01-03", 105, "2024-01-04", 115, "long", 10, "target", 1),
+        ]
+        m = calculate_metrics(trades)
+        assert m.recovery_factor == float("inf")
+
+    def test_recovery_factor_zero_trades(self):
+        """Zero trades → recovery_factor = 0."""
+        m = calculate_metrics([])
+        assert m.recovery_factor == 0.0
+
+    def test_gross_profit_loss(self):
+        """Gross profit and gross loss exposed in metrics."""
+        trades = [
+            Trade("2024-01-01", 100, "2024-01-02", 110, "long", 10, "target", 1),
+            Trade("2024-01-03", 105, "2024-01-04", 100, "long", -5, "stop", 1),
+            Trade("2024-01-05", 102, "2024-01-06", 108, "long", 6, "target", 1),
+        ]
+        m = calculate_metrics(trades)
+        assert m.gross_profit == 16
+        assert m.gross_loss == -5  # stored as negative
+
+    def test_gross_profit_loss_zero_trades(self):
+        """Zero trades → both = 0."""
+        m = calculate_metrics([])
+        assert m.gross_profit == 0.0
+        assert m.gross_loss == 0.0
+
+
+# --- Commission ---
+
+
+class TestCommission:
+    def test_commission_basic(self, daily_df, empty_sessions):
+        """Commission reduces PnL by fixed amount per trade."""
+        strategy_no_comm = Strategy(entry="close > 107", direction="long", exit_bars=1)
+        strategy_comm = Strategy(entry="close > 107", direction="long", exit_bars=1, commission=2.0)
+        r1 = run_backtest(daily_df, strategy_no_comm, empty_sessions)
+        r2 = run_backtest(daily_df, strategy_comm, empty_sessions)
+        assert r1.trades, "Need trades to test commission"
+        # Each trade should lose exactly 2.0 pts from commission
+        for t1, t2 in zip(r1.trades, r2.trades):
+            assert t2.pnl == pytest.approx(t1.pnl - 2.0)
+
+    def test_commission_default_zero(self):
+        """Default commission is 0 — backward compatible."""
+        s = Strategy(entry="close > 100", direction="long")
+        assert s.commission == 0.0
+
+    def test_commission_with_slippage(self, daily_df, empty_sessions):
+        """Commission and slippage both applied correctly."""
+        strategy_base = Strategy(entry="close > 107", direction="long", exit_bars=1)
+        strategy_both = Strategy(
+            entry="close > 107", direction="long", exit_bars=1, slippage=0.5, commission=1.0
+        )
+        r1 = run_backtest(daily_df, strategy_base, empty_sessions)
+        r2 = run_backtest(daily_df, strategy_both, empty_sessions)
+        assert r1.trades, "Need trades to test"
+        # Each trade loses 1.0 (slippage: 0.5*2 sides) + 1.0 (commission) = 2.0
+        for t1, t2 in zip(r1.trades, r2.trades):
+            assert t2.pnl == pytest.approx(t1.pnl - 2.0)
+
+
+# --- Format summary ---
+
+
+def _make_result(trades):
+    """Helper: build BacktestResult from trade list."""
+    from barb.backtest.metrics import BacktestResult, build_equity_curve, calculate_metrics
+
+    return BacktestResult(
+        trades=trades,
+        metrics=calculate_metrics(trades),
+        equity_curve=build_equity_curve(trades),
+    )
+
+
+class TestFormatSummary:
+    def test_zero_trades(self):
+        """Zero trades → single line message."""
+        from assistant.tools.backtest import _format_summary
+
+        result = _make_result([])
+        summary = _format_summary(result)
+        assert "0 trades" in summary
+
+    def test_format_summary_yearly(self):
+        """Yearly breakdown present in summary."""
+        from datetime import date
+
+        from assistant.tools.backtest import _format_summary
+
+        trades = [
+            Trade(date(2023, 6, 1), 100, date(2023, 6, 2), 110, "long", 10, "target", 1),
+            Trade(date(2024, 3, 1), 100, date(2024, 3, 2), 105, "long", 5, "target", 1),
+            Trade(date(2024, 6, 1), 100, date(2024, 6, 2), 97, "long", -3, "stop", 1),
+        ]
+        summary = _format_summary(_make_result(trades))
+        assert "By year:" in summary
+        assert "2023" in summary
+        assert "2024" in summary
+
+    def test_format_summary_exit_types(self):
+        """Exit type breakdown present in summary."""
+        from datetime import date
+
+        from assistant.tools.backtest import _format_summary
+
+        trades = [
+            Trade(date(2024, 1, 1), 100, date(2024, 1, 2), 110, "long", 10, "target", 1),
+            Trade(date(2024, 1, 3), 100, date(2024, 1, 4), 95, "long", -5, "stop", 1),
+            Trade(date(2024, 1, 5), 100, date(2024, 1, 6), 103, "long", 3, "timeout", 2),
+        ]
+        summary = _format_summary(_make_result(trades))
+        assert "Exits:" in summary
+        assert "stop" in summary
+        assert "target" in summary
+        assert "timeout" in summary
+
+    def test_format_summary_top_trades(self):
+        """Concentration metric (top 3 trades) present in summary."""
+        from datetime import date
+
+        from assistant.tools.backtest import _format_summary
+
+        trades = [
+            Trade(date(2024, 1, 1), 100, date(2024, 1, 2), 150, "long", 50, "target", 1),
+            Trade(date(2024, 1, 3), 100, date(2024, 1, 4), 95, "long", -5, "stop", 1),
+            Trade(date(2024, 1, 5), 100, date(2024, 1, 6), 102, "long", 2, "timeout", 2),
+        ]
+        summary = _format_summary(_make_result(trades))
+        assert "Top 3 trades:" in summary
+        assert "% of total PnL" in summary
+
+    def test_format_summary_five_lines(self):
+        """Summary has exactly 5 lines for non-zero trades."""
+        from datetime import date
+
+        from assistant.tools.backtest import _format_summary
+
+        trades = [
+            Trade(date(2024, 1, 1), 100, date(2024, 1, 2), 110, "long", 10, "target", 1),
+            Trade(date(2024, 1, 3), 100, date(2024, 1, 4), 95, "long", -5, "stop", 1),
+        ]
+        summary = _format_summary(_make_result(trades))
+        lines = summary.strip().split("\n")
+        assert len(lines) == 5
+
+    def test_format_summary_recovery_factor(self):
+        """Recovery factor appears in summary line 2."""
+        from datetime import date
+
+        from assistant.tools.backtest import _format_summary
+
+        trades = [
+            Trade(date(2024, 1, 1), 100, date(2024, 1, 2), 110, "long", 10, "target", 1),
+            Trade(date(2024, 1, 3), 100, date(2024, 1, 4), 95, "long", -5, "stop", 1),
+        ]
+        summary = _format_summary(_make_result(trades))
+        assert "Recovery:" in summary

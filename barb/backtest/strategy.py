@@ -14,6 +14,7 @@ class Strategy:
     take_profit: points (float) or percentage (str like "3%")
     exit_bars: force exit after N bars
     slippage: points per side, default 0
+    commission: points per round-trip, default 0
     """
 
     entry: str
@@ -23,6 +24,7 @@ class Strategy:
     take_profit: float | str | None = None
     exit_bars: int | None = None
     slippage: float = 0.0
+    commission: float = 0.0  # points per round-trip
 
 
 def resolve_level(value: float | str, entry_price: float) -> float:

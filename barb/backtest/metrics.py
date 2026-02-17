@@ -31,6 +31,9 @@ class BacktestMetrics:
     avg_bars_held: float
     max_consecutive_wins: int
     max_consecutive_losses: int
+    recovery_factor: float  # total_pnl / max_drawdown (inf if max_dd = 0)
+    gross_profit: float  # sum of winning trade pnls
+    gross_loss: float  # sum of losing trade pnls (negative number)
 
 
 @dataclass
@@ -57,6 +60,9 @@ def calculate_metrics(trades: list[Trade]) -> BacktestMetrics:
             avg_bars_held=0.0,
             max_consecutive_wins=0,
             max_consecutive_losses=0,
+            recovery_factor=0.0,
+            gross_profit=0.0,
+            gross_loss=0.0,
         )
 
     wins = [t for t in trades if t.pnl > 0]
@@ -111,6 +117,9 @@ def calculate_metrics(trades: list[Trade]) -> BacktestMetrics:
         avg_bars_held=sum(t.bars_held for t in trades) / total if total else 0.0,
         max_consecutive_wins=max_consec_wins,
         max_consecutive_losses=max_consec_losses,
+        recovery_factor=cumulative / max_dd if max_dd > 0 else float("inf"),
+        gross_profit=gross_profit,
+        gross_loss=-gross_loss,  # store as negative
     )
 
 
