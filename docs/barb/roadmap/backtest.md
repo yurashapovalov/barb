@@ -431,69 +431,227 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 - [x] SSE event: data_block с type "backtest"
 - [x] E2E тесты: сценарий RSI + multi-turn hammer strategy
 
-### Phase 3: Frontend
-- [ ] Strategy Results Card component
-- [ ] Equity Curve (Shadcn area chart)
-- [ ] Trades Table (expandable)
+### Phase 3: Minute-Level Exit Resolution ✓
+- [x] `barb/backtest/engine.py` — `_find_exit_in_minutes()` walks minute bars chronologically
+- [x] Fallback to daily bar conservative assumption when minute data unavailable
+- [x] Integration test: same data, different outcome with/without minute bars
 
-### Phase 4: Validation & Robustness
+### Phase 4: Metrics + AI Commentary + Commission ✓
+- [x] `barb/backtest/metrics.py` — recovery_factor, gross_profit, gross_loss
+- [x] `assistant/tools/backtest.py` — 5-line model_response (yearly, exit types, concentration)
+- [x] `assistant/prompt/system.py` — rule #9 rewrite (analyze quality, not repeat numbers)
+- [x] `barb/backtest/strategy.py` + `engine.py` — commission field
+- [x] 54 теста total
 
-Бэктестинг без валидации — self-deception. Пользователь прогоняет 20 стратегий, выбирает лучшую — и получает overfit. Результат красивый на истории, бесполезный на реале. Задача этой фазы — дать инструменты, которые помогают отличить реальное edge от подгонки.
+---
 
-Референс: Marcos López de Prado, "Advances in Financial Machine Learning" — triple barrier method (уже реализован), walk-forward analysis, deflated Sharpe ratio.
+### Phase 5: Frontend Backtest Card
 
-#### Train/Test Split
+#### Контекст
 
-Ключевая идея: стратегию придумываешь на одних данных (in-sample), проверяешь на других (out-of-sample). Если результат сильно хуже — overfit.
+Backend бэктеста готов — 54 теста, 5-строчная аналитика, Claude даёт качественные рекомендации. Но пользователь **ничего не видит** — фронтенд рендерит backtest data_block как generic DataCard (иконка таблицы, пустое содержимое). Equity curve, метрики, trades — всё есть в данных, но UI не показывает.
 
-```python
-run_backtest(df, strategy, sessions,
-    train_period="2015:2022",
-    test_period="2023:2025"
-)
+Текущий фронтенд не знает о типе `backtest`:
+- `DataBlock` интерфейс не имеет поля `type`
+- `data-card.tsx` рендерит все блоки одинаково
+- `data-panel.tsx` пытается показать как таблицу — показывает мусор
+
+#### Изменения
+
+##### 1. `front/src/types/index.ts` — Тип BacktestBlock
+
+Добавить `BacktestBlock` интерфейс и дискриминатор `type` в существующий `DataBlock`:
+
+```typescript
+export interface BacktestBlock {
+  type: "backtest";
+  title: string;
+  strategy: {
+    entry: string;
+    direction: "long" | "short";
+    exit_target?: string | null;
+    stop_loss?: number | string | null;
+    take_profit?: number | string | null;
+    exit_bars?: number | null;
+    slippage: number;
+    commission: number;
+  };
+  metrics: {
+    total_trades: number;
+    winning_trades: number;
+    losing_trades: number;
+    win_rate: number;
+    profit_factor: number;
+    avg_win: number;
+    avg_loss: number;
+    max_drawdown: number;
+    total_pnl: number;
+    expectancy: number;
+    avg_bars_held: number;
+    max_consecutive_wins: number;
+    max_consecutive_losses: number;
+    recovery_factor: number;
+    gross_profit: number;
+    gross_loss: number;
+  };
+  trades: {
+    entry_date: string;
+    exit_date: string;
+    entry_price: number;
+    exit_price: number;
+    direction: string;
+    pnl: number;
+    exit_reason: string;
+    bars_held: number;
+  }[];
+  equity_curve: number[];
+}
 ```
 
-Результат — **две колонки метрик**. Claude видит обе и комментирует деградацию:
+Дискриминация по `type`: если `"type" in block && block.type === "backtest"` → BacktestBlock, иначе DataBlock (существующее поведение).
+
+##### 2. `front/src/hooks/use-chat.ts` — Различать типы блоков
+
+В `onDataBlock` callback: сохранять блок as-is. Тип различается при рендеринге (в компонентах), не при получении. Минимальное изменение — возможно не нужно менять вообще, если DataBlock уже хранит произвольные поля.
+
+Проверить: если `DataBlock` строго типизирован и отбрасывает лишние поля — нужно ослабить тип или использовать union.
+
+##### 3. `front/src/components/ai/data-card.tsx` — Backtest card в чате
+
+Определить тип блока и рендерить разные карточки:
 
 ```
-                Train (2015-2022)    Test (2023-2025)
-Trades          127                  31
-Win Rate        54.3%                41.9%
-Profit Factor   1.45                 0.89
-Total P&L       +2340 pts            -180 pts
-Sharpe          0.82                 -0.15
-→ "Стратегия показывает значительную деградацию на тестовом периоде — вероятно переоптимизирована"
+DataBlock без type    → существующий DataCard (таблица, график)
+BacktestBlock         → BacktestCard (метрики + мини equity curve)
 ```
 
-Если пользователь не указывает split — движок прогоняет на всех данных (текущее поведение). Split — опциональный, но Claude может предложить его для стратегий с большой историей.
+BacktestCard в чате — компактный:
+```
+┌─────────────────────────────────────────┐
+│  📊 RSI < 30 Long                       │
+│                                         │
+│  71 trades   WR 53.5%   PF 1.38        │
+│  +1798 pts   DD 1710    RF 1.05        │
+│                                         │
+│  ╭──────────╮                           │
+│  │ equity   │  (мини sparkline)         │
+│  ╰──────────╯                           │
+└─────────────────────────────────────────┘
+```
 
-#### Sharpe Ratio
+Клик → открывает BacktestPanel (как DataCard → DataPanel).
 
-Стандартная метрика risk-adjusted return. Отсутствует в v1 — нужно добавить.
+##### 4. `front/src/components/backtest/backtest-panel.tsx` — Полная панель
+
+Открывается при клике на BacktestCard. Три секции:
+
+**Секция 1: Metrics Grid**
+```
+┌───────────────────────────────────────────────────┐
+│  Trades    71       Win Rate    53.5%             │
+│  PF        1.38     Recovery    1.05              │
+│  Total     +1798    Max DD      1710              │
+│  Avg Win   +173     Avg Loss    -145              │
+│  Avg Bars  1.5      Expectancy  +25.3             │
+└───────────────────────────────────────────────────┘
+```
+
+Цвета: total_pnl зелёный/красный, win_rate > 50% зелёный, PF > 1 зелёный.
+
+**Секция 2: Equity Curve**
+
+Lightweight-charts LineSeries (уже в бандле для candlestick chart). Тёмный фон, зелёная линия если итог положительный, красная если отрицательный. Ось X — номер сделки (не дата, т.к. trades не equidistant). Ось Y — cumulative P&L.
+
+Переиспользовать паттерн из `candlestick-chart.tsx`: transparent background, hex colors, zinc palette.
+
+**Секция 3: Trades Table**
+
+Сортируемая таблица всех сделок:
+```
+| # | Entry Date | Exit Date  | Entry    | Exit     | P&L     | Exit    | Bars |
+|---|------------|------------|----------|----------|---------|---------|------|
+| 1 | 2008-01-18 | 2008-01-21 | 1870.50  | 1833.09  | -37.41  | stop    | 2    |
+| 2 | 2008-01-22 | 2008-01-22 | 1771.50  | 1824.65  | +53.15  | tp      | 0    |
+```
+
+P&L зелёный для плюса, красный для минуса. Дефолтная сортировка по дате. Клик на заголовок — сортировка по любому столбцу.
+
+##### 5. `front/src/components/backtest/equity-chart.tsx` — Equity curve chart
+
+Отдельный компонент. Входные данные: `equity_curve: number[]`.
+
+Lightweight-charts v5 LineSeries:
+```typescript
+const chart = createChart(container, { ... });
+const series = chart.addSeries(LineSeries, {
+  color: totalPnl >= 0 ? "#22c55e" : "#ef4444",
+  lineWidth: 2,
+});
+series.setData(equity_curve.map((value, i) => ({ time: i, value })));
+```
+
+**Важно**: lightweight-charts `time` ожидает числа/даты. Для equity curve используем индекс сделки (0, 1, 2, ...) как time — отключить time axis labels или заменить на "Trade #N".
+
+Альтернатива: recharts AreaChart из shadcn — проще, нет проблемы с time axis. Но менее консистентно с candlestick chart.
+
+**Рекомендация**: recharts AreaChart для equity curve. Lightweight-charts — overkill для простого line chart, а проблема с time axis добавляет ненужную сложность. Candlestick chart использует lightweight-charts потому что это TradingView OSS и нужна специфика свечей. Equity curve — просто линия.
+
+##### 6. Стратегия отображения (strategy badge)
+
+В BacktestCard и BacktestPanel показывать параметры стратегии:
 
 ```
-Sharpe = mean(trade_pnl) / std(trade_pnl) * sqrt(252)
+Long | RSI < 30 | Stop 2% | TP 3% | Max 5 bars
 ```
 
-Annualized, daily. При Sharpe < 0.5 стратегия сомнительна. При Sharpe > 2.0 — скорее всего overfit или мало данных.
+Компактная строка под заголовком. Не компонент — просто форматирование из `strategy` объекта.
 
-#### Minimum Sample Warning
+#### Файлы
 
-Если trades < 30 — предупреждение. Статистически результаты ненадёжны. 53 сделки за 17 лет (как RSI < 30 на NQ) — на грани.
+```
+front/src/types/index.ts                          — BacktestBlock тип (~30 строк)
+front/src/components/ai/data-card.tsx              — маршрутизация по type (~10 строк)
+front/src/components/backtest/backtest-card.tsx     — компактная карточка в чате (~60 строк)
+front/src/components/backtest/backtest-panel.tsx    — полная панель (~120 строк)
+front/src/components/backtest/equity-chart.tsx      — equity curve (recharts) (~50 строк)
+front/src/components/backtest/trades-table.tsx      — таблица сделок (~80 строк)
+front/src/components/panels/data-panel.tsx          — маршрутизация BacktestPanel (~5 строк)
+```
 
-#### Walk-Forward (v2)
+~350 строк нового кода, 2 файла модифицированы.
 
-Нарезать историю на окна, прогнать каждое:
-- Train 2010-2014, test 2015
-- Train 2010-2016, test 2017
-- Train 2010-2018, test 2019
-- ...
+#### НЕ в Phase 5
 
-Если стратегия стабильно работает на каждом out-of-sample окне — это сильнее чем один split. Но сложнее в реализации и объяснении пользователю.
+- **Monthly heatmap** — красиво, но не критично. Phase 6.
+- **Strategy comparison side-by-side** — нужна поддержка нескольких блоков. Phase 6.
+- **Downloadable CSV** — экспорт trades. Phase 6.
+- **Interactive equity curve** (hover → показать trade details) — Phase 6.
+- **MAE/MFE per trade** — backend изменение, не frontend. Phase 6.
+- **Sharpe/Sortino/Calmar** — нужна annualization и % returns. Phase 6.
 
-### Phase 5: Enhancements
-- [ ] Multiple strategies comparison (side by side)
-- [ ] Commission modeling
-- [ ] Position sizing options
-- [ ] Monthly/yearly breakdown of results
-- [ ] Win rate by exit reason (stop vs target vs expression)
+#### Верификация
+
+1. `cd front && npm run dev` — запустить dev server
+2. Отправить бэктест запрос → увидеть BacktestCard вместо generic DataCard
+3. Клик на карточку → BacktestPanel с метриками, equity curve, trades table
+4. Equity curve: зелёная линия для положительного P&L
+5. Trades table: сортировка по P&L — самые прибыльные сверху
+6. 0 trades → сообщение "No trades" вместо пустой таблицы
+7. `.venv/bin/ruff check .` — backend lint (на случай если что-то задели)
+
+---
+
+### Phase 6: Advanced Metrics + Validation
+
+- MAE/MFE per trade — track running min/max during trade in engine
+- Sharpe/Sortino/Calmar — percentage returns, annualization
+- Train/Test Split — in-sample / out-of-sample comparison
+- Walk-Forward analysis — rolling window validation
+- Monthly heatmap, strategy comparison
+
+### Phase 7: Realistic Fills
+
+- `fill_mode` — market / limit / stop
+- `slippage_atr` — dynamic slippage based on ATR
+- Trailing stop
+- Position sizing
