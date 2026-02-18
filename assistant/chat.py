@@ -262,14 +262,17 @@ class Assistant:
 
     def _exec_backtest(self, input_data: dict, title: str) -> tuple[str, dict | None]:
         """Execute run_backtest tool. Returns (model_response, data_block)."""
-        result = run_backtest_tool(input_data, self.df_minute, self.sessions)
-        model_response = result.get("model_response", "")
-        backtest = result.get("backtest")
+        from assistant.tools.backtest import _build_backtest_card
 
-        if not backtest:
+        tool_result = run_backtest_tool(input_data, self.df_minute, self.sessions)
+        model_response = tool_result.get("model_response", "")
+        bt_result = tool_result.get("result")
+
+        if not bt_result:
             return model_response, None
 
-        return model_response, backtest
+        card = _build_backtest_card(bt_result, title)
+        return model_response, card
 
 
 def _build_query_card(result: dict, title: str) -> dict | None:

@@ -49,7 +49,29 @@ export interface BarChartBlock {
   rows: Record<string, unknown>[];
 }
 
-export type Block = TableBlock | BarChartBlock;
+export interface MetricsGridBlock {
+  type: "metrics-grid";
+  items: { label: string; value: string; color?: string }[];
+}
+
+export interface AreaChartBlock {
+  type: "area-chart";
+  x_key: string;
+  series: { key: string; label: string; style: "line" | "area"; color?: string }[];
+  data: Record<string, unknown>[];
+}
+
+export interface HorizontalBarBlock {
+  type: "horizontal-bar";
+  items: { label: string; value: number; detail?: string }[];
+}
+
+export type Block =
+  | TableBlock
+  | BarChartBlock
+  | MetricsGridBlock
+  | AreaChartBlock
+  | HorizontalBarBlock;
 
 export interface DataBlock {
   title: string;

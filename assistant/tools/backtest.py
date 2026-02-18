@@ -1,7 +1,6 @@
 """Backtest tool for Anthropic Claude."""
 
 from collections import defaultdict
-from dataclasses import asdict
 
 import pandas as pd
 
@@ -152,32 +151,130 @@ def run_backtest_tool(
         period=input_data.get("period"),
     )
 
-    # Convert datetime.date → ISO string for JSON serialization.
-    # Trade.entry_date/exit_date are datetime.date from engine.
-    trades = [
+    return {
+        "model_response": _format_summary(result),
+        "result": result,
+    }
+
+
+def _build_backtest_card(result: BacktestResult, title: str) -> dict:
+    """Build typed DataCard from BacktestResult.
+
+    Returns {title, blocks: [metrics-grid, area-chart, horizontal-bar, table]}.
+    """
+    m = result.metrics
+
+    if m.total_trades == 0:
+        return {
+            "title": title,
+            "blocks": [
+                {
+                    "type": "metrics-grid",
+                    "items": [{"label": "Trades", "value": "0"}],
+                },
+            ],
+        }
+
+    pf = f"{m.profit_factor:.2f}" if m.profit_factor != float("inf") else "inf"
+    rf = f"{m.recovery_factor:.2f}" if m.recovery_factor != float("inf") else "inf"
+    pnl_color = "green" if m.total_pnl > 0 else "red" if m.total_pnl < 0 else None
+
+    # 1. metrics-grid
+    items = [
+        {"label": "Trades", "value": str(m.total_trades)},
+        {"label": "Win Rate", "value": f"{m.win_rate:.1f}%"},
+        {"label": "PF", "value": pf},
+        {"label": "Total P&L", "value": f"{m.total_pnl:+,.1f}"},
+        {"label": "Avg Win", "value": f"{m.avg_win:+,.1f}"},
+        {"label": "Avg Loss", "value": f"{m.avg_loss:,.1f}"},
+        {"label": "Max DD", "value": f"{m.max_drawdown:,.1f}"},
+        {"label": "Recovery", "value": rf},
+    ]
+    if pnl_color:
+        items[3]["color"] = pnl_color
+
+    metrics_block = {"type": "metrics-grid", "items": items}
+
+    # 2. area-chart — equity + drawdown
+    equity = 0.0
+    peak = 0.0
+    chart_data = []
+    for t in result.trades:
+        equity += t.pnl
+        peak = max(peak, equity)
+        chart_data.append(
+            {
+                "date": str(t.exit_date),
+                "equity": round(equity, 2),
+                "drawdown": round(equity - peak, 2),
+            }
+        )
+
+    area_block = {
+        "type": "area-chart",
+        "x_key": "date",
+        "series": [
+            {"key": "equity", "label": "Equity", "style": "line"},
+            {"key": "drawdown", "label": "Drawdown", "style": "area", "color": "red"},
+        ],
+        "data": chart_data,
+    }
+
+    # 3. horizontal-bar — exit type breakdown
+    exits = defaultdict(lambda: {"pnl": 0.0, "count": 0, "wins": 0, "losses": 0})
+    for t in result.trades:
+        exits[t.exit_reason]["pnl"] += t.pnl
+        exits[t.exit_reason]["count"] += 1
+        if t.pnl > 0:
+            exits[t.exit_reason]["wins"] += 1
+        else:
+            exits[t.exit_reason]["losses"] += 1
+
+    exit_items = [
+        {
+            "label": reason.replace("_", " ").title(),
+            "value": round(d["pnl"], 1),
+            "detail": f"{d['count']} trades (W:{d['wins']} L:{d['losses']})",
+        }
+        for reason, d in sorted(exits.items(), key=lambda x: x[1]["pnl"], reverse=True)
+    ]
+
+    hbar_block = {"type": "horizontal-bar", "items": exit_items}
+
+    # 4. table — all trades
+    trade_rows = [
         {
             "entry_date": str(t.entry_date),
             "exit_date": str(t.exit_date),
+            "direction": t.direction,
             "entry_price": t.entry_price,
             "exit_price": t.exit_price,
-            "direction": t.direction,
-            "pnl": t.pnl,
+            "pnl": round(t.pnl, 2),
             "exit_reason": t.exit_reason,
             "bars_held": t.bars_held,
         }
         for t in result.trades
     ]
 
+    table_block = {
+        "type": "table",
+        "columns": [
+            "entry_date",
+            "exit_date",
+            "direction",
+            "entry_price",
+            "exit_price",
+            "pnl",
+            "exit_reason",
+            "bars_held",
+        ],
+        "rows": trade_rows,
+    }
+
+    card_title = f"{title} · {m.total_trades} trades"
     return {
-        "model_response": _format_summary(result),
-        "backtest": {
-            "type": "backtest",
-            "title": input_data.get("title", "Backtest"),
-            "strategy": asdict(strategy),
-            "metrics": asdict(result.metrics),
-            "trades": trades,
-            "equity_curve": result.equity_curve,
-        },
+        "title": card_title,
+        "blocks": [metrics_block, area_block, hbar_block, table_block],
     }
 
 
