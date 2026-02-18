@@ -597,16 +597,31 @@ Tanstack table — тот же компонент что для query, друг�
 
 ---
 
-### Phase 7: Intraday Timeframe ✱ большой рефактор
+### Phase 7: Intraday Timeframe ✱ средний рефактор
 
 Текущий движок всегда `resample(df, "daily")`. `hour()` и `minute()` = 0 на дневных барах. Нельзя тестировать стратегии с входом в конкретное время.
 
 Реальный вопрос пользователя: "optimal time to enter if SL 50, target 100, breakeven 20 min after entry" → ассистент сделал 10 безуспешных попыток.
 
-- `strategy.py`: `timeframe: str = "daily"` (1m, 5m, 15m, 30m, 1h, daily)
-- `engine.py`: `resample(df, strategy.timeframe)` вместо `resample(df, "daily")`
-- `exit_bars` считает бары таймфрейма (5 на 1h = 5 часов, 5 на daily = 5 дней)
-- Edge cases: overnight позиции, CME halt 17:00-18:00
+**Архитектурное решение:** `from`/timeframe — pipeline field, не Strategy field. Как session и period. Стратегия определяет ЧТО торговать (entry, exit), pipeline определяет на каких данных (session, period, timeframe). Так же устроено в TradingView, Backtrader, QuantConnect.
+
+```python
+# engine.py — одна строка вместо hardcode
+def run_backtest(df, strategy, sessions, session=None, period=None, timeframe="daily"):
+    bars = resample(df, timeframe)
+```
+
+```python
+# tool schema — from рядом с session и period
+"from": {"type": "string", "description": "Bar timeframe (default: daily)"}
+```
+
+**Сложности (не в архитектуре, а в simulation loop):**
+
+- **Minute exit resolution:** сейчас `minute_by_date` ищет точный выход внутри дневного бара. Для часовых баров — нужно искать минутки внутри часа. Структуру нужно менять.
+- **Производительность:** daily = ~4K баров, hourly = ~100K, minute = ~5M. Simulate loop x25-x1000 медленнее.
+- **Session boundaries:** на часовых барах — CME halt 17:00-18:00, дырки в данных.
+- **exit_bars семантика:** "5 баров" = 5 часов на 1h, 5 дней на daily. Документировать.
 
 ---
 
