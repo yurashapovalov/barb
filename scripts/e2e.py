@@ -2,9 +2,10 @@
 """End-to-end test: real Anthropic API calls through the full Barb pipeline.
 
 Usage:
-    python scripts/e2e.py              # run all scenarios
-    python scripts/e2e.py --scenario 1 # run single scenario (1-indexed)
-    python scripts/e2e.py --quiet      # just pass/fail, no trace details
+    python scripts/e2e.py                          # run all scenarios
+    python scripts/e2e.py --scenario 1             # run single scenario (1-indexed)
+    python scripts/e2e.py --scenario "session high" # run by name substring
+    python scripts/e2e.py --quiet                  # just pass/fail, no trace details
 """
 
 import argparse
@@ -30,6 +31,7 @@ if _env_file.exists():
 from assistant.chat import Assistant
 from barb.data import load_data
 from config.market.instruments import get_instrument, register_instrument
+from scripts.e2e_scenarios import SCENARIOS
 from supabase import create_client
 
 # --- ANSI colors ---
@@ -47,8 +49,14 @@ class C:
     END = "\033[0m"
 
 
+_instruments_loaded = False
+
+
 def _load_instruments():
-    """Load instruments from Supabase (same as api/main.py lifespan)."""
+    """Load instruments from Supabase (same as api/main.py lifespan). Runs once."""
+    global _instruments_loaded
+    if _instruments_loaded:
+        return
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_KEY")
     if not url or not key:
@@ -58,160 +66,33 @@ def _load_instruments():
     result = db.table("instrument_full").select("*").execute()
     for row in result.data:
         register_instrument(row)
-    return len(result.data)
+    print(f"{C.DIM}Loaded {len(result.data)} instruments from Supabase{C.END}")
+    _instruments_loaded = True
 
 
-# --- Test scenarios ---
-# Based on real trader tasks (gap fade, ORB, volatility clustering, etc.)
-
-SCENARIOS = [
-    {
-        "name": "Gap fade — стоит ли торговать закрытие гэпа",
-        "messages": [
-            "Какой процент гэпов на открытии закрывается в тот же день?",
-            "да, только считай гэпы больше 20 пунктов",
-            "а отдельно для гэпов вверх и вниз?",
-        ],
-        "expect_tool": True,
-        "expect_data": True,  # count() returns source_rows as evidence
-    },
-    {
-        "name": "Пятничный bias — стоит ли держать позицию",
-        "messages": [
-            "какой средний range последнего часа торгов по пятницам за 2024 год по сравнению с другими днями?",
-            "давай",
-            "а в какой процент пятниц цена закрытия была ниже цены на 15:00?",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "ORB — когда формируется хай дня",
-        "messages": [
-            "In what percentage of days is the high or low of the RTH session set within the first 30 minutes?",
-            "yes",
-            "show me by quarter for 2024",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Volatility clustering — чего ждать завтра",
-        "messages": [
-            "после дней с range больше 300 пунктов какой средний range на следующий день?",
-            "да, RTH",
-            "покажи эти дни и что было на следующий день",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Сезонность объёма — когда не торговать",
-        "messages": [
-            "покажи средний дневной объём по месяцам за последние 2 года",
-            "давай, только ETH сессию используй",
-            "а по дням недели?",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Inside day breakout — стоит ли ждать движение",
-        "messages": [
-            "сколько inside days было за 2024-2025?",
-            "да, RTH",
-            "какой средний range на следующий день после inside day?",
-            "покажи топ-10 самых сильных движений после inside day",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Торговые дни — count",
-        "messages": [
-            "сколько торговых дней в марте 2025?",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Торговые дни — покажи",
-        "messages": [
-            "покажи торговые дни в марте 2025",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Knowledge — NR7",
-        "messages": [
-            "What is NR7?",
-        ],
-        "expect_tool": False,
-        "expect_data": False,
-    },
-    {
-        "name": "Большие падения — фильтр с контекстом",
-        "messages": [
-            "собери за 2024-2025 год все дни когда котировки понизились на 2.5% и более",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Backtest — RSI mean reversion",
-        "messages": [
-            "протестируй стратегию: покупай когда RSI ниже 30, стоп 2%, тейк 3%, максимум 5 дней",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Backtest — hammer after selloff, multi-turn",
-        "messages": [
-            "протестируй стратегию: лонг после 3 дней падения подряд если закрытие в верхней половине диапазона дня. стоп 1.5%, тейк 3%, максимум 5 дней, проскальзывание 0.5. RTH, вся история",
-            "а теперь прогони только на 2022-2025 чтобы проверить out-of-sample",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Затишье перед бурей — squeeze detection",
-        "messages": [
-            "бывает что рынок затихает а потом резко двигается? как часто это происходит?",
-            "за последние 2 года покажи",
-            "какие самые сильные движения были после затишья?",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-    {
-        "name": "Backtest — gap fill with RSI filter",
-        "messages": [
-            "Покупай когда гэп вниз больше 1% и вчерашний RSI был выше 50. Таргет — закрытие гэпа (prev(close)). Стоп 1.5%. Максимум 1 день. Только RTH.",
-        ],
-        "expect_tool": True,
-        "expect_data": True,
-    },
-]
+# Cache assistants by (instrument, model) to avoid recreating for same instrument
+_assistant_cache: dict[tuple[str, str | None], Assistant] = {}
 
 
-def create_assistant(model=None):
+def get_assistant(instrument: str, model=None) -> Assistant:
+    """Get or create an Assistant for the given instrument."""
+    cache_key = (instrument, model)
+    if cache_key in _assistant_cache:
+        return _assistant_cache[cache_key]
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         print(f"{C.RED}ERROR: ANTHROPIC_API_KEY not set. Add to .env or export.{C.END}")
         sys.exit(1)
 
-    count = _load_instruments()
-    print(f"{C.DIM}Loaded {count} instruments from Supabase{C.END}")
+    _load_instruments()
 
-    instrument = "NQ"
     config = get_instrument(instrument)
     if not config:
         print(f"{C.RED}ERROR: Instrument {instrument} not found in Supabase{C.END}")
         sys.exit(1)
 
-    return Assistant(
+    assistant = Assistant(
         api_key=api_key,
         instrument=instrument,
         df_daily=load_data(instrument, "1d"),
@@ -219,6 +100,8 @@ def create_assistant(model=None):
         sessions=config["sessions"],
         model=model,
     )
+    _assistant_cache[cache_key] = assistant
+    return assistant
 
 
 def chat_sync(assistant, message, history=None):
@@ -460,28 +343,55 @@ def run_scenario(assistant, scenario, quiet=False):
     }
 
 
+def _select_scenarios(selector: str | None) -> list[dict]:
+    """Select scenarios by 1-indexed number or name substring."""
+    if not selector:
+        return SCENARIOS
+
+    # Try as number first
+    try:
+        idx = int(selector) - 1
+        if 0 <= idx < len(SCENARIOS):
+            return [SCENARIOS[idx]]
+        print(f"Invalid scenario index. Valid: 1-{len(SCENARIOS)}")
+        sys.exit(1)
+    except ValueError:
+        pass
+
+    # Match by name substring (case-insensitive)
+    needle = selector.lower()
+    matched = [s for s in SCENARIOS if needle in s["name"].lower()]
+    if not matched:
+        print(f"No scenarios matching '{selector}'. Available:")
+        for i, s in enumerate(SCENARIOS, 1):
+            print(f"  {i}. {s['name']}")
+        sys.exit(1)
+    return matched
+
+
 def main():
     parser = argparse.ArgumentParser(description="Barb end-to-end test")
-    parser.add_argument("--scenario", type=int, help="Run single scenario (1-indexed)")
+    parser.add_argument(
+        "--scenario", type=str, help="Scenario number (1-indexed) or name substring"
+    )
     parser.add_argument("--model", type=str, help="Override model (e.g. claude-haiku-4-5-20251001)")
     parser.add_argument("--quiet", action="store_true", help="Minimal output")
     args = parser.parse_args()
 
-    print(f"{C.BOLD}Loading data...{C.END}")
-    assistant = create_assistant(model=args.model)
-    print(f"{C.DIM}Ready. Model: {assistant.model}{C.END}")
+    scenarios = _select_scenarios(args.scenario)
 
-    scenarios = SCENARIOS
-    if args.scenario:
-        idx = args.scenario - 1
-        if 0 <= idx < len(SCENARIOS):
-            scenarios = [SCENARIOS[idx]]
-        else:
-            print(f"Invalid scenario. Valid: 1-{len(SCENARIOS)}")
-            sys.exit(1)
+    print(f"{C.BOLD}Loading data...{C.END}")
+
+    # Pre-load assistants for all instruments needed
+    instruments = {s.get("instrument", "NQ") for s in scenarios}
+    for instrument in sorted(instruments):
+        assistant = get_assistant(instrument, model=args.model)
+        print(f"{C.DIM}Ready: {instrument} | Model: {assistant.model}{C.END}")
 
     results = []
     for scenario in scenarios:
+        instrument = scenario.get("instrument", "NQ")
+        assistant = get_assistant(instrument, model=args.model)
         r = run_scenario(assistant, scenario, quiet=args.quiet)
         results.append(r)
 
@@ -508,10 +418,14 @@ def main():
     results_dir = ROOT / "results" / "e2e"
     results_dir.mkdir(parents=True, exist_ok=True)
 
+    # Use model from first assistant
+    first_instrument = scenarios[0].get("instrument", "NQ")
+    model_name = get_assistant(first_instrument, model=args.model).model
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report = {
         "timestamp": datetime.now().isoformat(),
-        "model": assistant.model,
+        "model": model_name,
         "passed": passed,
         "total": len(results),
         "total_cost": total_cost,
@@ -527,7 +441,7 @@ def main():
         ],
     }
 
-    model_short = assistant.model.split("-")[1] if "-" in assistant.model else assistant.model
+    model_short = model_name.split("-")[1] if "-" in model_name else model_name
     path = results_dir / f"{timestamp}_{model_short}.json"
     path.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str))
     print(f"\n  Saved: {path.relative_to(ROOT)}")

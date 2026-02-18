@@ -553,17 +553,79 @@ Tanstack table — тот же компонент что для query, друг�
 
 ---
 
-### Phase 6: Advanced Metrics + Validation
+### Phase 6: Exit Management
 
-- MAE/MFE per trade — track running min/max during trade in engine
+Вызвано реальными вопросами пользователей. Текущий движок: фиксированный стоп/тейк + timeout. Трейдерам нужно больше.
+
+#### 6a. Breakeven ✱ маленькое изменение
+
+После N баров, если сделка в прибыли → стоп перемещается на цену входа.
+
+```
+Вход long @ 100.0, SL @ 95.0, breakeven_bars = 20
+Бар 1-19:  стоп = 95.0
+Бар 20:    если в прибыли → стоп = 100.0
+Бар 21+:   стоп = 100.0 (если активирован)
+```
+
+- `strategy.py`: `breakeven_bars: int | None = None`
+- `engine.py` / `_simulate`: после N баров проверить `price > entry` (long), если да → `stop = entry + slippage`
+- Позже: `breakeven_distance: float` — по расстоянию вместо баров
+
+#### 6b. Trailing stop ✱ средний
+
+Стоп двигается за ценой. Нужен для трендовых стратегий — фиксированный тейк отсекает длинные движения.
+
+```
+Вход long @ 100, trail = 2
+Цена: 101 → стоп 99, 103 → стоп 101, 105 → стоп 103, 102 → выход @ 103
+```
+
+- `strategy.py`: `trailing_stop: float | str | None` (пункты или "2%")
+- `engine.py`: трекать `max_price` побарово, пересчитывать `stop = max_price - trail`
+- На минутках: обновлять max_price каждую свечу
+
+#### 6c. Scale out ✱ большое, можно отложить
+
+Закрытие частями: 50% на +1%, 50% на +2%.
+
+- `strategy.py`: `scale_out: list[dict] | None` → `[{"at": "1%", "size": 50}]`
+- `engine.py`: трекать `remaining_size`, partial P&L
+- Можно аппроксимировать двумя отдельными бэктестами
+
+Порядок: breakeven → trailing → scale out.
+
+---
+
+### Phase 7: Intraday Timeframe ✱ большой рефактор
+
+Текущий движок всегда `resample(df, "daily")`. `hour()` и `minute()` = 0 на дневных барах. Нельзя тестировать стратегии с входом в конкретное время.
+
+Реальный вопрос пользователя: "optimal time to enter if SL 50, target 100, breakeven 20 min after entry" → ассистент сделал 10 безуспешных попыток.
+
+- `strategy.py`: `timeframe: str = "daily"` (1m, 5m, 15m, 30m, 1h, daily)
+- `engine.py`: `resample(df, strategy.timeframe)` вместо `resample(df, "daily")`
+- `exit_bars` считает бары таймфрейма (5 на 1h = 5 часов, 5 на daily = 5 дней)
+- Edge cases: overnight позиции, CME halt 17:00-18:00
+
+---
+
+### Phase 8: Realistic Fills
+
+- `fill_mode` — optimistic (current), realistic, pessimistic
+- `slippage_atr` — adaptive slippage as fraction of ATR(14)
+- `tp_must_exceed` — price must exceed, not just touch TP level
+- Position sizing
+
+См. `backtest-v3-fills.md` для деталей.
+
+---
+
+### Phase 9: Advanced Metrics + Validation
+
+- MAE/MFE per trade — track running min/max during trade in engine (минутные данные уже есть)
 - Sharpe/Sortino/Calmar — percentage returns, annualization
+- Monte Carlo — рандомно перетасовать порядок сделок 1000x, distribution P&L/drawdown
 - Train/Test Split — in-sample / out-of-sample comparison
 - Walk-Forward analysis — rolling window validation
 - Monthly heatmap, strategy comparison
-
-### Phase 7: Realistic Fills
-
-- `fill_mode` — market / limit / stop
-- `slippage_atr` — dynamic slippage based on ATR
-- Trailing stop
-- Position sizing

@@ -15,6 +15,8 @@ BACKTEST_TOOL = {
 Simulates trades bar-by-bar on daily data and returns performance metrics.
 Uses the same expression syntax as run_query for entry/exit conditions.
 
+IMPORTANT: Entry conditions are evaluated on DAILY bars. hour() and minute() always return 0 — do NOT use time-based entry conditions. For time-of-day analysis, use run_query instead.
+
 Strategy fields:
 - entry: boolean expression that triggers a trade (e.g. "rsi(close, 14) < 30")
 - direction: "long" or "short"

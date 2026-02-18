@@ -27,6 +27,7 @@ IMPORTANT:
 - group_by requires a COLUMN NAME, not an expression. Create column in map first.
 - select only supports aggregate functions: count(), sum(col), mean(col), min(col), max(col), std(col), median(col), percentile(col, p), correlation(col1, col2), last(col)
 - For percentage calculations, run TWO queries: total count and filtered count.
+- hour() and minute() return 0 on daily/weekly/monthly data (no time component). Use intraday timeframe (1m, 5m, 1h) for time-of-day analysis.
 
 Output format:
 - Use "columns" to control which columns appear in the result table. Order in array = order in output.
@@ -45,6 +46,8 @@ Common multi-function patterns:
   OPEX            → 3rd Friday: dayofweek() == 4 and day() >= 15 and day() <= 21
   opening range   → first 30-60 min of RTH session
   closing range   → last 60 min of RTH session
+  session high/low by hour → from:"1h", map: hr=hour(), is_high=high==rolling_max(high,23), where: is_high, group_by: hr, select: count()
+                             (23 = hours in ETH session; use rolling_min for lows)
 </patterns>
 
 <examples>
