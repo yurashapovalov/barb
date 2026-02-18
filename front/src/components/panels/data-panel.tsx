@@ -185,16 +185,11 @@ function AreaChartBlockView({ block }: { block: AreaChartBlock }) {
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            tickFormatter={(v: string) => v.slice(5)}
+            minTickGap={40}
+            tickFormatter={(v: string) => v.slice(0, 4)}
           />
           <YAxis tickLine={false} axisLine={false} tickMargin={8} width={60} />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                formatter={(value) => formatValue(value, { decimals: 1 })}
-              />
-            }
-          />
+          <ChartTooltip content={<ChartTooltipContent />} />
           {block.series.map((s) =>
             s.style === "area" ? (
               <Area
