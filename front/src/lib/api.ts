@@ -189,7 +189,7 @@ function isErrorEvent(obj: unknown): obj is SSEErrorEvent {
 }
 
 function isDataBlockEvent(obj: unknown): obj is SSEDataBlockEvent {
-  return has(obj, "query") && has(obj, "result");
+  return has(obj, "title") && has(obj, "blocks");
 }
 
 // --- Streaming ---

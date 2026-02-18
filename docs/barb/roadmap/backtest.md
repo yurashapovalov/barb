@@ -438,18 +438,18 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 
 ### Phase 4: Metrics + AI Commentary + Commission ✓
 - [x] `barb/backtest/metrics.py` — recovery_factor, gross_profit, gross_loss
-- [x] `assistant/tools/backtest.py` — 5-line model_response (yearly, exit types, concentration)
+- [x] `assistant/tools/backtest.py` — 5-line model_response (yearly, exit types W/L, concentration, best/worst, consec W/L)
 - [x] `assistant/prompt/system.py` — rule #9 rewrite (analyze quality, not repeat numbers)
 - [x] `barb/backtest/strategy.py` + `engine.py` — commission field
-- [x] 54 теста total
+- [x] 56 тестов total
 
 ---
 
-### Phase 5: Frontend Backtest Panel
+### Phase 5: Frontend — Data Panel + Backtest Content
 
 #### Контекст
 
-Backend бэктеста готов — 54 теста, 5-строчная аналитика, Claude даёт качественные рекомендации. Но пользователь **ничего не видит** — фронтенд рендерит backtest data_block как generic DataCard (иконка таблицы, пустое содержимое). Equity curve, метрики, trades — всё есть в данных, но UI не показывает.
+Backend бэктеста готов — 56 тестов, 5-строчная аналитика, Claude даёт качественные рекомендации. Но пользователь **ничего не видит** — фронтенд рендерит backtest data_block как generic DataCard (иконка таблицы, пустое содержимое).
 
 Текущий фронтенд не знает о типе `backtest`:
 - `DataBlock` интерфейс не имеет поля `type`
@@ -458,18 +458,48 @@ Backend бэктеста готов — 54 теста, 5-строчная ана
 
 #### Подход
 
-Существующий паттерн: DataCard в чате → клик → DataPanel в правой панели. Для бэктеста тот же паттерн: карточка в чате (заголовок с title бэктеста) → клик → правая панель с бэктест-контентом вместо таблицы данных.
-
-Минимум изменений в chat flow. Вся работа — в панели.
-
-#### Layout панели (сверху вниз, по важности для трейдера)
-
-##### 1. Metrics Summary — компактная сетка 4×2
+**Одна DataPanel — разный контент.** Панель — generic контейнер (header, scroll, close). Контент определяется типом данных. Каждый визуальный блок (таблица, chart, metrics grid) — отдельный переиспользуемый компонент. Query и backtest показываются в одной и той же панели, просто собираются разные блоки.
 
 ```
-┌──────────────────────────────────────────────┐
-│  RSI < 30 Long                               │
-├──────────┬──────────┬──────────┬─────────────┤
+DataPanel (generic container)
+  ├── PanelHeader + close button  — общий
+  ├── title                        — общий
+  └── content blocks               — зависят от типа данных
+       │
+       ├── QueryBlock (type === undefined):
+       │     ├── BarChart (если есть chart hint)
+       │     └── Table (source_rows)
+       │
+       └── BacktestBlock (type === "backtest"):
+             ├── MetricsGrid (metrics → 4×2 key-value)
+             ├── LineChart (equity_curve → line + drawdown area)
+             ├── BarChart (by_exit → горизонтальные бары)
+             └── Table (trades → tanstack)
+```
+
+Компоненты generic — не знают про backtest. `MetricsGrid` принимает массив `{label, value}`. `Table` принимает rows и columns. `BarChart` принимает data, categoryKey, valueKey. Те же компоненты, разные данные.
+
+#### Backend: structured data для фронта
+
+Бэкенд уже считает yearly/exit/concentration для model_response. Нужно добавить эти же данные как structured JSON в backtest response — фронт рендерит, не считает.
+
+`assistant/tools/backtest.py` — добавить в backtest dict:
+
+```python
+"equity_curve": [{"date": "2024-01-15", "value": 52.5}, ...],
+"by_year": [{"year": 2024, "pnl": 2555.0, "trades": 90}, ...],
+"by_exit": [{"reason": "stop", "trades": 43, "pnl": -1800.5, "wins": 0, "losses": 43}, ...],
+"concentration": {"top_n": 3, "pnl": 1850.0, "pct_of_total": 72.4},
+```
+
+Engine (`barb/backtest/`) не меняется. Всё в tool wrapper.
+
+#### Layout панели (сверху вниз)
+
+##### 1. Metrics Grid — 4×2
+
+```
+┌──────────┬──────────┬──────────┬─────────────┐
 │ 71       │ 53.5%    │ 1.38     │ +1,798 pts  │
 │ Trades   │ Win Rate │ PF       │ Total P&L   │
 ├──────────┼──────────┼──────────┼─────────────┤
@@ -478,159 +508,48 @@ Backend бэктеста готов — 54 теста, 5-строчная ана
 └──────────┴──────────┴──────────┴─────────────┘
 ```
 
-8 ключевых метрик. Достаточно чтобы за секунду понять — стратегия рабочая или нет. Total P&L зелёный если плюс, красный если минус.
+Generic компонент `MetricsGrid` — принимает `{label, value, color?}[]`. Backtest передаёт 8 метрик. Компонент не знает что это backtest.
 
-##### 2. Equity Curve + Drawdown overlay
+##### 2. Equity Curve + Drawdown
 
-```
-┌──────────────────────────────────────────────┐
-│  ╱╲    ╱╲                                    │
-│ ╱  ╲  ╱  ╲      ╱╲  ╱╲    ╱╲               │  equity (line)
-│╱    ╲╱    ╲    ╱  ╲╱  ╲  ╱  ╲    ╱         │
-│           ╲  ╱         ╲╱    ╲  ╱           │
-│            ╲╱                  ╲╱            │
-│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│  drawdown (area, red, under)
-└──────────────────────────────────────────────┘
-```
+Recharts ComposedChart: Line (equity) + Area (drawdown, красная). Drawdown = `equity[i] - max(equity[0..i])`, считается на фронте (3 строки, pure derived view). Данные приходят с бэка как `[{date, value}]`.
 
-Recharts (уже в проекте). Line chart для equity, Area chart для drawdown (красная полупрозрачная область). Drawdown считается на фронте из equity_curve: `drawdown[i] = equity[i] - max(equity[0..i])`.
+##### 3. Exits Breakdown
 
-##### 3. Exits Breakdown — P&L по типу выхода
+Горизонтальные бары по exit_reason. Данные приходят с бэка как `[{reason, trades, pnl, wins, losses}]`. Зелёный/красный по знаку pnl. Переиспользует `BarChart` или простой div с процентной шириной.
 
-```
-┌──────────────────────────────────────────────┐
-│ Stop        32 trades    -4,759 pts   ██████ │
-│ Take Profit 33 trades    +6,106 pts   ██████ │
-│ Timeout      6 trades      +451 pts   ██     │
-└──────────────────────────────────────────────┘
-```
+##### 4. Trades Table
 
-Горизонтальные бары. Зелёный для плюса, красный для минуса. Считается на фронте из trades (group by exit_reason, sum pnl).
+Tanstack table — тот же компонент что для query, другие столбцы. P&L зелёный/красный. По умолчанию date desc.
 
-##### 4. Trades Table — tanstack/react-table (уже в проекте)
+#### Шаги реализации
 
-```
-┌─────────────┬─────────────┬─────────┬────────┬──────┐
-│ Entry       │ Exit        │ P&L     │ Reason │ Bars │
-├─────────────┼─────────────┼─────────┼────────┼──────┤
-│ 2025-04-09  │ 2025-04-09  │ +507.9  │ TP     │  0   │
-│ 2025-04-07  │ 2025-04-07  │ +504.3  │ TP     │  0   │
-│ 2025-03-11  │ 2025-03-17  │ +583.0  │ TP     │  5   │
-└─────────────┴─────────────┴─────────┴────────┴──────┘
-```
+##### 1. Backend: structured data
+`assistant/tools/backtest.py` — добавить `equity_curve` с датами, `by_year`, `by_exit`, `concentration` в response dict. Тесты.
 
-P&L зелёный/красный. Сортировка по любой колонке. По умолчанию по дате desc (новые сверху).
+##### 2. Types
+`front/src/types/index.ts` — `DataBlock` → discriminated union (`QueryBlock | BacktestBlock`). Дискриминация по полю `type`.
 
-#### Изменения
+##### 3. DataCard
+`front/src/components/ai/data-card.tsx` — иконка `ActivityIcon` для backtest, label из `title`.
 
-##### 1. `front/src/types/index.ts` — Тип BacktestBlock
+##### 4. DataPanel content routing
+`front/src/components/panels/data-panel.tsx` — `type === "backtest"` → backtest content blocks, иначе текущий query content.
 
-```typescript
-export interface BacktestBlock {
-  type: "backtest";
-  title: string;
-  strategy: {
-    entry: string;
-    direction: "long" | "short";
-    exit_target?: string | null;
-    stop_loss?: number | string | null;
-    take_profit?: number | string | null;
-    exit_bars?: number | null;
-    slippage: number;
-    commission: number;
-  };
-  metrics: {
-    total_trades: number;
-    winning_trades: number;
-    losing_trades: number;
-    win_rate: number;
-    profit_factor: number;
-    avg_win: number;
-    avg_loss: number;
-    max_drawdown: number;
-    total_pnl: number;
-    expectancy: number;
-    avg_bars_held: number;
-    max_consecutive_wins: number;
-    max_consecutive_losses: number;
-    recovery_factor: number;
-    gross_profit: number;
-    gross_loss: number;
-  };
-  trades: {
-    entry_date: string;
-    exit_date: string;
-    entry_price: number;
-    exit_price: number;
-    direction: string;
-    pnl: number;
-    exit_reason: string;
-    bars_held: number;
-  }[];
-  equity_curve: number[];
-}
-```
-
-Дискриминация: `"type" in block && block.type === "backtest"` → BacktestBlock, иначе DataBlock.
-
-##### 2. `front/src/components/ai/data-card.tsx` — Лейбл для бэктеста
-
-Минимальное изменение: если блок — backtest, показать title из бэктеста вместо generic label. Та же карточка, другой текст. Клик → открывает панель (как сейчас).
-
-##### 3. `front/src/components/panels/data-panel.tsx` — Маршрутизация
-
-Если блок — backtest → рендерить `BacktestPanel` вместо таблицы данных.
-
-##### 4. `front/src/components/backtest/backtest-panel.tsx` — Панель
-
-4 секции сверху вниз: metrics grid, equity+drawdown chart, exits breakdown, trades table. Каждая секция — отдельный компонент.
-
-##### 5. `front/src/components/backtest/equity-chart.tsx` — Recharts
-
-ComposedChart: Line (equity) + Area (drawdown). Drawdown считается из equity_curve.
-
-##### 6. `front/src/components/backtest/exits-breakdown.tsx` — Бары по exit type
-
-Группируем trades по exit_reason, считаем count и sum pnl. Горизонтальные бары с цветом.
-
-##### 7. `front/src/components/backtest/trades-table.tsx` — Tanstack table
-
-Переиспользуем паттерн существующей таблицы. Сортировка, цвета P&L.
-
-#### Файлы
-
-```
-front/src/types/index.ts                           — BacktestBlock тип (~30 строк)
-front/src/components/ai/data-card.tsx               — backtest label (~5 строк)
-front/src/components/panels/data-panel.tsx           — маршрутизация (~10 строк)
-front/src/components/backtest/backtest-panel.tsx     — layout 4 секций (~40 строк)
-front/src/components/backtest/metrics-grid.tsx       — 4×2 сетка метрик (~50 строк)
-front/src/components/backtest/equity-chart.tsx       — recharts line+area (~60 строк)
-front/src/components/backtest/exits-breakdown.tsx    — горизонтальные бары (~50 строк)
-front/src/components/backtest/trades-table.tsx       — tanstack table (~80 строк)
-```
-
-~325 строк нового кода, 3 файла модифицированы, 5 новых файлов.
+##### 5. Generic components
+- `MetricsGrid` — grid из `{label, value, color?}[]`
+- `EquityChart` — recharts Line + Area (equity + drawdown)
+- Exits breakdown — горизонтальные бары
+- Trades table — те же tanstack columns, другие данные
 
 #### НЕ в Phase 5
 
-- **Monthly returns heatmap** — красиво, позже.
-- **Strategy comparison side-by-side** — нужна поддержка нескольких блоков.
-- **Downloadable CSV** — экспорт trades.
-- **By year breakdown в панели** — модель уже пишет это в чате, дублировать не нужно.
-- **MAE/MFE scatter plot** — нет данных в Trade dataclass.
-- **Parameter sensitivity** — другая фича целиком.
-
-#### Верификация
-
-1. `cd front && npm run dev` — запустить dev server
-2. Бэктест запрос → карточка в чате с title бэктеста (не generic "Table")
-3. Клик на карточку → правая панель с 4 секциями
-4. Metrics grid: 8 метрик, Total P&L зелёный/красный
-5. Equity curve: линия + красный drawdown overlay
-6. Exits breakdown: бары по exit type с P&L
-7. Trades table: сортировка по дате desc, P&L с цветом
-8. 0 trades → сообщение "No trades" вместо пустых секций
+- Monthly returns heatmap
+- Strategy comparison side-by-side
+- Downloadable CSV
+- By year breakdown в панели (Claude пишет в чате)
+- MAE/MFE scatter plot
+- Parameter sensitivity
 
 ---
 

@@ -228,7 +228,10 @@ trades = [
         "strategy": {entry, direction, stop_loss, ...},
         "metrics": {total_trades, win_rate, profit_factor, ...},
         "trades": [{entry_date, exit_date, pnl, exit_reason, ...}],
-        "equity_curve": [52.5, 17.8, ...],
+        "equity_curve": [{"date": "2024-01-15", "value": 52.5}, ...],
+        "by_year": [{"year": 2024, "pnl": 2555.0, "trades": 90}, ...],
+        "by_exit": [{"reason": "stop", "trades": 43, "pnl": -1800.5}, ...],
+        "concentration": {"top_n": 3, "pnl": 1850.0, "pct_of_total": 72.4},
     },
 }
 ```
@@ -239,16 +242,16 @@ trades = [
 
 ```
 Backtest: 90 trades | Win Rate 52.2% | PF 1.48 | Total +2555.0 pts | Max DD 1675.7 pts
-Avg win: +171.2 | Avg loss: -124.6 | Avg bars: 1.1 | Recovery: 1.52
+Avg win: +171.2 | Avg loss: -124.6 | Best: +302.2 | Worst: -339.5 | Avg bars: 1.1 | Recovery: 1.52 | Consec W/L: 4/7
 By year: 2020 +1200.5 (25) | 2021 +408.2 (22) | 2022 -102.0 (18) | 2023 +893.1 (16) | 2024 +155.2 (9)
-Exits: stop 43 (-1800.5) | take_profit 38 (+4200.0) | timeout 9 (+155.5)
+Exits: stop 43 (W:0 L:43, -1800.5) | take_profit 38 (W:38 L:0, +4200.0) | timeout 9 (W:5 L:4, +155.5)
 Top 3 trades: +1850.0 pts (72.4% of total PnL)
 ```
 
-- Line 1: headline metrics + recovery factor
-- Line 2: trade-level stats (avg win/loss, avg bars, recovery factor)
+- Line 1: headline metrics
+- Line 2: trade-level stats (avg win/loss, best/worst, avg bars, recovery factor, max consecutive W/L)
 - Line 3: yearly P&L breakdown — stability/regime dependency
-- Line 4: exit type P&L — which mechanism drives profit
+- Line 4: exit type with W/L counts — reveals broken exit logic (e.g. target exits with losses)
 - Line 5: concentration — dependency on outlier trades
 
 0 сделок: `Backtest: 0 trades — entry condition never triggered in this period.`
@@ -280,7 +283,7 @@ event: tool_start
 data: {"tool_name": "run_backtest", "input": {"strategy": {...}, "title": "..."}}
 
 event: data_block
-data: {"type": "backtest", "title": "...", "strategy": {...}, "metrics": {...}, "trades": [...], "equity_curve": [...]}
+data: {"type": "backtest", "title": "...", "strategy": {...}, "metrics": {...}, "trades": [...], "equity_curve": [{date, value}, ...], "by_year": [{year, pnl, trades}, ...], "by_exit": [{reason, trades, pnl}, ...], "concentration": {top_n, pnl, pct_of_total}}
 
 event: tool_end
 data: {"tool_name": "run_backtest", "duration_ms": 450, "error": null}

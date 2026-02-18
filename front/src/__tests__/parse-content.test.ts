@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { parseContent } from "@/lib/parse-content";
-import type { Message } from "@/types";
-import type { DataBlock } from "@/types";
+import type { DataBlock, Message } from "@/types";
 
 function msg(content: string, data: DataBlock[] | null = null): Message {
   return {
@@ -15,8 +14,16 @@ function msg(content: string, data: DataBlock[] | null = null): Message {
   };
 }
 
-const block0: DataBlock = { query: {}, result: 42, session: "RTH", timeframe: "daily" } as DataBlock;
-const block1: DataBlock = { query: {}, result: 100, session: "ETH", timeframe: "weekly" } as DataBlock;
+const block0: DataBlock = {
+  title: "RTH daily · 5 rows",
+  blocks: [{ type: "table", columns: ["date", "close"], rows: [{ date: "2024-01-01", close: 42 }] }],
+  status: "success",
+};
+const block1: DataBlock = {
+  title: "ETH weekly · 3 rows",
+  blocks: [{ type: "table", columns: ["date", "close"], rows: [{ date: "2024-01-01", close: 100 }] }],
+  status: "success",
+};
 
 describe("parseContent", () => {
   it("returns single text segment when no data", () => {

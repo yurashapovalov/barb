@@ -185,10 +185,18 @@ SCENARIOS = [
         "expect_tool": True,
         "expect_data": True,
     },
+    {
+        "name": "Backtest — gap fill with RSI filter",
+        "messages": [
+            "Покупай когда гэп вниз больше 1% и вчерашний RSI был выше 50. Таргет — закрытие гэпа (prev(close)). Стоп 1.5%. Максимум 1 день. Только RTH.",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
 ]
 
 
-def create_assistant():
+def create_assistant(model=None):
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         print(f"{C.RED}ERROR: ANTHROPIC_API_KEY not set. Add to .env or export.{C.END}")
@@ -209,6 +217,7 @@ def create_assistant():
         df_daily=load_data(instrument, "1d"),
         df_minute=load_data(instrument, "1m"),
         sessions=config["sessions"],
+        model=model,
     )
 
 
@@ -454,11 +463,12 @@ def run_scenario(assistant, scenario, quiet=False):
 def main():
     parser = argparse.ArgumentParser(description="Barb end-to-end test")
     parser.add_argument("--scenario", type=int, help="Run single scenario (1-indexed)")
+    parser.add_argument("--model", type=str, help="Override model (e.g. claude-haiku-4-5-20251001)")
     parser.add_argument("--quiet", action="store_true", help="Minimal output")
     args = parser.parse_args()
 
     print(f"{C.BOLD}Loading data...{C.END}")
-    assistant = create_assistant()
+    assistant = create_assistant(model=args.model)
     print(f"{C.DIM}Ready. Model: {assistant.model}{C.END}")
 
     scenarios = SCENARIOS
@@ -517,7 +527,8 @@ def main():
         ],
     }
 
-    path = results_dir / f"{timestamp}_sonnet.json"
+    model_short = assistant.model.split("-")[1] if "-" in assistant.model else assistant.model
+    path = results_dir / f"{timestamp}_{model_short}.json"
     path.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str))
     print(f"\n  Saved: {path.relative_to(ROOT)}")
 

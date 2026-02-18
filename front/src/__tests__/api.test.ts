@@ -152,7 +152,10 @@ describe("sendMessageStream", () => {
   });
 
   it("dispatches data_block events", async () => {
-    const block = { query: { select: "range" }, result: 150, rows: 1, session: "RTH", timeframe: null };
+    const block = {
+      title: "RTH · 1 row",
+      blocks: [{ type: "table", columns: ["date", "range"], rows: [{ date: "2024-01-01", range: 150 }] }],
+    };
     mockFetch.mockResolvedValue(
       sseResponse([
         { event: "data_block", data: block },

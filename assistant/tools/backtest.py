@@ -199,9 +199,14 @@ def _format_summary(result: BacktestResult) -> str:
     )
 
     # Line 2: trade-level stats
+    sorted_pnls = sorted((t.pnl for t in result.trades), reverse=True)
+    best = sorted_pnls[0]
+    worst = sorted_pnls[-1]
     line2 = (
         f"Avg win: {m.avg_win:+.1f} | Avg loss: {m.avg_loss:.1f} | "
-        f"Avg bars: {m.avg_bars_held:.1f} | Recovery: {rf}"
+        f"Best: {best:+.1f} | Worst: {worst:+.1f} | "
+        f"Avg bars: {m.avg_bars_held:.1f} | Recovery: {rf} | "
+        f"Consec W/L: {m.max_consecutive_wins}/{m.max_consecutive_losses}"
     )
 
     # Line 3: yearly breakdown from trades
@@ -213,16 +218,22 @@ def _format_summary(result: BacktestResult) -> str:
     parts = [f"{y} {d['pnl']:+.1f} ({d['count']})" for y, d in sorted(yearly.items())]
     line3 = f"By year: {' | '.join(parts)}"
 
-    # Line 4: exit type P&L breakdown
-    exits = defaultdict(lambda: {"pnl": 0.0, "count": 0})
+    # Line 4: exit type P&L breakdown with win/loss counts
+    exits = defaultdict(lambda: {"pnl": 0.0, "count": 0, "wins": 0, "losses": 0})
     for t in result.trades:
         exits[t.exit_reason]["pnl"] += t.pnl
         exits[t.exit_reason]["count"] += 1
-    exit_parts = [f"{r} {d['count']} ({d['pnl']:+.1f})" for r, d in sorted(exits.items())]
+        if t.pnl > 0:
+            exits[t.exit_reason]["wins"] += 1
+        else:
+            exits[t.exit_reason]["losses"] += 1
+    exit_parts = [
+        f"{r} {d['count']} (W:{d['wins']} L:{d['losses']}, {d['pnl']:+.1f})"
+        for r, d in sorted(exits.items())
+    ]
     line4 = f"Exits: {' | '.join(exit_parts)}"
 
     # Line 5: concentration — top 3 trades as % of total PnL
-    sorted_pnls = sorted((t.pnl for t in result.trades), reverse=True)
     top3_pnl = sum(sorted_pnls[:3])
     if m.total_pnl != 0:
         top3_pct = abs(top3_pnl / m.total_pnl) * 100

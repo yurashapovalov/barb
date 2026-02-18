@@ -11,12 +11,7 @@ interface DataCardProps {
 export function formatLabel(data: DataBlock): string {
   if (data.status === "loading") return "Loading...";
   if (data.status === "error") return data.error || "Error";
-  if (data.title) return data.title;
-  const parts: string[] = [];
-  if (data.session) parts.push(data.session);
-  if (data.timeframe) parts.push(data.timeframe);
-  if (data.rows !== null) parts.push(`${data.rows} rows`);
-  return parts.join(" · ") || "Query result";
+  return data.title || "Query result";
 }
 
 export function DataCard({ data, active, onClick }: DataCardProps) {

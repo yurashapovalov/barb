@@ -162,16 +162,10 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
         },
         onToolStart() {
           addAssistantMessage();
-          // Add loading placeholder
-          const loadingBlock = {
-            query: {},
-            result: null,
-            rows: null,
-            session: null,
-            timeframe: null,
-            source_rows: null,
-            source_row_count: null,
-            status: "loading" as const,
+          const loadingBlock: DataBlock = {
+            title: "Loading...",
+            blocks: [],
+            status: "loading",
           };
           dataBlocks.push(loadingBlock);
           loadingBlockIndex = dataBlocks.length - 1;
@@ -184,10 +178,10 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
         },
         onToolEnd(event) {
           if (event.error && loadingBlockIndex >= 0) {
-            // Update loading block to error state
             dataBlocks[loadingBlockIndex] = {
-              ...dataBlocks[loadingBlockIndex],
-              status: "error" as const,
+              title: "Error",
+              blocks: [],
+              status: "error",
               error: event.error,
             };
             const data = [...dataBlocks];

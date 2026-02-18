@@ -664,7 +664,7 @@ class TestFormatSummary:
         assert "2024" in summary
 
     def test_format_summary_exit_types(self):
-        """Exit type breakdown present in summary."""
+        """Exit type breakdown with W/L counts present in summary."""
         from datetime import date
 
         from assistant.tools.backtest import _format_summary
@@ -676,9 +676,10 @@ class TestFormatSummary:
         ]
         summary = _format_summary(_make_result(trades))
         assert "Exits:" in summary
-        assert "stop" in summary
-        assert "target" in summary
-        assert "timeout" in summary
+        assert "W:" in summary
+        assert "L:" in summary
+        assert "stop 1 (W:0 L:1" in summary
+        assert "target 1 (W:1 L:0" in summary
 
     def test_format_summary_top_trades(self):
         """Concentration metric (top 3 trades) present in summary."""
@@ -721,3 +722,32 @@ class TestFormatSummary:
         ]
         summary = _format_summary(_make_result(trades))
         assert "Recovery:" in summary
+
+    def test_format_summary_best_worst(self):
+        """Best and worst trade appear in summary."""
+        from datetime import date
+
+        from assistant.tools.backtest import _format_summary
+
+        trades = [
+            Trade(date(2024, 1, 1), 100, date(2024, 1, 2), 150, "long", 50, "target", 1),
+            Trade(date(2024, 1, 3), 100, date(2024, 1, 4), 80, "long", -20, "stop", 1),
+            Trade(date(2024, 1, 5), 100, date(2024, 1, 6), 105, "long", 5, "timeout", 2),
+        ]
+        summary = _format_summary(_make_result(trades))
+        assert "Best: +50.0" in summary
+        assert "Worst: -20.0" in summary
+
+    def test_format_summary_consecutive(self):
+        """Max consecutive wins/losses appear in summary."""
+        from datetime import date
+
+        from assistant.tools.backtest import _format_summary
+
+        trades = [
+            Trade(date(2024, 1, 1), 100, date(2024, 1, 2), 110, "long", 10, "target", 1),
+            Trade(date(2024, 1, 3), 100, date(2024, 1, 4), 115, "long", 15, "target", 1),
+            Trade(date(2024, 1, 5), 100, date(2024, 1, 6), 95, "long", -5, "stop", 1),
+        ]
+        summary = _format_summary(_make_result(trades))
+        assert "Consec W/L: 2/1" in summary

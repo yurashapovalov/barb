@@ -34,19 +34,28 @@ export interface Conversation {
   updated_at: string;
 }
 
+// --- Data blocks: typed content for panel rendering ---
+
+export interface TableBlock {
+  type: "table";
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
+export interface BarChartBlock {
+  type: "bar-chart";
+  category_key: string;
+  value_key: string;
+  rows: Record<string, unknown>[];
+}
+
+export type Block = TableBlock | BarChartBlock;
+
 export interface DataBlock {
-  query: Record<string, unknown>;
-  result: unknown;
-  rows: number | null;
-  session: string | null;
-  timeframe: string | null;
-  source_rows: Record<string, unknown>[] | null;
-  source_row_count: number | null;
-  columns?: string[] | null;
-  title?: string;
+  title: string;
+  blocks: Block[];
   status?: "loading" | "success" | "error";
   error?: string;
-  chart?: { category: string; value: string } | null;
 }
 
 export interface UsageBlock {

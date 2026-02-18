@@ -31,7 +31,10 @@ class Assistant:
         df_daily: pd.DataFrame,
         df_minute: pd.DataFrame,
         sessions: dict,
+        model: str | None = None,
     ):
+        if model:
+            self.model = model  # override class-level default
         self.client = anthropic.Anthropic(api_key=api_key)
         self.instrument = instrument
         self.df_daily = df_daily
@@ -58,7 +61,7 @@ class Assistant:
         for round_num in range(MAX_TOOL_ROUNDS):
             # Stream response with prompt caching
             with self.client.messages.stream(
-                model=MODEL,
+                model=self.model,
                 max_tokens=4096,
                 temperature=0,
                 system=[
@@ -234,7 +237,7 @@ class Assistant:
         }
 
     def _exec_query(self, input_data: dict, title: str) -> tuple[str, dict | None]:
-        """Execute run_query tool. Returns (model_response, data_block)."""
+        """Execute run_query tool. Returns (model_response, data_card)."""
         query = input_data.get("query", {})
         timeframe = query.get("from", "daily")
         session_name = query.get("session")
@@ -254,32 +257,8 @@ class Assistant:
 
         result = run_query(query, df, self.sessions)
         model_response = result.get("model_response", "")
-
-        table_data = result.get("table")
-        source_rows = result.get("source_rows")
-        ui_data = table_data or source_rows
-
-        if not ui_data:
-            return model_response, None
-
-        # Column order from _order_columns() — JSONB doesn't preserve key order
-        columns = list(ui_data[0].keys()) if isinstance(ui_data, list) and ui_data else None
-        metadata = result.get("metadata", {})
-        block = {
-            "query": query,
-            "result": ui_data,
-            "rows": len(ui_data) if isinstance(ui_data, list) else None,
-            "columns": columns,
-            "session": metadata.get("session"),
-            "timeframe": metadata.get("from"),
-            # source_rows as separate evidence only when result is table_data.
-            # When result already IS source_rows — don't duplicate.
-            "source_rows": source_rows if table_data else None,
-            "source_row_count": result.get("source_row_count") if table_data else None,
-            "title": title,
-            "chart": result.get("chart"),
-        }
-        return model_response, block
+        card = _build_query_card(result, title)
+        return model_response, card
 
     def _exec_backtest(self, input_data: dict, title: str) -> tuple[str, dict | None]:
         """Execute run_backtest tool. Returns (model_response, data_block)."""
@@ -291,6 +270,45 @@ class Assistant:
             return model_response, None
 
         return model_response, backtest
+
+
+def _build_query_card(result: dict, title: str) -> dict | None:
+    """Build typed DataCard from run_query result.
+
+    Returns {title, blocks: [{type, ...}, ...]} or None if no data to show.
+    """
+    table_data = result.get("table")
+    source_rows = result.get("source_rows")
+    ui_data = table_data or source_rows
+
+    if not ui_data:
+        return None
+
+    columns = list(ui_data[0].keys()) if isinstance(ui_data, list) and ui_data else []
+
+    blocks = []
+
+    # Bar chart for grouped results
+    chart = result.get("chart")
+    if chart:
+        blocks.append(
+            {
+                "type": "bar-chart",
+                "category_key": chart["category"],
+                "value_key": chart["value"],
+                "rows": ui_data,
+            }
+        )
+
+    blocks.append(
+        {
+            "type": "table",
+            "columns": columns,
+            "rows": ui_data,
+        }
+    )
+
+    return {"title": title, "blocks": blocks}
 
 
 def _build_messages(history: list[dict], message: str) -> list[dict]:
