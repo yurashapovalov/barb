@@ -11,7 +11,7 @@
     ↓
 1. session    — фильтр по торговой сессии (RTH, ETH)
 2. period     — фильтр по периоду (YYYY, YYYY-MM, YYYY-MM-DD, start:end где каждая часть любого формата, last_year, last_month, last_week)
-3. from       — ресемплинг таймфрейма (1m, 5m, 15m, 30m, 1h, 2h, 4h, daily, weekly, monthly, quarterly, yearly)
+3. from       — ресемплинг таймфрейма (1m, 5m, 15m, 30m, 1h, 2h, 4h, daily, weekly, monthly, quarterly, yearly; default: 1m)
 4. map        — вычисляемые колонки {"name": "expression"}
 5. where      — фильтр строк по условию (expression)
 6. group_by   — группировка (по колонке из map)
@@ -32,7 +32,7 @@ Projection (columns) → Результат (summary для модели + table
 - `source_row_count` — количество исходных строк
 - `metadata` — rows, session, from, warnings
 - `query` — исходный запрос
-- `chart` — hint для фронтенда (`{category, value}`, только для grouped DataFrame результатов; ключ отсутствует в scalar/dict ответах)
+- `chart` — hint для фронтенда (`{category, value}` для grouped результатов, `null` для обычных таблиц; ключ отсутствует в scalar/dict ответах)
 
 Типы summary:
 - **table**: `{type, rows, columns, stats:{col:{min,max,mean}}, first:{date,..}, last:{date,..}}`

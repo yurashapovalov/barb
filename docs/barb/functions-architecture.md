@@ -101,10 +101,13 @@ from barb.functions._smoothing import wilder_smooth
 ```python
 def wilder_smooth(series, n):
     # Первое значение = SMA первых n non-NaN точек
-    result[seed_idx] = np.mean(non_nan[:n])
+    result[seed_idx] = np.mean(non_nan)
     # Дальше рекурсия: rma[t] = (1/n) * val[t] + (1 - 1/n) * rma[t-1]
     for i in range(seed_idx + 1, len(values)):
-        result[i] = alpha * values[i] + (1 - alpha) * result[i - 1]
+        if np.isnan(values[i]):
+            result[i] = result[i - 1]
+        else:
+            result[i] = alpha * values[i] + (1 - alpha) * result[i - 1]
 ```
 
 ---
@@ -211,6 +214,9 @@ def _assert_close(our_val, tv_val, rel_tol, abs_tol=0):
     """Match within relative OR absolute tolerance."""
     diff = abs(our_val - tv_val)
     if abs_tol and diff <= abs_tol:
+        return
+    if tv_val == 0:
+        assert diff <= abs_tol
         return
     pct = diff / abs(tv_val)
     assert pct <= rel_tol

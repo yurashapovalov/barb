@@ -101,7 +101,7 @@ Intentional, not premature:
 Known deviations from this checklist (update as we fix them):
 
 - **Discriminated unions**: async states use `boolean + null + error`, not discriminated unions. Decided to keep this pattern because provider data (conversations, instruments) persists across loading/error states — a pure discriminated union where data only exists in "success" doesn't fit when you want to show stale cached data during refresh.
-- **Tests**: 4 test files for 58 source files. Auth and component rendering not covered (chat streaming has basic tests).
+- **Tests**: 6 test files for 63 source files. Auth and component rendering not covered (chat streaming has basic tests).
 - **Code splitting**: no `React.lazy`, entire app in one bundle. App is small — add when bundle size becomes a problem.
 - **sidebar-panel.tsx**: uses 8 hooks directly (useState, useNavigate, useParams, useAuth, useConversations, useInstruments, useSidebar, useTheme) instead of receiving props. Documented exception — splitting would create a 15+ prop interface for no real benefit.
 - **HomePage**: uses hooks directly without a container wrapper, unlike other pages.

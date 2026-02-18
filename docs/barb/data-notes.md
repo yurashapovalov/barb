@@ -8,6 +8,7 @@
   - `data/1m/futures/{SYMBOL}.parquet` — 1-minute bars (6 cols: timestamp, O, H, L, C, volume)
 - 31 instruments, range ~2008 to 2026-02
 - Timestamps in US/Eastern (naive, no tz info)
+- 7 инструментов имеют маппинг provider ticker → наш символ (`scripts/update_data.py:36-44`): A6→6A, AD→6C, B→BRN, B6→6B, E1→6S, E6→6E, J1→6J
 
 ## Two Datasets, Two Purposes
 - **Daily bars** (`1d/`) — for `"from": "daily"` and longer timeframes (weekly, monthly, quarterly, yearly)

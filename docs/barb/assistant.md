@@ -60,13 +60,13 @@ Sliding window + summarization для длинных разговоров.
 - `source_row_count` — количество исходных строк
 - `chart` — chart hints (category, value columns) для фронтенда
 
-`chat.py._exec_query()` дополнительно извлекает `metadata` (session, timeframe) из interpreter result и включает в UI block.
+`chat.py._exec_query()` выбирает DataFrame (daily/minute) на основе timeframe и session из tool input. `_build_query_card()` конвертирует результат → typed data block `{title, blocks}` с optional `bar-chart` и всегда `table`.
 
-**run_backtest** (`tools/backtest.py`) — тестирование торговой стратегии. Принимает strategy (entry expression, direction, stop/take/target/exit_bars/slippage), session, period, title. Возвращает:
-- `model_response` — компактная строка с метриками (trades, win rate, PF, P&L, drawdown)
-- `backtest` — полные данные для UI (type: "backtest", metrics, trades, equity_curve, strategy)
+**run_backtest** (`tools/backtest.py`) — тестирование торговой стратегии. Принимает strategy (entry expression, direction, stop/take/target/exit_bars/slippage/commission), session, period, title. Возвращает:
+- `model_response` — 5-строчная сводка (headline, trade stats, yearly, exits, concentration)
+- `result` — `BacktestResult` объект (trades, metrics, equity_curve)
 
-Обёртка `run_backtest_tool()` конвертирует dict → Strategy → `barb.backtest.run_backtest()` и сериализует `datetime.date` → ISO string. Подробности: `docs/barb/backtest.md`.
+`run_backtest_tool()` конвертирует dict → Strategy → `barb.backtest.run_backtest()`. `_build_backtest_card()` конвертирует `BacktestResult` → typed data block `{title, blocks}` с 4 блоками (metrics-grid, area-chart, horizontal-bar, table). Подробности: `docs/barb/backtest.md`.
 
 ### tools/reference.py
 Авто-генерация reference для tool description из `SIGNATURES` + `DESCRIPTIONS` dicts. Заменяет статический `expressions.md`. Добавляешь функцию в `barb/functions/` → она автоматически появляется в промпте.

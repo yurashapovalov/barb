@@ -136,7 +136,7 @@ front/src/
         instrument-panel.tsx             — candlestick chart, conversation list, prompt
         conversation-item.tsx            — conversation row with dropdown menu
       chat-panel.tsx                     — messages, prompt input, empty state
-      data-panel.tsx                     — table + chart from query result
+      data-panel.tsx                     — renders typed blocks (table, bar-chart, metrics-grid, area-chart, horizontal-bar)
       panel-header.tsx                   — shared header bar
       home-panel.tsx                     — home page content
       resize-handle.tsx                  — drag to resize data panel
@@ -166,10 +166,12 @@ front/src/
       chat-page.tsx                      — layout: chat panel + data panel + resize
 
   types/
-    index.ts                             — Message, Conversation, Instrument, UserInstrument, DataBlock, UsageBlock, ToolCall, SSE events
+    index.ts                             — Message, Conversation, Instrument, UserInstrument, DataBlock, Block (5 types), UsageBlock, ToolCall, SSE events
 
   __tests__/
     api.test.ts                          — API functions + SSE streaming
+    date.test.ts                         — relative date formatting
+    format.test.ts                       — column label + number formatting
     parse-content.test.ts                — content parsing
     use-chat.test.ts                     — chat hook lifecycle
     use-theme.test.ts                    — theme switching
@@ -222,7 +224,7 @@ Env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`.
 ## Key dependencies
 
 - **lightweight-charts** — TradingView OSS candlestick chart (~45 KB)
-- **recharts** — bar charts for grouped data
+- **recharts** — bar charts for grouped data, equity/drawdown area chart for backtests
 - **streamdown** — streaming markdown renderer
 - **use-stick-to-bottom** — auto-scroll in chat
 - **@tanstack/react-table** — sortable data tables

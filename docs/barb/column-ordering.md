@@ -85,11 +85,11 @@
 2. Если `columns` есть → projection (фильтр + порядок по массиву)
 3. Иначе → fallback ordering (фиксированный приоритет)
 
-Вызывается в `_build_response()` перед сериализацией. Валидация формата `columns` (должен быть массив строк) — в `barb/validation.py`.
+Вызывается в `_build_response()` перед сериализацией — как для основного результата (`interpreter.py:621`), так и для `source_df` (`interpreter.py:616`) при агрегациях. Валидация формата `columns` (должен быть массив строк) — в `barb/validation.py`. `columns` также объявлен в JSON schema tool'а (`assistant/tools/__init__.py:106-110`), чтобы LLM получал type information.
 
-### Сохранение порядка через JSONB
+### Сохранение порядка через typed blocks
 
-PostgreSQL JSONB не сохраняет порядок ключей. Бэкенд (`assistant/chat.py`) извлекает порядок колонок из сериализованных записей и передаёт как `columns` в data_block. Фронтенд (`data-panel.tsx`) использует `columnOrder ?? Object.keys(rows[0])` — приоритет у `columns` из бэкенда, fallback на порядок ключей для старых данных.
+PostgreSQL JSONB не сохраняет порядок ключей. Бэкенд (`assistant/chat.py:290`) извлекает порядок колонок из ключей первой записи (`list(ui_data[0].keys())`) и передаёт в поле `columns` typed `TableBlock` (`chat.py:309`). Фронтенд (`data-panel.tsx:82`) использует `block.columns` напрямую — typed `TableBlock` всегда содержит упорядоченный список колонок.
 
 ## Точность значений
 

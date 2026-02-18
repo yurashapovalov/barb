@@ -11,7 +11,7 @@ Claude пишет: "Тестирую стратегию RSI oversold..."
     ↓
 Claude вызывает run_backtest({strategy: {entry: "rsi(close,14) < 30", ...}})
     ↓
-Engine: session → period → resample → evaluate → simulate → metrics
+Engine: session → period → group minutes → resample → evaluate → simulate → metrics
     ↓
 Результат: 53 trades, PF 1.32, equity curve
 ```
@@ -202,39 +202,44 @@ Tool schema для Claude. Описание с примерами стратег
 
 ### run_backtest_tool()
 
-Обёртка: dict → Strategy → `run_backtest()` → сериализация.
-
-Критический момент — **datetime.date → ISO string**. Trade.entry_date/exit_date — `datetime.date` объекты из engine. SSE (`json.dumps`) и Supabase (JSONB) требуют строки. Конвертация в wrapper:
-
-```python
-trades = [
-    {
-        "entry_date": str(t.entry_date),  # "2024-01-15"
-        "exit_date": str(t.exit_date),
-        ...
-    }
-    for t in result.trades
-]
-```
+Обёртка: dict → Strategy → `run_backtest()` → `BacktestResult`.
 
 Возвращает:
 
 ```python
 {
     "model_response": "Backtest: 53 trades | Win Rate 49.1% | PF 1.32 | ...",
-    "backtest": {
-        "type": "backtest",
-        "title": "RSI Mean Reversion",
-        "strategy": {entry, direction, stop_loss, ...},
-        "metrics": {total_trades, win_rate, profit_factor, ...},
-        "trades": [{entry_date, exit_date, pnl, exit_reason, ...}],
-        "equity_curve": [{"date": "2024-01-15", "value": 52.5}, ...],
-        "by_year": [{"year": 2024, "pnl": 2555.0, "trades": 90}, ...],
-        "by_exit": [{"reason": "stop", "trades": 43, "pnl": -1800.5}, ...],
-        "concentration": {"top_n": 3, "pnl": 1850.0, "pct_of_total": 72.4},
-    },
+    "result": BacktestResult,  # объект, не dict
 }
 ```
+
+### _build_backtest_card()
+
+Конвертирует `BacktestResult` → typed data block для UI. Вызывается из `chat.py._exec_backtest()`.
+
+datetime.date → ISO string конвертация происходит здесь (для JSON/SSE/Supabase).
+
+Возвращает:
+
+```python
+{
+    "title": "RSI < 30 Long · 71 trades",
+    "blocks": [
+        {"type": "metrics-grid", "items": [{"label": "Trades", "value": "71"}, ...]},
+        {"type": "area-chart", "x_key": "date", "series": [...], "data": [...]},
+        {"type": "horizontal-bar", "items": [{"label": "Take Profit", "value": 6106.1, "detail": "..."}]},
+        {"type": "table", "columns": [...], "rows": [...]},
+    ],
+}
+```
+
+4 блока:
+1. **metrics-grid** — 8 метрик (Trades, Win Rate, PF, Total P&L, Avg Win, Avg Loss, Max DD, Recovery). P&L с color (green/red).
+2. **area-chart** — equity curve (line) + drawdown (area, red). Computed from trades, not from BacktestResult.equity_curve.
+3. **horizontal-bar** — exit type breakdown, sorted by PnL desc. Detail: count + W/L.
+4. **table** — all trades (entry_date, exit_date, direction, entry/exit price, pnl, exit_reason, bars_held).
+
+0 сделок → single metrics-grid block с Trades=0.
 
 ### Формат для модели
 
@@ -283,19 +288,19 @@ event: tool_start
 data: {"tool_name": "run_backtest", "input": {"strategy": {...}, "title": "..."}}
 
 event: data_block
-data: {"type": "backtest", "title": "...", "strategy": {...}, "metrics": {...}, "trades": [...], "equity_curve": [{date, value}, ...], "by_year": [{year, pnl, trades}, ...], "by_exit": [{reason, trades, pnl}, ...], "concentration": {top_n, pnl, pct_of_total}}
+data: {"title": "RSI < 30 Long · 71 trades", "blocks": [{type: "metrics-grid", ...}, {type: "area-chart", ...}, {type: "horizontal-bar", ...}, {type: "table", ...}]}
 
 event: tool_end
 data: {"tool_name": "run_backtest", "duration_ms": 450, "error": null}
 ```
 
-### Дискриминация типов
+### Единый формат
 
-Query блоки — нет поля `type`. Backtest блоки — `type: "backtest"`. Frontend различает по наличию поля `type`.
+Query и backtest блоки используют одинаковый формат `{title, blocks: Block[]}`. Frontend проверяет наличие `title` + `blocks` через `isDataBlockEvent()`.
 
 ### Хранение в DB
 
-Блоки хранятся в `message.data` (JSONB[]). Тип определяется по полю `type`. Миграция не нужна — JSONB принимает любую структуру.
+Блоки хранятся в `message.data` (JSONB). Все блоки — `{title, blocks}`. JSONB принимает любую структуру.
 
 ## System Prompt
 
@@ -329,7 +334,7 @@ Query блоки — нет поля `type`. Backtest блоки — `type: "bac
 
 ## Тесты
 
-`tests/test_backtest.py` — 54 теста:
+`tests/test_backtest.py` — 56 тестов:
 
 - **TestStrategy** — dataclass creation
 - **TestResolveLevel** — points, percentage conversion
@@ -357,24 +362,25 @@ barb/backtest/
   metrics.py          — Trade, BacktestMetrics, BacktestResult, calculate_metrics()
 
 assistant/tools/
-  backtest.py         — BACKTEST_TOOL schema, run_backtest_tool(), _format_summary()
+  backtest.py         — BACKTEST_TOOL schema, run_backtest_tool(), _build_backtest_card(), _format_summary()
 
 tests/
-  test_backtest.py    — 40 tests (synthetic + real + minute resolution)
+  test_backtest.py    — 56 tests (synthetic + real + minute resolution + metrics + commission + format)
+  test_data_blocks.py — 13 tests (query cards + backtest cards)
 ```
 
 ### Dependencies
 
 ```
 barb/backtest/engine.py  ← barb/backtest/strategy.py (Strategy, resolve_level)
-                         ← barb/backtest/metrics.py (Trade, BacktestResult, calculate_metrics)
+                         ← barb/backtest/metrics.py (Trade, BacktestResult, build_equity_curve, calculate_metrics)
                          ← barb/expressions (evaluate)
                          ← barb/functions (FUNCTIONS)
                          ← barb/interpreter (filter_session, filter_period, resample, QueryError)
 
 assistant/tools/backtest.py ← barb/backtest/engine (run_backtest)
                             ← barb/backtest/strategy (Strategy)
-                            ← barb/backtest/metrics (BacktestMetrics)
+                            ← barb/backtest/metrics (BacktestResult)
 
-assistant/chat.py ← assistant/tools/backtest (BACKTEST_TOOL, run_backtest_tool)
+assistant/chat.py ← assistant/tools/backtest (BACKTEST_TOOL, run_backtest_tool, _build_backtest_card)
 ```

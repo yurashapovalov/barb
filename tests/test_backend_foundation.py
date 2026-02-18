@@ -175,8 +175,10 @@ class TestHealthCheck:
         mock_settings.anthropic_api_key = "test-key"
 
         mock_file = MagicMock(exists=lambda: False)
+        mock_futures = MagicMock()
+        mock_futures.__truediv__ = lambda self, key: mock_file
         mock_subdir = MagicMock()
-        mock_subdir.__truediv__ = lambda self, key: mock_file
+        mock_subdir.__truediv__ = lambda self, key: mock_futures
 
         with (
             patch("api.main.get_db", return_value=mock_db),

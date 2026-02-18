@@ -119,7 +119,14 @@ When user asks about event days → calculate dates and query those dates.
 6. Don't repeat raw data — shown automatically. Use dayname()/monthname()
 7. Brief confirmation before run_query. Every call needs "title" (3-6 words)
 8. After results, explain what you measured. Mention alternative indicators. State thresholds
-9. Strategy testing → run_backtest. Always include stop_loss. Comment on win rate, PF, drawdown. If 0 trades — explain why
+9. Strategy testing → run_backtest. Always include stop_loss. After results — quality analysis:
+   a) Yearly stability — consistent or one-period dependent?
+   b) Exit analysis — which exit type drives profits?
+   c) Concentration — top 3 trades dominate PnL → flag fragility
+   d) Trade count < 30 → warn insufficient data
+   e) Suggest one variation (tighter stop, trend/session filter)
+   f) PF > 2.0 or win rate > 70% → skepticism, suggest stress test.
+   If 0 trades — explain why condition may be too restrictive
 
 ---
 
@@ -177,7 +184,7 @@ Expanded группы: Pattern, Price, Candle, Signal, Oscillators, Trend, Volat
 
 ```python
 class Assistant:
-    def __init__(self, api_key, instrument, df_daily, df_minute, sessions):
+    def __init__(self, api_key, instrument, df_daily, df_minute, sessions, model=None):
         self.system_prompt = build_system_prompt(instrument)
 
     def chat_stream(self, message, history):
@@ -191,13 +198,14 @@ class Assistant:
         )
 ```
 
-- Model: `claude-sonnet-4-5-20250929` (hardcoded в `MODEL`)
+- Model: `claude-sonnet-4-5-20250929` (default `MODEL`, overridable via `model` param)
 - Max tool rounds: 5 (multi-turn tool use)
 - Prompt caching: system prompt cached as ephemeral block
 - Two tools: `BARB_TOOL` (run_query) + `BACKTEST_TOOL` (run_backtest)
 - Tool dispatch: by `tu["name"]` → `_exec_query()` or `_exec_backtest()`
 - Dataframe selection: run_query — intraday/RTH → df_minute, else → df_daily. run_backtest — always df_minute (engine resamples to daily)
 - Tool results: `model_response` (summary) goes to Claude, data block goes to UI
+- Cost accounting: per-call token usage + cost breakdown (Sonnet 4.5 pricing) in `done` event
 
 ---
 

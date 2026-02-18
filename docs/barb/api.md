@@ -32,6 +32,7 @@ HTTP-слой. FastAPI с SSE streaming.
 
 ### Chat
 - `POST /api/chat/stream` — SSE streaming endpoint. Валидация: `message` min 1, max 10000 символов.
+- Два tool'а: `run_query` (Barb Script запросы) и `run_backtest` (стратегии). Оба зарегистрированы в `assistant/chat.py`, backtest логика в `assistant/tools/backtest.py`.
 
 ### Admin
 - `POST /api/admin/reload-data?token=ADMIN_TOKEN` — очистка кэшей load_data и _get_assistant
@@ -40,7 +41,7 @@ HTTP-слой. FastAPI с SSE streaming.
 
 Supabase JWT через JWKS. Фронт получает токен через Google OAuth или magic link (email OTP), шлёт в `Authorization: Bearer <token>`. Бэкенд получает signing key через JWKS endpoint (`/auth/v1/.well-known/jwks.json`), валидирует подпись (ES256, audience="authenticated").
 
-Нет токена или невалидный → 401. Токен истёк → 401 "Token expired".
+Нет Bearer header → 401 "Missing authorization token". Невалидный токен → 401 "Invalid token". Токен истёк → 401 "Token expired".
 
 `GET /health`, `GET /api/instruments`, `GET /api/instruments/{symbol}/ohlc` — без авторизации.
 
@@ -62,13 +63,12 @@ event: tool_end
 data: {"tool_name": "run_query", "duration_ms": 1234, "error": null}
 
 event: data_block (run_query)
-data: {"query": {...}, "result": [...], "rows": 13, "columns": ["date", "open", "high", "low", "close", "volume"], "session": "RTH", "timeframe": "daily", "source_rows": [...] | null, "source_row_count": 80 | null, "title": "...", "chart": {"category": "...", "value": "..."}}
-// source_rows: separate evidence only for aggregations with table_data.
-// When result already IS the evidence (no table_data) — source_rows is null.
+data: {"title": "...", "blocks": [{"type": "bar-chart", "category_key": "...", "value_key": "...", "rows": [...]}, {"type": "table", "columns": [...], "rows": [...]}]}
+// bar-chart block present only for grouped results. table block always present.
 
 event: data_block (run_backtest)
-data: {"type": "backtest", "title": "...", "strategy": {...}, "metrics": {"total_trades": 53, "win_rate": 49.1, "profit_factor": 1.32, ...}, "trades": [{"entry_date": "2024-01-15", "exit_date": "2024-01-16", "pnl": 52.5, ...}], "equity_curve": [52.5, 17.8, ...]}
-// Type discrimination: query blocks have no "type" field, backtest blocks have type: "backtest".
+data: {"title": "... · 53 trades", "blocks": [{"type": "metrics-grid", "items": [{"label": "Trades", "value": "53"}, ...]}, {"type": "area-chart", "x_key": "date", "series": [...], "data": [...]}, {"type": "horizontal-bar", "items": [...]}, {"type": "table", "columns": [...], "rows": [...]}]}
+// Both use typed DataCard format: {title, blocks: [{type, ...}, ...]}.
 
 event: done
 data: {"answer": "...", "usage": {...}, "tool_calls": [...], "data": [...]}

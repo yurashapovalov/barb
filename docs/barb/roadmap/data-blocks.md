@@ -2,39 +2,12 @@
 
 Backend говорит фронту **что рисовать**. Каждый data block — `title` + массив типизированных `blocks`. Фронт итерирует по blocks, маппит `type` → компонент, передаёт data как props. Не угадывает, не парсит.
 
-## Текущее состояние
+## Статус
 
-Data block — плоский dict с query-specific полями. Frontend угадывает что рисовать.
+- **Phase 1** (typed block format for queries) — DONE
+- **Phase 2** (backtest blocks + frontend components) — DONE
 
-### Backend (`chat.py → _exec_query()`)
-
-```python
-block = {
-    "query": query,
-    "result": ui_data,           # rows для таблицы
-    "rows": len(ui_data),
-    "columns": columns,
-    "session": session,
-    "timeframe": timeframe,
-    "source_rows": source_rows,
-    "source_row_count": count,
-    "title": title,
-    "chart": {"category": "dow", "value": "mean_r"},  # or None
-}
-```
-
-### Frontend (`data-panel.tsx`)
-
-```
-getChartInfo(data) → есть chart hint? → BarChart
-normalizeResult(data.source_rows ?? data.result) → Table
-```
-
-Проблемы:
-- Нет `type` — фронт угадывает по наличию полей
-- `chart` hint — ad-hoc механизм (`{"category", "value"}`)
-- Нельзя добавить новые визуализации без новых ad-hoc полей
-- Backtest не влезает в этот формат
+Оба типа блоков (query и backtest) используют единый формат `{title, blocks: Block[]}`.
 
 ## Целевое состояние
 

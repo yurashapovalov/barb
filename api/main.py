@@ -311,7 +311,7 @@ def health():
     checks["anthropic"] = "ok" if get_settings().anthropic_api_key else "fail"
 
     # Data file
-    checks["data"] = "ok" if (DATA_DIR / "1d" / "NQ.parquet").exists() else "fail"
+    checks["data"] = "ok" if (DATA_DIR / "1d" / "futures" / "NQ.parquet").exists() else "fail"
 
     failed = any(v == "fail" for v in checks.values())
     status = "fail" if failed else "ok"

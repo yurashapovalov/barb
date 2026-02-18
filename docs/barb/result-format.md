@@ -151,33 +151,41 @@ Stats включает `min`, `max`, `mean` для каждой числовой
 
 ## Backtest Result
 
-`assistant/tools/backtest.py` → `run_backtest_tool()`. Отдельный поток данных от run_query.
+`assistant/tools/backtest.py` → `run_backtest_tool()` + `_build_backtest_card()`.
 
 ### Формат для модели
 
+5-строчная сводка:
+
 ```
-Backtest: 53 trades | Win Rate 49.1% | PF 1.32 | Total +1087.0 pts | Max DD 1675.7 pts
-Avg win: +171.2 | Avg loss: -124.6 | Avg bars: 1.1 | Consec W/L: 5/6
+Backtest: 71 trades | Win Rate 53.5% | PF 1.38 | Total +1798.4 pts | Max DD 1709.7 pts
+Avg win: +173.3 | Avg loss: -145.0 | Best: +619.5 | Worst: -395.5 | Avg bars: 1.1 | Recovery: 1.05 | Consec W/L: 4/7
+By year: 2020 +1200.5 (25) | 2021 +408.2 (22) | 2022 -102.0 (18) | 2023 +893.1 (16) | 2024 +155.2 (9)
+Exits: stop 32 (W:0 L:32, -4759.0) | take_profit 33 (W:33 L:0, +6106.1) | timeout 6 (W:3 L:3, +451.2)
+Top 3 trades: +1592.0 pts (88.5% of total PnL)
 ```
 
 0 сделок: `Backtest: 0 trades — entry condition never triggered in this period.`
 
 ### Формат для UI (SSE data_block)
 
+Тот же формат что и query блоки — `{title, blocks: Block[]}`:
+
 ```json
 {
-    "type": "backtest",
-    "title": "RSI Mean Reversion",
-    "strategy": {"entry": "rsi(close,14) < 30", "direction": "long", "stop_loss": "2%", ...},
-    "metrics": {"total_trades": 53, "win_rate": 49.1, "profit_factor": 1.32, ...},
-    "trades": [{"entry_date": "2024-01-15", "exit_date": "2024-01-16", "pnl": 52.5, ...}],
-    "equity_curve": [52.5, 17.8, ...]
+    "title": "RSI < 30 Long · 71 trades",
+    "blocks": [
+        {"type": "metrics-grid", "items": [{"label": "Trades", "value": "71"}, {"label": "Win Rate", "value": "53.5%"}, ...]},
+        {"type": "area-chart", "x_key": "date", "series": [...], "data": [{"date": "2024-01-16", "equity": 100.0, "drawdown": 0.0}, ...]},
+        {"type": "horizontal-bar", "items": [{"label": "Take Profit", "value": 6106.1, "detail": "33 trades (W:33 L:0)"}, ...]},
+        {"type": "table", "columns": ["entry_date", "exit_date", "direction", ...], "rows": [...]}
+    ]
 }
 ```
 
-Дискриминация: query блоки — нет поля `type`. Backtest блоки — `type: "backtest"`.
+Единый формат: query и backtest блоки оба используют `{title, blocks}`. Frontend проверяет `isDataBlockEvent()` — наличие `title` + `blocks`.
 
-Даты в trades — ISO строки (`str(datetime.date)`). Сериализация в wrapper, не в engine.
+Даты в trades — ISO строки (`str(datetime.date)`). Сериализация в `_build_backtest_card()`, не в engine.
 
 ## Примеры
 

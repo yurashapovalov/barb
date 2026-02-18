@@ -154,7 +154,7 @@ Credentials из `.env` (SUPABASE_URL, SUPABASE_SERVICE_KEY).
 
 После append данных — API должен сбросить `lru_cache` в `barb/data.py`.
 
-`POST /api/admin/reload-data?token=ADMIN_TOKEN` — вызывает `load_data.cache_clear()` + `_get_assistant.cache_clear()`, zero downtime. Скрипт `update_data.py` вызывает его автоматически в конце (`_reload_api_cache()`). Требует `ADMIN_TOKEN` в `.env`.
+`POST /api/admin/reload-data?token=ADMIN_TOKEN` — вызывает `load_data.cache_clear()` + `_get_assistant.cache_clear()`, zero downtime. Скрипт `update_data.py` вызывает его автоматически в конце (`_reload_api_cache()`). Требует `ADMIN_TOKEN` в `.env`. Reload идёт на `http://localhost:8000` (hardcoded) — если API не запущен, скрипт логирует warning и продолжает.
 
 ## CLI
 
@@ -170,6 +170,9 @@ update_data.py --type futures --force
 
 # Полный rebuild с нуля
 update_data.py --type futures --period full --force
+
+# Другие периоды (week, month — промежуточные варианты)
+update_data.py --type futures --period week --force
 ```
 
 ## What We Don't Do (Yet)
