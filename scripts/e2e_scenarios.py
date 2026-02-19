@@ -130,6 +130,14 @@ SCENARIOS = [
         "expect_data": True,
     },
     {
+        "name": "Backtest — trailing stop trend following",
+        "messages": [
+            "протестируй стратегию: лонг когда цена закрылась выше 20-дневного максимума, трейлинг стоп 2%, максимум 10 дней. RTH, 2023-2025",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
         "name": "Backtest — gap fill with RSI filter",
         "messages": [
             "Покупай когда гэп вниз больше 1% и вчерашний RSI был выше 50. Таргет — закрытие гэпа (prev(close)). Стоп 1.5%. Максимум 1 день. Только RTH.",

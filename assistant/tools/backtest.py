@@ -22,6 +22,7 @@ Strategy fields:
 - direction: "long" or "short"
 - stop_loss: points (number) or percentage (string "2%"). Distance from entry.
 - take_profit: points (number) or percentage (string "3%"). Distance from entry.
+- trailing_stop: trail distance — points (number) or percentage ("1.5%"). Stop follows price, exits on retrace.
 - exit_target: expression evaluated ONCE at entry → fixed target price
   (e.g. "prev(close)" for gap fill)
 - exit_bars: force exit after N bars if no stop/target hit
@@ -29,7 +30,8 @@ Strategy fields:
 - commission: points per round-trip, default 0
 
 Entry: signal on bar N → enter at bar N+1's open.
-Exit priority: stop → take_profit → exit_target → exit_bars timeout → end of data.
+Exit priority: stop/trailing_stop → take_profit → exit_target → exit_bars timeout → end of data.
+When trailing_stop + stop_loss both set, effective stop = whichever is tighter (trailing can only improve the fixed stop).
 
 <patterns>
 Common entry patterns:
@@ -88,6 +90,9 @@ User: "Покупка когда цена выше 200 SMA и откатилас
                     "take_profit": {
                         "description": "Number = points, string = percentage ('3%')",
                     },
+                    "trailing_stop": {
+                        "description": "Trail distance. Number = points, string = percentage ('1.5%'). Stop follows price.",
+                    },
                     "exit_bars": {
                         "type": "integer",
                         "description": "Force exit after N bars",
@@ -140,6 +145,7 @@ def run_backtest_tool(
         exit_target=strat.get("exit_target"),
         stop_loss=strat.get("stop_loss"),
         take_profit=strat.get("take_profit"),
+        trailing_stop=strat.get("trailing_stop"),
         exit_bars=strat.get("exit_bars"),
         slippage=strat.get("slippage", 0.0),
         commission=strat.get("commission", 0.0),

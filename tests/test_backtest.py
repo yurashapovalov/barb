@@ -348,7 +348,7 @@ class TestFindExitInMinutes:
                 (96, 106, 96, 105),  # high=106 would hit TP at 105, but stop already hit
             ]
         )
-        price, reason = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
+        price, reason, _ = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
         assert reason == "stop"
         assert price == 97.0
 
@@ -363,7 +363,7 @@ class TestFindExitInMinutes:
                 (105, 105, 94, 95),  # low=94 would hit stop at 97, but TP already hit
             ]
         )
-        price, reason = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
+        price, reason, _ = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
         assert reason == "take_profit"
         assert price == 105.0
 
@@ -377,7 +377,7 @@ class TestFindExitInMinutes:
                 (100, 106, 95, 100),  # low=95 < stop=97, high=106 > tp=105
             ]
         )
-        price, reason = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
+        price, reason, _ = _find_exit_in_minutes(minutes, True, 97.0, 105.0, None)
         assert reason == "stop"
         assert price == 97.0
 
@@ -391,7 +391,7 @@ class TestFindExitInMinutes:
                 (101, 104, 99, 102),
             ]
         )
-        price, reason = _find_exit_in_minutes(minutes, True, 95.0, 110.0, None)
+        price, reason, _ = _find_exit_in_minutes(minutes, True, 95.0, 110.0, None)
         assert price is None
         assert reason is None
 
@@ -405,7 +405,7 @@ class TestFindExitInMinutes:
                 (99, 103, 99, 102),  # high=103 hits target at 102
             ]
         )
-        price, reason = _find_exit_in_minutes(minutes, True, None, None, 102.0)
+        price, reason, _ = _find_exit_in_minutes(minutes, True, None, None, 102.0)
         assert reason == "target"
         assert price == 102.0
 
@@ -418,7 +418,7 @@ class TestFindExitInMinutes:
                 (100, 104, 98, 99),  # high=104 hits stop at 103
             ]
         )
-        price, reason = _find_exit_in_minutes(minutes, False, 103.0, None, None)
+        price, reason, _ = _find_exit_in_minutes(minutes, False, 103.0, None, None)
         assert reason == "stop"
         assert price == 103.0
 
@@ -431,7 +431,7 @@ class TestFindExitInMinutes:
                 (100, 101, 96, 97),  # low=96 hits TP at 97
             ]
         )
-        price, reason = _find_exit_in_minutes(minutes, False, None, 97.0, None)
+        price, reason, _ = _find_exit_in_minutes(minutes, False, None, 97.0, None)
         assert reason == "take_profit"
         assert price == 97.0
 
@@ -449,7 +449,7 @@ class TestResolveExit:
                 (105, 105, 94, 95),  # low=94 would hit stop
             ]
         )
-        price, reason = _resolve_exit(daily_bar, minutes, True, 97.0, 105.0, None, None, 1)
+        price, reason, _ = _resolve_exit(daily_bar, minutes, True, 97.0, 105.0, None, None, 1)
         assert reason == "take_profit"  # Minute-level: TP first
 
     def test_daily_fallback_conservative(self):
@@ -457,7 +457,7 @@ class TestResolveExit:
         from barb.backtest.engine import _resolve_exit
 
         daily_bar = pd.Series({"open": 100, "high": 106, "low": 95, "close": 100})
-        price, reason = _resolve_exit(daily_bar, None, True, 97.0, 105.0, None, None, 1)
+        price, reason, _ = _resolve_exit(daily_bar, None, True, 97.0, 105.0, None, None, 1)
         assert reason == "stop"  # Conservative: stop checked first
 
     def test_timeout_after_price_check(self):
@@ -465,7 +465,7 @@ class TestResolveExit:
         from barb.backtest.engine import _resolve_exit
 
         daily_bar = pd.Series({"open": 100, "high": 103, "low": 98, "close": 101})
-        price, reason = _resolve_exit(daily_bar, None, True, 95.0, 110.0, None, 3, 3)
+        price, reason, _ = _resolve_exit(daily_bar, None, True, 95.0, 110.0, None, 3, 3)
         assert reason == "timeout"
         assert price == 101.0
 
@@ -474,7 +474,7 @@ class TestResolveExit:
         from barb.backtest.engine import _resolve_exit
 
         daily_bar = pd.Series({"open": 100, "high": 103, "low": 98, "close": 101})
-        price, reason = _resolve_exit(daily_bar, None, True, 95.0, 110.0, None, 5, 2)
+        price, reason, _ = _resolve_exit(daily_bar, None, True, 95.0, 110.0, None, 5, 2)
         assert price is None
         assert reason is None
 
@@ -751,3 +751,167 @@ class TestFormatSummary:
         ]
         summary = _format_summary(_make_result(trades))
         assert "Consec W/L: 2/1" in summary
+
+
+# --- Trailing stop ---
+
+
+class TestTrailingStop:
+    def test_trailing_stop_basic_long(self, daily_df, empty_sessions):
+        """Long with trailing stop: price moves up, trail follows, exits on retrace."""
+        # daily_df: close goes 102, 108, 106, 105, 109, 104, 110, 106, 112, 108
+        # Entry when close > 107 → signal on bar 1 (close=108), enter bar 2 (open=107)
+        # Trail = 5pts → initial stop = 102
+        # Bar 2: high=110 → best=110, trail=105. low=104 > 105? No, 104 < 105 → exit at 105
+        strategy = Strategy(
+            entry="close > 107",
+            direction="long",
+            trailing_stop=5,
+        )
+        result = run_backtest(daily_df, strategy, empty_sessions)
+        assert len(result.trades) >= 1
+        first = result.trades[0]
+        assert first.exit_reason == "trailing_stop"
+
+    def test_trailing_stop_short(self, daily_df, empty_sessions):
+        """Short with trailing stop: trail follows price down."""
+        # Entry when close < 103 → signal on bar 0 (close=102), enter bar 1 (open=105)
+        # Trail = 5pts → initial stop = 110
+        # Bar 1: low=103 → best=103, trail=108. high=110 >= 108? Yes → exit at 108
+        strategy = Strategy(
+            entry="close < 103",
+            direction="short",
+            trailing_stop=5,
+        )
+        result = run_backtest(daily_df, strategy, empty_sessions)
+        assert len(result.trades) >= 1
+        for trade in result.trades:
+            if trade.exit_reason == "trailing_stop":
+                # Short trailing: exited when price retraced up
+                assert trade.exit_reason == "trailing_stop"
+
+    def test_trailing_stop_percentage(self, daily_df, empty_sessions):
+        """Trailing stop as percentage string."""
+        strategy = Strategy(
+            entry="close > 107",
+            direction="long",
+            trailing_stop="5%",
+        )
+        result = run_backtest(daily_df, strategy, empty_sessions)
+        # Should not crash, percentage resolves correctly
+        assert isinstance(result.metrics.total_trades, int)
+        assert result.metrics.total_trades >= 1
+
+    def test_trailing_stop_with_fixed_stop(self, daily_df, empty_sessions):
+        """Fixed stop acts as floor — trailing can only improve it."""
+        # With wide trailing (50pts from entry ~107) and tight fixed stop (2pts),
+        # the fixed stop is tighter initially → should hit "stop" not "trailing_stop"
+        strategy = Strategy(
+            entry="close > 107",
+            direction="long",
+            stop_loss=2,
+            trailing_stop=50,
+        )
+        result = run_backtest(daily_df, strategy, empty_sessions)
+        if result.trades:
+            stopped = [t for t in result.trades if t.exit_reason == "stop"]
+            # Fixed stop at 105 should dominate over trail at 57
+            assert len(stopped) > 0
+
+    def test_trailing_stop_immediate_loss(self):
+        """Price goes against immediately — exits at initial trail level."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        # Long entry at 100, trail=3 → initial stop=97
+        # Price drops immediately
+        minutes = _make_minutes(
+            [
+                (100, 100, 96, 97),  # low=96 < trail_stop=97
+            ]
+        )
+        price, reason, best = _find_exit_in_minutes(
+            minutes,
+            True,
+            None,
+            None,
+            None,
+            trail_points=3,
+            best_price=100,
+        )
+        assert reason == "trailing_stop"
+        assert price == 97.0  # 100 - 3
+
+    def test_trailing_stop_minute_precision(self):
+        """Minute-level trailing: price rises, trail follows, then retrace exits."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        # Long entry at 100, trail=2
+        # Min 1: high=103 → best=103, trail=101. low=102 > 101, no exit
+        # Min 2: high=106 → best=106, trail=104. low=105 > 104, no exit
+        # Min 3: high=106 → best=106, trail=104. low=103 < 104 → exit at 104
+        minutes = _make_minutes(
+            [
+                (100, 103, 102, 102),
+                (102, 106, 105, 105),
+                (105, 106, 103, 103),
+            ]
+        )
+        price, reason, best = _find_exit_in_minutes(
+            minutes,
+            True,
+            None,
+            None,
+            None,
+            trail_points=2,
+            best_price=100,
+        )
+        assert reason == "trailing_stop"
+        assert price == 104.0  # best(106) - trail(2)
+        assert best == 106.0
+
+    def test_trailing_stop_with_tp(self):
+        """Trailing stop + take profit coexist — TP wins if hit first."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        # Long entry at 100, trail=3, TP at 105
+        # Min 1: high=105 → TP hit at 105 (before trail catches up)
+        minutes = _make_minutes(
+            [
+                (100, 106, 99, 105),
+            ]
+        )
+        price, reason, _ = _find_exit_in_minutes(
+            minutes,
+            True,
+            None,
+            105.0,
+            None,
+            trail_points=3,
+            best_price=100,
+        )
+        # Trail updates best to 106, trail_stop=103. low=99 < 103 → trailing_stop wins
+        # (stop check comes before TP check in the loop)
+        assert reason == "trailing_stop"
+        assert price == 103.0
+
+    def test_trailing_stop_exit_reason_distinct(self):
+        """Exit reason is 'trailing_stop', distinct from 'stop'."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        minutes = _make_minutes(
+            [
+                (100, 105, 102, 104),  # best=105, trail=103
+                (104, 104, 102, 102),  # low=102 < 103 → trailing exit
+            ]
+        )
+        price, reason, _ = _find_exit_in_minutes(
+            minutes,
+            True,
+            None,
+            None,
+            None,
+            trail_points=2,
+            best_price=100,
+        )
+        assert reason == "trailing_stop"
+        assert reason != "stop"

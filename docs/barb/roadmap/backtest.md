@@ -50,6 +50,7 @@ class Strategy:
     exit_target: str | None     # Expression evaluated ONCE at entry → fixed price. E.g. "prev(close)" for gap fill
     stop_loss: float | None     # Points (or percentage if ends with %)
     take_profit: float | None   # Points (or percentage if ends with %)
+    trailing_stop: float | None # Trail distance in points or "2%". Stop follows price.
     exit_bars: int | None       # Max bars in trade or None
     slippage: float             # Points per side, default 0
 ```
@@ -182,7 +183,7 @@ Bar N+1: entry at open (adjusted for slippage)
 
 ### Exit Logic (по приоритету)
 
-1. **Stop loss** — low (long) или high (short) пересекает стоп-цену
+1. **Stop loss / Trailing stop** — low (long) или high (short) пересекает стоп-цену. При trailing — стоп двигается за ценой
 2. **Take profit** — high (long) или low (short) пересекает тейк-цену
 3. **Exit target** — цена достигает target price (вычисляется ОДИН РАЗ при входе из `exit_target` expression)
 4. **Exit bars** — максимальная длительность сделки
@@ -228,7 +229,7 @@ class Trade:
     exit_price: float
     direction: str          # "long" | "short"
     pnl: float              # points (after slippage)
-    exit_reason: str        # "stop" | "take_profit" | "target" | "timeout" | "end"
+    exit_reason: str        # "stop" | "trailing_stop" | "take_profit" | "target" | "timeout" | "end"
     bars_held: int          # сколько баров в позиции
 ```
 
@@ -441,7 +442,7 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 - [x] `assistant/tools/backtest.py` — 5-line model_response (yearly, exit types W/L, concentration, best/worst, consec W/L)
 - [x] `assistant/prompt/system.py` — rule #9 rewrite (analyze quality, not repeat numbers)
 - [x] `barb/backtest/strategy.py` + `engine.py` — commission field
-- [x] 56 тестов total
+- [x] 64 тестов total (56 core + 8 trailing stop)
 
 ---
 
@@ -572,7 +573,7 @@ Tanstack table — тот же компонент что для query, друг�
 - `engine.py` / `_simulate`: после N баров проверить `price > entry` (long), если да → `stop = entry + slippage`
 - Позже: `breakeven_distance: float` — по расстоянию вместо баров
 
-#### 6b. Trailing stop ✱ средний
+#### 6b. Trailing stop ✓
 
 Стоп двигается за ценой. Нужен для трендовых стратегий — фиксированный тейк отсекает длинные движения.
 
@@ -582,8 +583,9 @@ Tanstack table — тот же компонент что для query, друг�
 ```
 
 - `strategy.py`: `trailing_stop: float | str | None` (пункты или "2%")
-- `engine.py`: трекать `max_price` побарово, пересчитывать `stop = max_price - trail`
-- На минутках: обновлять max_price каждую свечу
+- `engine.py`: `best_price` побарово, `_pick_tighter_stop()` — trailing + fixed stop coexist
+- На минутках: обновлять `best_price` каждую свечу, `exit_reason = "trailing_stop"`
+- 8 тестов: basic long/short, percentage, with fixed stop, immediate loss, minute precision, with TP, distinct reason
 
 #### 6c. Scale out ✱ большое, можно отложить
 
