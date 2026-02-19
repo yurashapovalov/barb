@@ -25,17 +25,18 @@ interface ChatPanelProps {
   onSelectData?: (data: DataBlock) => void;
   pendingTool?: ChatState["pendingTool"];
   confirmBacktest?: ChatState["confirmBacktest"];
+  dismissBacktest?: ChatState["dismissBacktest"];
 }
 
-export function ChatPanel({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest }: ChatPanelProps) {
+export function ChatPanel({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest, dismissBacktest }: ChatPanelProps) {
   return (
     <PromptInputProvider>
-      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} pendingTool={pendingTool} confirmBacktest={confirmBacktest} />
+      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} pendingTool={pendingTool} confirmBacktest={confirmBacktest} dismissBacktest={dismissBacktest} />
     </PromptInputProvider>
   );
 }
 
-function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest }: ChatPanelProps) {
+function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest, dismissBacktest }: ChatPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -87,6 +88,7 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
           <StrategyCard
             input={pendingTool.input}
             onConfirm={confirmBacktest}
+            onCancel={dismissBacktest ?? (() => {})}
             isRunning={isLoading}
           />
         )}

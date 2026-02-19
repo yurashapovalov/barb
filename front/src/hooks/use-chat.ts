@@ -375,5 +375,10 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
     }
   };
 
-  return { messages, isLoading, error, send, pendingTool, confirmBacktest };
+  const dismissBacktest = () => {
+    setPendingTool(null);
+    setIsLoading(false);
+  };
+
+  return { messages, isLoading, error, send, pendingTool, confirmBacktest, dismissBacktest };
 }

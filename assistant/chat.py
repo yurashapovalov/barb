@@ -424,11 +424,14 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
             tool_results = []
             for i, tc in enumerate(tool_calls):
                 tool_id = tc.get("id", f"toolu_hist_{i}")
+                output = tc.get("output")
+                # Pending tool_call (output=None) means user cancelled
+                content = "Cancelled by user" if output is None else _compact_output(output)
                 tool_results.append(
                     {
                         "type": "tool_result",
                         "tool_use_id": tool_id,
-                        "content": _compact_output(tc.get("output", "done")),
+                        "content": content,
                     }
                 )
             messages.append({"role": "user", "content": tool_results})

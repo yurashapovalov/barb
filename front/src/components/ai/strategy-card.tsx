@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 interface StrategyCardProps {
   input: Record<string, unknown>;
   onConfirm: (input: Record<string, unknown>) => void;
+  onCancel: () => void;
   isRunning: boolean;
 }
 
@@ -24,7 +25,7 @@ const STRATEGY_FIELDS = [
 // Fields shown even if not in the original input
 const ALWAYS_VISIBLE = new Set(["direction", "stop_loss", "take_profit"]);
 
-export function StrategyCard({ input, onConfirm, isRunning }: StrategyCardProps) {
+export function StrategyCard({ input, onConfirm, onCancel, isRunning }: StrategyCardProps) {
   const [params, setParams] = useState(() => structuredClone(input));
 
   const strategy = (params.strategy ?? {}) as Record<string, unknown>;
@@ -90,19 +91,26 @@ export function StrategyCard({ input, onConfirm, isRunning }: StrategyCardProps)
         </label>
       </div>
 
-      <Button className="w-full" size="sm" onClick={() => onConfirm(params)} disabled={isRunning}>
-        {isRunning ? (
-          <>
-            <LoaderIcon className="animate-spin" />
-            Running...
-          </>
-        ) : (
-          <>
-            <PlayIcon />
-            Run Backtest
-          </>
+      <div className="flex gap-2">
+        <Button className="flex-1" size="sm" onClick={() => onConfirm(params)} disabled={isRunning}>
+          {isRunning ? (
+            <>
+              <LoaderIcon className="animate-spin" />
+              Running...
+            </>
+          ) : (
+            <>
+              <PlayIcon />
+              Run Backtest
+            </>
+          )}
+        </Button>
+        {!isRunning && (
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
         )}
-      </Button>
+      </div>
     </div>
   );
 }

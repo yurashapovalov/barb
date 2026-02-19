@@ -17,6 +17,7 @@ interface ChatPageProps {
   onCloseData: () => void;
   pendingTool?: ChatState["pendingTool"];
   confirmBacktest?: ChatState["confirmBacktest"];
+  dismissBacktest?: ChatState["dismissBacktest"];
 }
 
 export function ChatPage({
@@ -31,11 +32,12 @@ export function ChatPage({
   onCloseData,
   pendingTool,
   confirmBacktest,
+  dismissBacktest,
 }: ChatPageProps) {
   return (
     <div className="flex h-full">
       <div className="min-w-full flex-1 lg:min-w-0">
-        <ChatPanel header={chatHeader} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} pendingTool={pendingTool} confirmBacktest={confirmBacktest} />
+        <ChatPanel header={chatHeader} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} pendingTool={pendingTool} confirmBacktest={confirmBacktest} dismissBacktest={dismissBacktest} />
       </div>
       {selectedData && (
         <>

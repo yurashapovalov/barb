@@ -58,7 +58,7 @@ export function ChatPageContainer() {
   // "new" is a sentinel — means user started typing on instrument page
   const conversationId = id === "new" ? undefined : id;
 
-  const { messages, isLoading, error, send, pendingTool, confirmBacktest } = useChat({
+  const { messages, isLoading, error, send, pendingTool, confirmBacktest, dismissBacktest } = useChat({
     conversationId,
     token,
     instrument: symbol ?? "",
@@ -142,6 +142,7 @@ export function ChatPageContainer() {
       onCloseData={() => setSelectedData(null)}
       pendingTool={pendingTool}
       confirmBacktest={confirmBacktest}
+      dismissBacktest={dismissBacktest}
     />
   );
 }
