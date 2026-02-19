@@ -112,7 +112,7 @@ def chat_sync(assistant, message, history=None):
     cost = None
     current_tool = None
 
-    for event in assistant.chat_stream(message, history=history):
+    for event in assistant.chat_stream(message, history=history, auto_execute=True):
         etype = event["event"]
 
         if etype == "tool_start":

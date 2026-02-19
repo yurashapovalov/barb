@@ -121,6 +121,22 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000)
 
 
+class BacktestRequest(BaseModel):
+    instrument: str = "NQ"
+    strategy: dict
+    session: str | None = None
+    period: str | None = None
+    title: str = "Backtest"
+
+
+class ContinueRequest(BaseModel):
+    conversation_id: str = Field(..., min_length=1)
+    tool_use_id: str = Field(..., min_length=1)
+    tool_input: dict
+    model_response: str
+    data_card: dict
+
+
 # --- Assistant cache ---
 
 
@@ -154,6 +170,57 @@ def _parse_tool_output(output):
         return json.loads(output)
     except (json.JSONDecodeError, TypeError):
         return {"raw": str(output)}
+
+
+def _sse(event: str, data) -> str:
+    """Format Server-Sent Event."""
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+def _load_history(db, conversation: dict) -> tuple[list[dict], list[dict]]:
+    """Load message history with tool calls from DB.
+
+    Returns (raw_history, history_with_context).
+    """
+    conv_id = conversation["id"]
+
+    try:
+        msg_result = (
+            db.table("messages")
+            .select("id, role, content")
+            .eq("conversation_id", conv_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+    except Exception:
+        log.exception("Failed to load messages")
+        raise HTTPException(503, "Service temporarily unavailable")
+
+    model_ids = [m["id"] for m in msg_result.data if m["role"] == "assistant"]
+    tc_by_msg = {}
+    if model_ids:
+        try:
+            tc_result = (
+                db.table("tool_calls")
+                .select("message_id, tool_name, input, output")
+                .in_("message_id", model_ids)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            for tc in tc_result.data:
+                tc_by_msg.setdefault(tc["message_id"], []).append(tc)
+        except Exception:
+            log.warning("Failed to load tool calls for history, continuing without")
+
+    raw_history = []
+    for m in msg_result.data:
+        entry = {"role": m["role"], "text": m["content"]}
+        if m["role"] == "assistant" and m["id"] in tc_by_msg:
+            entry["tool_calls"] = tc_by_msg[m["id"]]
+        raw_history.append(entry)
+
+    history = build_history_with_context(conversation.get("context"), raw_history)
+    return raw_history, history
 
 
 def _persist_chat(
@@ -219,6 +286,21 @@ def _persist_chat(
             ]
             db.table("tool_calls").insert(tool_rows).execute()
             log.info("Tool calls saved: conv=%s", conv_id)
+
+        # Save pending tool call if present (not yet executed)
+        pending = result.get("pending_tool")
+        if pending:
+            db.table("tool_calls").insert(
+                {
+                    "message_id": message_id,
+                    "tool_name": "run_backtest",
+                    "input": pending["input"],
+                    "output": None,
+                    "error": None,
+                    "duration_ms": 0,
+                }
+            ).execute()
+            log.info("Pending tool call saved: conv=%s", conv_id)
 
         old_usage = conversation["usage"]
         new_usage = result["usage"]
@@ -291,6 +373,76 @@ def _maybe_summarize(
         )
     except Exception:
         log.exception("Failed to summarize: conv=%s", conversation["id"])
+
+
+def _persist_continuation(
+    db,
+    conversation: dict,
+    done_data: dict,
+) -> tuple[str, bool]:
+    """Persist continuation after backtest card approval.
+
+    Saves analysis as new assistant message and updates conversation usage.
+    """
+    conv_id = conversation["id"]
+    message_id = ""
+    try:
+        data_to_save = done_data["data"] or None
+        model_msg = (
+            db.table("messages")
+            .insert(
+                {
+                    "conversation_id": conv_id,
+                    "role": "assistant",
+                    "content": done_data["answer"],
+                    "data": data_to_save,
+                    "usage": done_data["usage"],
+                }
+            )
+            .execute()
+        )
+        message_id = model_msg.data[0]["id"]
+
+        if done_data.get("tool_calls"):
+            tool_rows = [
+                {
+                    "message_id": message_id,
+                    "tool_name": tc["tool_name"],
+                    "input": tc["input"],
+                    "output": _parse_tool_output(tc["output"]),
+                    "error": tc["error"],
+                    "duration_ms": tc["duration_ms"],
+                }
+                for tc in done_data["tool_calls"]
+            ]
+            db.table("tool_calls").insert(tool_rows).execute()
+
+        old_usage = conversation["usage"]
+        new_usage = done_data["usage"]
+        old_cr_tokens = old_usage.get("cache_read_tokens", 0)
+        old_cw_tokens = old_usage.get("cache_write_tokens", 0)
+        old_cr_cost = old_usage.get("cache_read_cost", 0)
+        old_cw_cost = old_usage.get("cache_write_cost", 0)
+        accumulated = {
+            "input_tokens": old_usage["input_tokens"] + new_usage["input_tokens"],
+            "output_tokens": old_usage["output_tokens"] + new_usage["output_tokens"],
+            "cache_read_tokens": old_cr_tokens + new_usage.get("cache_read_tokens", 0),
+            "cache_write_tokens": old_cw_tokens + new_usage.get("cache_write_tokens", 0),
+            "input_cost": old_usage["input_cost"] + new_usage["input_cost"],
+            "output_cost": old_usage["output_cost"] + new_usage["output_cost"],
+            "cache_read_cost": old_cr_cost + new_usage.get("cache_read_cost", 0),
+            "cache_write_cost": old_cw_cost + new_usage.get("cache_write_cost", 0),
+            "total_cost": old_usage["total_cost"] + new_usage["total_cost"],
+            "message_count": old_usage["message_count"],
+        }
+        db.table("conversations").update({"usage": accumulated}).eq("id", conv_id).execute()
+
+        log.info("Continuation persisted: conv=%s, msg_id=%s", conv_id, message_id)
+    except Exception as e:
+        log.exception("Failed to persist continuation: conv=%s, error=%s", conv_id, str(e))
+        return message_id, False
+
+    return message_id, True
 
 
 # --- Endpoints ---
@@ -377,6 +529,37 @@ def reload_data(token: str = ""):
     _get_assistant.cache_clear()
     log.info("Data and assistant caches cleared")
     return {"status": "ok"}
+
+
+@app.post("/api/backtest")
+def run_backtest_endpoint(request: BacktestRequest, user: dict = Depends(get_current_user)):
+    """Run backtest directly — no LLM, returns DataCard."""
+    from assistant.tools.backtest import _build_backtest_card, run_backtest_tool
+
+    config = get_instrument(request.instrument)
+    if not config:
+        raise HTTPException(400, f"Unknown instrument: {request.instrument}")
+
+    df_minute = load_data(request.instrument, "1m")
+
+    try:
+        bt = run_backtest_tool(
+            {
+                "strategy": request.strategy,
+                "session": request.session,
+                "period": request.period,
+            },
+            df_minute,
+            config["sessions"],
+        )
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+    card = _build_backtest_card(bt["result"], request.title)
+    return {
+        "model_response": bt["model_response"],
+        "card": card,
+    }
 
 
 @app.get("/api/user-instruments")
@@ -631,45 +814,7 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
     except ValueError:
         raise HTTPException(400, f"Unknown instrument: {instrument}")
 
-    # Load message history from DB (including tool calls for context)
-    try:
-        msg_result = (
-            db.table("messages")
-            .select("id, role, content")
-            .eq("conversation_id", request.conversation_id)
-            .order("created_at", desc=False)
-            .execute()
-        )
-    except Exception:
-        log.exception("Failed to load messages")
-        raise HTTPException(503, "Service temporarily unavailable")
-
-    model_ids = [m["id"] for m in msg_result.data if m["role"] == "assistant"]
-    tc_by_msg = {}
-    if model_ids:
-        try:
-            tc_result = (
-                db.table("tool_calls")
-                .select("message_id, tool_name, input, output")
-                .in_("message_id", model_ids)
-                .order("created_at", desc=False)
-                .execute()
-            )
-            for tc in tc_result.data:
-                tc_by_msg.setdefault(tc["message_id"], []).append(tc)
-        except Exception:
-            log.warning("Failed to load tool calls for history, continuing without")
-
-    raw_history = []
-    for m in msg_result.data:
-        entry = {"role": m["role"], "text": m["content"]}
-        if m["role"] == "assistant" and m["id"] in tc_by_msg:
-            entry["tool_calls"] = tc_by_msg[m["id"]]
-        raw_history.append(entry)
-    history = build_history_with_context(conversation.get("context"), raw_history)
-
-    def _sse(event: str, data) -> str:
-        return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+    raw_history, history = _load_history(db, conversation)
 
     def generate():
         # Update title immediately so sidebar reflects it before model responds
@@ -723,8 +868,8 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
 
         yield _sse("persist", {"message_id": message_id, "persisted": persisted})
 
-        # Summarize context (best effort)
-        if persisted:
+        # Summarize context (best effort, skip for pending — conversation not complete)
+        if persisted and not done_data.get("pending_tool"):
             msg_count = conversation["usage"]["message_count"] + 1
             _maybe_summarize(
                 db,
@@ -733,6 +878,83 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
                 raw_history,
                 msg_count,
             )
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/chat/continue")
+def chat_continue(request: ContinueRequest, user: dict = Depends(get_current_user)):
+    """Continue chat after backtest card approval — model analyzes results."""
+    db = get_db()
+
+    try:
+        conv_result = (
+            db.table("conversations")
+            .select("*")
+            .eq("id", request.conversation_id)
+            .eq("user_id", user["sub"])
+            .execute()
+        )
+    except Exception:
+        log.exception("Failed to load conversation")
+        raise HTTPException(503, "Service temporarily unavailable")
+
+    if not conv_result.data:
+        raise HTTPException(404, "Conversation not found")
+
+    conversation = conv_result.data[0]
+    instrument = conversation["instrument"]
+
+    try:
+        assistant = _get_assistant(instrument)
+    except RuntimeError:
+        raise HTTPException(500, "ANTHROPIC_API_KEY not configured")
+    except ValueError:
+        raise HTTPException(400, f"Unknown instrument: {instrument}")
+
+    _, history = _load_history(db, conversation)
+
+    def generate():
+        start = time.time()
+        done_data = None
+
+        try:
+            for event in assistant.continue_stream(
+                history,
+                request.tool_use_id,
+                request.model_response,
+                request.data_card,
+            ):
+                yield _sse(event["event"], event["data"])
+                if event["event"] == "done":
+                    done_data = event["data"]
+        except Exception:
+            log.exception("Continue stream error: conv=%s", request.conversation_id)
+            yield _sse("error", {"error": "Service temporarily unavailable"})
+            return
+
+        latency = time.time() - start
+
+        if not done_data:
+            return
+
+        log.info(
+            "Continue stream user=%s conv=%s: %.2fs, $%.6f",
+            user["sub"],
+            request.conversation_id,
+            latency,
+            done_data["usage"]["total_cost"],
+        )
+
+        message_id, persisted = _persist_continuation(db, conversation, done_data)
+        yield _sse("persist", {"message_id": message_id, "persisted": persisted})
 
     return StreamingResponse(
         generate(),

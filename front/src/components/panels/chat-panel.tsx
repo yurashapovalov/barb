@@ -1,6 +1,7 @@
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai/conversation";
 import { DataCard } from "@/components/ai/data-card";
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai/message";
+import { StrategyCard } from "@/components/ai/strategy-card";
 import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
 import {
   PromptInput,
@@ -22,17 +23,19 @@ interface ChatPanelProps {
   send: ChatState["send"];
   selectedData?: DataBlock | null;
   onSelectData?: (data: DataBlock) => void;
+  pendingTool?: ChatState["pendingTool"];
+  confirmBacktest?: ChatState["confirmBacktest"];
 }
 
-export function ChatPanel({ header, messages, isLoading, send, selectedData, onSelectData }: ChatPanelProps) {
+export function ChatPanel({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest }: ChatPanelProps) {
   return (
     <PromptInputProvider>
-      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} />
+      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} pendingTool={pendingTool} confirmBacktest={confirmBacktest} />
     </PromptInputProvider>
   );
 }
 
-function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSelectData }: ChatPanelProps) {
+function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest }: ChatPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -80,6 +83,13 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
               </Message>
             );
           })}
+        {pendingTool && confirmBacktest && (
+          <StrategyCard
+            input={pendingTool.input}
+            onConfirm={confirmBacktest}
+            isRunning={isLoading}
+          />
+        )}
         </ConversationContent>
         )}
         <ConversationScrollButton />

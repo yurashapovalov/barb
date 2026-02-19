@@ -42,21 +42,86 @@ class Assistant:
         self.sessions = sessions
         self.system_prompt = build_system_prompt(instrument)
 
-    def chat_stream(self, message: str, history: list[dict] | None = None) -> Generator[dict]:
+    def chat_stream(
+        self,
+        message: str,
+        history: list[dict] | None = None,
+        auto_execute: bool = False,
+    ) -> Generator[dict]:
         """Process chat message, yielding SSE events.
 
         Yields dicts with "event" and "data" keys:
-            tool_start, tool_end, data_block, text_delta, done.
+            tool_start, tool_end, data_block, text_delta, tool_pending, done.
+
+        For run_backtest: yields tool_pending (with params) instead of executing.
+        Frontend shows StrategyCard, user confirms, then calls continue_stream().
+
+        Set auto_execute=True to skip the pause (for scripts/e2e).
         """
         messages = _build_messages(history or [], message)
+        yield from self._run_stream(messages, auto_execute=auto_execute)
 
+    def continue_stream(
+        self,
+        history: list[dict],
+        tool_use_id: str,
+        model_response: str,
+        data_card: dict,
+    ) -> Generator[dict]:
+        """Continue after tool_pending — inject tool result and let Claude analyze.
+
+        Called after frontend runs backtest via POST /api/backtest.
+        """
+        messages = _build_messages_from_history(history)
+
+        # Patch the pending tool_use ID so it matches the tool_result we'll add.
+        # DB history generates synthetic IDs (toolu_hist_N), but Anthropic needs
+        # tool_use.id == tool_result.tool_use_id within the same messages array.
+        for msg in reversed(messages):
+            if msg["role"] == "assistant" and isinstance(msg["content"], list):
+                for block in msg["content"]:
+                    if block.get("type") == "tool_use" and block.get("name") == "run_backtest":
+                        block["id"] = tool_use_id
+                        break
+                break
+
+        # Yield the data block so frontend gets it
+        yield {"event": "data_block", "data": data_card}
+
+        # Add tool result and continue
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": model_response,
+                    }
+                ],
+            }
+        )
+
+        yield from self._run_stream(messages, is_continuation=True, initial_data=[data_card])
+
+    def _run_stream(
+        self,
+        messages: list[dict],
+        is_continuation: bool = False,
+        auto_execute: bool = False,
+        initial_data: list[dict] | None = None,
+    ) -> Generator[dict]:
+        """Core streaming loop — shared by chat_stream and continue_stream."""
         total_input_tokens = 0
         total_output_tokens = 0
         total_cache_read = 0
         total_cache_write = 0
         tool_call_log = []
-        data_blocks = []
+        data_blocks = list(initial_data) if initial_data else []
         answer = ""
+        # Pre-populate answer with placeholders for initial data blocks
+        for i in range(len(data_blocks)):
+            answer += f"\n\n{{{{data:{i}}}}}\n\n"
 
         for round_num in range(MAX_TOOL_ROUNDS):
             # Stream response with prompt caching
@@ -125,6 +190,38 @@ class Assistant:
                     "content": response.content,
                 }
             )
+
+            # Check for run_backtest — pause for user approval
+            backtest_tu = next((tu for tu in tool_uses if tu["name"] == "run_backtest"), None)
+            if backtest_tu and not is_continuation and not auto_execute:
+                yield {
+                    "event": "tool_pending",
+                    "data": {
+                        "tool_name": "run_backtest",
+                        "tool_use_id": backtest_tu["id"],
+                        "input": backtest_tu["input"],
+                    },
+                }
+                # Yield partial done — frontend needs usage + answer so far
+                yield {
+                    "event": "done",
+                    "data": {
+                        "answer": answer,
+                        "usage": _calc_usage(
+                            total_input_tokens,
+                            total_output_tokens,
+                            total_cache_read,
+                            total_cache_write,
+                        ),
+                        "tool_calls": tool_call_log,
+                        "data": data_blocks,
+                        "pending_tool": {
+                            "tool_use_id": backtest_tu["id"],
+                            "input": backtest_tu["input"],
+                        },
+                    },
+                }
+                return  # Stop — frontend will call continue_stream
 
             # Execute tools and collect results
             tool_results = []
@@ -203,34 +300,16 @@ class Assistant:
                 }
             )
 
-        # Calculate costs
-        # Sonnet 4.5: $3/MTok input, $0.30/MTok cached read, $3.75/MTok cache write, $15/MTok output
-        # API returns: input_tokens = tokens AFTER cache breakpoint (uncached)
-        #              cache_read_input_tokens = tokens read from cache
-        #              cache_creation_input_tokens = tokens written to cache
-        input_cost = total_input_tokens * 3.0 / 1_000_000
-        cache_read_cost = total_cache_read * 0.30 / 1_000_000
-        cache_write_cost = total_cache_write * 3.75 / 1_000_000
-        output_cost = total_output_tokens * 15.0 / 1_000_000
-        total_cost = input_cost + cache_read_cost + cache_write_cost + output_cost
-
-        usage = {
-            "input_tokens": total_input_tokens,
-            "output_tokens": total_output_tokens,
-            "cache_read_tokens": total_cache_read,
-            "cache_write_tokens": total_cache_write,
-            "input_cost": input_cost,
-            "cache_read_cost": cache_read_cost,
-            "cache_write_cost": cache_write_cost,
-            "output_cost": output_cost,
-            "total_cost": total_cost,
-        }
-
         yield {
             "event": "done",
             "data": {
                 "answer": answer,
-                "usage": usage,
+                "usage": _calc_usage(
+                    total_input_tokens,
+                    total_output_tokens,
+                    total_cache_read,
+                    total_cache_write,
+                ),
                 "tool_calls": tool_call_log,
                 "data": data_blocks,
             },
@@ -366,3 +445,73 @@ def _compact_output(*_args) -> str:
     Model should re-query for fresh data, not reference old results.
     """
     return "done"
+
+
+def _calc_usage(input_tokens: int, output_tokens: int, cache_read: int, cache_write: int) -> dict:
+    """Calculate token costs.
+
+    Sonnet 4.5: $3/MTok input, $0.30/MTok cached read, $3.75/MTok cache write, $15/MTok output.
+    """
+    input_cost = input_tokens * 3.0 / 1_000_000
+    cache_read_cost = cache_read * 0.30 / 1_000_000
+    cache_write_cost = cache_write * 3.75 / 1_000_000
+    output_cost = output_tokens * 15.0 / 1_000_000
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cache_read_tokens": cache_read,
+        "cache_write_tokens": cache_write,
+        "input_cost": input_cost,
+        "cache_read_cost": cache_read_cost,
+        "cache_write_cost": cache_write_cost,
+        "output_cost": output_cost,
+        "total_cost": input_cost + cache_read_cost + cache_write_cost + output_cost,
+    }
+
+
+def _build_messages_from_history(history: list[dict]) -> list[dict]:
+    """Build Anthropic messages from DB history (for continue_stream).
+
+    Same as _build_messages but without appending a new user message.
+    The last entry should be the assistant message with tool_use.
+    """
+    messages = []
+    for msg in history:
+        role = msg.get("role", "user")
+        text = msg.get("text", "")
+        tool_calls = msg.get("tool_calls", [])
+
+        if role == "assistant" and tool_calls:
+            content = []
+            for i, tc in enumerate(tool_calls):
+                tool_id = tc.get("id", f"toolu_hist_{i}")
+                content.append(
+                    {
+                        "type": "tool_use",
+                        "id": tool_id,
+                        "name": tc["tool_name"],
+                        "input": tc.get("input", {}),
+                    }
+                )
+            if text:
+                content.insert(0, {"type": "text", "text": text})
+            messages.append({"role": "assistant", "content": content})
+
+            # Add tool results for completed tool calls (not pending ones)
+            completed = [tc for tc in tool_calls if tc.get("output") is not None]
+            if completed:
+                tool_results = []
+                for i, tc in enumerate(tool_calls):
+                    tool_id = tc.get("id", f"toolu_hist_{i}")
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": _compact_output(tc.get("output", "done")),
+                        }
+                    )
+                messages.append({"role": "user", "content": tool_results})
+        else:
+            messages.append({"role": role, "content": text})
+
+    return messages

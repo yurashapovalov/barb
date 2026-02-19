@@ -77,6 +77,10 @@ User: "Покупка когда цена выше 200 SMA и откатилас
                         "type": "string",
                         "description": "Entry condition expression",
                     },
+                    "entry_label": {
+                        "type": "string",
+                        "description": "Human-readable entry description for UI card (e.g. '3 красных дня подряд')",
+                    },
                     "direction": {
                         "type": "string",
                         "enum": ["long", "short"],

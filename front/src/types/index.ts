@@ -112,6 +112,12 @@ export interface SSEToolEndEvent {
   error: string | null;
 }
 
+export interface SSEToolPendingEvent {
+  tool_name: string;
+  tool_use_id: string;
+  input: Record<string, unknown>;
+}
+
 export type SSEDataBlockEvent = DataBlock;
 
 export interface SSETextDeltaEvent {

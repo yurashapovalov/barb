@@ -15,6 +15,8 @@ interface ChatPageProps {
   dataPct: number;
   onDataResize: (delta: number) => void;
   onCloseData: () => void;
+  pendingTool?: ChatState["pendingTool"];
+  confirmBacktest?: ChatState["confirmBacktest"];
 }
 
 export function ChatPage({
@@ -27,11 +29,13 @@ export function ChatPage({
   dataPct,
   onDataResize,
   onCloseData,
+  pendingTool,
+  confirmBacktest,
 }: ChatPageProps) {
   return (
     <div className="flex h-full">
       <div className="min-w-full flex-1 lg:min-w-0">
-        <ChatPanel header={chatHeader} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} />
+        <ChatPanel header={chatHeader} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} pendingTool={pendingTool} confirmBacktest={confirmBacktest} />
       </div>
       {selectedData && (
         <>
