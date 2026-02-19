@@ -915,3 +915,171 @@ class TestTrailingStop:
         )
         assert reason == "trailing_stop"
         assert reason != "stop"
+
+
+# --- Breakeven ---
+
+
+class TestBreakeven:
+    def test_breakeven_basic_long(self):
+        """After N bars in profit, stop moves to entry → exit at entry price."""
+        # 5 bars: entry on bar 1 (open=100), breakeven after 2 bars
+        # Bar 2: open=102 (profit) → breakeven activates, stop=100
+        # Bar 3: low=99 < 100 → exit at breakeven
+        dates = pd.date_range("2024-01-02", periods=5, freq="D")
+        df = pd.DataFrame(
+            {
+                "open": [100, 100, 102, 101, 98],
+                "high": [104, 103, 105, 103, 100],
+                "low": [98, 99, 100, 99, 96],
+                "close": [102, 101, 103, 100, 97],
+                "volume": [1000] * 5,
+            },
+            index=dates,
+            dtype=float,
+        )
+        sessions = {"RTH": ("09:30", "16:15")}
+        strategy = Strategy(
+            entry="close > 101",
+            direction="long",
+            stop_loss=10,
+            breakeven_bars=2,
+        )
+        result = run_backtest(df, strategy, sessions)
+        assert len(result.trades) >= 1
+        trade = result.trades[0]
+        assert trade.exit_reason == "breakeven"
+        assert trade.exit_price == trade.entry_price  # exited at entry
+
+    def test_breakeven_short(self):
+        """Short breakeven: in profit when open < entry."""
+        dates = pd.date_range("2024-01-02", periods=5, freq="D")
+        df = pd.DataFrame(
+            {
+                "open": [100, 100, 98, 99, 102],
+                "high": [104, 103, 100, 101, 105],
+                "low": [98, 97, 96, 97, 100],
+                "close": [98, 99, 97, 100, 103],
+                "volume": [1000] * 5,
+            },
+            index=dates,
+            dtype=float,
+        )
+        sessions = {"RTH": ("09:30", "16:15")}
+        strategy = Strategy(
+            entry="close < 99",
+            direction="short",
+            stop_loss=10,
+            breakeven_bars=2,
+        )
+        result = run_backtest(df, strategy, sessions)
+        be_trades = [t for t in result.trades if t.exit_reason == "breakeven"]
+        assert len(be_trades) >= 1
+
+    def test_breakeven_not_in_profit(self):
+        """After N bars but NOT in profit → stop doesn't move."""
+        dates = pd.date_range("2024-01-02", periods=5, freq="D")
+        df = pd.DataFrame(
+            {
+                "open": [100, 100, 98, 97, 96],
+                "high": [104, 103, 100, 99, 98],
+                "low": [98, 97, 96, 95, 94],
+                "close": [102, 99, 97, 96, 95],
+                "volume": [1000] * 5,
+            },
+            index=dates,
+            dtype=float,
+        )
+        sessions = {"RTH": ("09:30", "16:15")}
+        strategy = Strategy(
+            entry="close > 101",
+            direction="long",
+            stop_loss=5,
+            breakeven_bars=1,
+        )
+        result = run_backtest(df, strategy, sessions)
+        # Not in profit at bar open → breakeven doesn't activate → hits fixed stop
+        for trade in result.trades:
+            assert trade.exit_reason != "breakeven"
+
+    def test_breakeven_raises_stop(self):
+        """Breakeven moves stop from initial level to entry."""
+        # Entry at ~100, stop_loss=5 (stop at 95), breakeven_bars=1
+        # After 1 bar in profit: stop moves to 100
+        # Without breakeven: stop stays at 95
+        dates = pd.date_range("2024-01-02", periods=6, freq="D")
+        df = pd.DataFrame(
+            {
+                "open": [100, 100, 102, 101, 99, 97],
+                "high": [104, 103, 105, 103, 100, 98],
+                "low": [98, 99, 100, 99, 97, 95],
+                "close": [102, 101, 103, 100, 98, 96],
+                "volume": [1000] * 6,
+            },
+            index=dates,
+            dtype=float,
+        )
+        sessions = {"RTH": ("09:30", "16:15")}
+
+        # With breakeven: exits at entry price
+        s_be = Strategy(
+            entry="close > 101",
+            direction="long",
+            stop_loss=5,
+            breakeven_bars=2,
+        )
+        r_be = run_backtest(df, s_be, sessions)
+
+        # Without breakeven: exits at fixed stop (lower)
+        s_no = Strategy(
+            entry="close > 101",
+            direction="long",
+            stop_loss=5,
+        )
+        r_no = run_backtest(df, s_no, sessions)
+
+        if r_be.trades and r_no.trades:
+            # Breakeven should preserve more P&L
+            assert r_be.trades[0].pnl >= r_no.trades[0].pnl
+
+    def test_breakeven_exit_reason_distinct(self):
+        """Exit reason is 'breakeven', distinct from 'stop' and 'trailing_stop'."""
+        from barb.backtest.engine import _check_exit_levels
+
+        bar = pd.Series({"open": 100, "high": 103, "low": 98, "close": 99})
+        # stop_reason="breakeven" → exit reason should be "breakeven"
+        price, reason, _ = _check_exit_levels(
+            bar,
+            True,
+            99.0,
+            None,
+            None,
+            stop_reason="breakeven",
+        )
+        assert reason == "breakeven"
+        assert reason != "stop"
+
+    def test_breakeven_with_trailing(self):
+        """Breakeven + trailing coexist — tighter wins."""
+        from barb.backtest.engine import _find_exit_in_minutes
+
+        # Long entry at 100, breakeven active (stop=100), trail=3 from best=105
+        # Trail stop = 102, breakeven stop = 100
+        # Trail is tighter (102 > 100) → trailing dominates
+        minutes = _make_minutes(
+            [
+                (104, 105, 101, 102),  # best=105, trail=102. low=101 < 102 → trailing exit
+            ]
+        )
+        price, reason, _ = _find_exit_in_minutes(
+            minutes,
+            True,
+            100.0,
+            None,
+            None,
+            trail_points=3,
+            best_price=104,
+            stop_reason="breakeven",
+        )
+        assert reason == "trailing_stop"
+        assert price == 102.0

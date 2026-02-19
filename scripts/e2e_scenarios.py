@@ -130,6 +130,14 @@ SCENARIOS = [
         "expect_data": True,
     },
     {
+        "name": "Backtest — breakeven after 2 days",
+        "messages": [
+            "протестируй лонг после 3 красных дней, стоп 2%, тейк 4%, но если через 2 дня в плюсе — перенеси стоп на вход. RTH, 2023-2025",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
         "name": "Backtest — trailing stop trend following",
         "messages": [
             "протестируй стратегию: лонг когда цена закрылась выше 20-дневного максимума, трейлинг стоп 2%, максимум 10 дней. RTH, 2023-2025",

@@ -23,6 +23,7 @@ Strategy fields:
 - stop_loss: points (number) or percentage (string "2%"). Distance from entry.
 - take_profit: points (number) or percentage (string "3%"). Distance from entry.
 - trailing_stop: trail distance — points (number) or percentage ("1.5%"). Stop follows price, exits on retrace.
+- breakeven_bars: after N bars, if in profit, move stop to entry price. Protects gains.
 - exit_target: expression evaluated ONCE at entry → fixed target price
   (e.g. "prev(close)" for gap fill)
 - exit_bars: force exit after N bars if no stop/target hit
@@ -93,6 +94,10 @@ User: "Покупка когда цена выше 200 SMA и откатилас
                     "trailing_stop": {
                         "description": "Trail distance. Number = points, string = percentage ('1.5%'). Stop follows price.",
                     },
+                    "breakeven_bars": {
+                        "type": "integer",
+                        "description": "After N bars, if in profit, move stop to entry price",
+                    },
                     "exit_bars": {
                         "type": "integer",
                         "description": "Force exit after N bars",
@@ -146,6 +151,7 @@ def run_backtest_tool(
         stop_loss=strat.get("stop_loss"),
         take_profit=strat.get("take_profit"),
         trailing_stop=strat.get("trailing_stop"),
+        breakeven_bars=strat.get("breakeven_bars"),
         exit_bars=strat.get("exit_bars"),
         slippage=strat.get("slippage", 0.0),
         commission=strat.get("commission", 0.0),

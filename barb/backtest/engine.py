@@ -102,6 +102,8 @@ def _simulate(
     tp_price = None
     trail_points = None
     best_price = None
+    stop_reason = "stop"
+    breakeven_activated = False
     is_long = strategy.direction == "long"
     if minute_by_date is None:
         minute_by_date = {}
@@ -112,6 +114,18 @@ def _simulate(
 
         if in_position:
             bars_held = i - entry_bar_idx
+
+            # Breakeven: after N bars, if in profit, move stop to entry
+            if (
+                strategy.breakeven_bars is not None
+                and not breakeven_activated
+                and bars_held >= strategy.breakeven_bars
+            ):
+                in_profit = bar["open"] > entry_price if is_long else bar["open"] < entry_price
+                if in_profit:
+                    stop_price = entry_price
+                    stop_reason = "breakeven"
+                    breakeven_activated = True
 
             # Use minute bars for precise exit, fall back to daily
             day_key = bar_date.date() if hasattr(bar_date, "date") else bar_date
@@ -127,6 +141,7 @@ def _simulate(
                 bars_held,
                 trail_points,
                 best_price,
+                stop_reason,
             )
 
             # End of data — force close
@@ -173,6 +188,10 @@ def _simulate(
                 trail_points = resolve_level(strategy.trailing_stop, entry_price)
                 best_price = entry_price
 
+            # Reset breakeven state
+            stop_reason = "stop"
+            breakeven_activated = False
+
             in_position = True
 
             # Check if exit happens on the same bar we entered
@@ -189,6 +208,7 @@ def _simulate(
                 0,
                 trail_points,
                 best_price,
+                stop_reason,
             )
 
             if exit_price is not None:
@@ -253,6 +273,7 @@ def _resolve_exit(
     bars_held: int,
     trail_points: float | None = None,
     best_price: float | None = None,
+    stop_reason: str = "stop",
 ) -> tuple[float | None, str | None, float | None]:
     """Find exit using minute bars if available, otherwise daily bar.
 
@@ -269,6 +290,7 @@ def _resolve_exit(
             target_price,
             trail_points,
             best_price,
+            stop_reason,
         )
     else:
         exit_price, exit_reason, best_price = _check_exit_levels(
@@ -279,6 +301,7 @@ def _resolve_exit(
             target_price,
             trail_points,
             best_price,
+            stop_reason,
         )
 
     if exit_price is not None:
@@ -299,6 +322,7 @@ def _find_exit_in_minutes(
     target_price: float | None,
     trail_points: float | None = None,
     best_price: float | None = None,
+    stop_reason: str = "stop",
 ) -> tuple[float | None, str | None, float | None]:
     """Walk minute bars chronologically to find first exit trigger.
 
@@ -320,13 +344,13 @@ def _find_exit_in_minutes(
             effective_stop = stop_price
             is_trailing = False
 
-        # Stop loss (fixed or trailing)
+        # Stop loss (fixed/breakeven or trailing)
         if effective_stop is not None:
             if is_long and bar["low"] <= effective_stop:
-                reason = "trailing_stop" if is_trailing else "stop"
+                reason = "trailing_stop" if is_trailing else stop_reason
                 return effective_stop, reason, best_price
             if not is_long and bar["high"] >= effective_stop:
-                reason = "trailing_stop" if is_trailing else "stop"
+                reason = "trailing_stop" if is_trailing else stop_reason
                 return effective_stop, reason, best_price
 
         # Take profit
@@ -354,6 +378,7 @@ def _check_exit_levels(
     target_price: float | None,
     trail_points: float | None = None,
     best_price: float | None = None,
+    stop_reason: str = "stop",
 ) -> tuple[float | None, str | None, float | None]:
     """Check price-based exit levels on a single bar (daily fallback).
 
@@ -373,13 +398,13 @@ def _check_exit_levels(
         effective_stop = stop_price
         is_trailing = False
 
-    # 1. Stop loss (fixed or trailing)
+    # 1. Stop loss (fixed/breakeven or trailing)
     if effective_stop is not None:
         if is_long and bar["low"] <= effective_stop:
-            reason = "trailing_stop" if is_trailing else "stop"
+            reason = "trailing_stop" if is_trailing else stop_reason
             return effective_stop, reason, best_price
         if not is_long and bar["high"] >= effective_stop:
-            reason = "trailing_stop" if is_trailing else "stop"
+            reason = "trailing_stop" if is_trailing else stop_reason
             return effective_stop, reason, best_price
 
     # 2. Take profit

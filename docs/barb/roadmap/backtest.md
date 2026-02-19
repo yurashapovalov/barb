@@ -51,6 +51,7 @@ class Strategy:
     stop_loss: float | None     # Points (or percentage if ends with %)
     take_profit: float | None   # Points (or percentage if ends with %)
     trailing_stop: float | None # Trail distance in points or "2%". Stop follows price.
+    breakeven_bars: int | None  # After N bars in profit, move stop to entry
     exit_bars: int | None       # Max bars in trade or None
     slippage: float             # Points per side, default 0
 ```
@@ -229,7 +230,7 @@ class Trade:
     exit_price: float
     direction: str          # "long" | "short"
     pnl: float              # points (after slippage)
-    exit_reason: str        # "stop" | "trailing_stop" | "take_profit" | "target" | "timeout" | "end"
+    exit_reason: str        # "stop" | "breakeven" | "trailing_stop" | "take_profit" | "target" | "timeout" | "end"
     bars_held: int          # сколько баров в позиции
 ```
 
@@ -442,7 +443,7 @@ Frontend рендерит `data_block` с `type: "backtest"` как Strategy Res
 - [x] `assistant/tools/backtest.py` — 5-line model_response (yearly, exit types W/L, concentration, best/worst, consec W/L)
 - [x] `assistant/prompt/system.py` — rule #9 rewrite (analyze quality, not repeat numbers)
 - [x] `barb/backtest/strategy.py` + `engine.py` — commission field
-- [x] 64 тестов total (56 core + 8 trailing stop)
+- [x] 70 тестов total (56 core + 8 trailing stop + 6 breakeven)
 
 ---
 
@@ -456,20 +457,14 @@ Typed data blocks system. DataPanel renders 5 block types: metrics-grid, area-ch
 
 Вызвано реальными вопросами пользователей. Текущий движок: фиксированный стоп/тейк + timeout. Трейдерам нужно больше.
 
-#### 6a. Breakeven ✱ маленькое изменение
+#### 6a. Breakeven ✓
 
 После N баров, если сделка в прибыли → стоп перемещается на цену входа.
 
-```
-Вход long @ 100.0, SL @ 95.0, breakeven_bars = 20
-Бар 1-19:  стоп = 95.0
-Бар 20:    если в прибыли → стоп = 100.0
-Бар 21+:   стоп = 100.0 (если активирован)
-```
-
 - `strategy.py`: `breakeven_bars: int | None = None`
-- `engine.py` / `_simulate`: после N баров проверить `price > entry` (long), если да → `stop = entry + slippage`
-- Позже: `breakeven_distance: float` — по расстоянию вместо баров
+- `engine.py` / `_simulate`: проверка `bar["open"] > entry_price` на баре N, `stop_reason` tracks "breakeven" vs "stop"
+- `exit_reason = "breakeven"` — distinct from "stop" and "trailing_stop"
+- 6 тестов: basic long/short, not in profit, raises stop, exit reason, with trailing
 
 #### 6b. Trailing stop ✓
 
