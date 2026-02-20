@@ -173,7 +173,8 @@ def filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
             step="period",
             expression=period,
         )
-    return df.loc[period]
+    # Slice to always return a DataFrame (not a Series for single-date match)
+    return df.loc[period:period]
 
 
 def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
