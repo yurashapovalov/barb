@@ -23,7 +23,6 @@ export interface Message {
   data: DataBlock[] | null;
   usage: UsageBlock | null;
   created_at: string;
-  pending_tool?: { tool_use_id: string; input: Record<string, unknown> } | null;
 }
 
 export interface Conversation {
@@ -111,12 +110,6 @@ export interface SSEToolEndEvent {
   tool_name: string;
   duration_ms: number;
   error: string | null;
-}
-
-export interface SSEToolPendingEvent {
-  tool_name: string;
-  tool_use_id: string;
-  input: Record<string, unknown>;
 }
 
 export type SSEDataBlockEvent = DataBlock;

@@ -114,28 +114,11 @@ class MessageResponse(BaseModel):
     data: list[dict] | None = None
     usage: dict | None = None
     created_at: str
-    pending_tool: dict | None = None
 
 
 class ChatRequest(BaseModel):
     conversation_id: str = Field(..., min_length=1)
     message: str = Field(..., min_length=1, max_length=10000)
-
-
-class BacktestRequest(BaseModel):
-    instrument: str = "NQ"
-    strategy: dict
-    session: str | None = None
-    period: str | None = None
-    title: str = "Backtest"
-
-
-class ContinueRequest(BaseModel):
-    conversation_id: str = Field(..., min_length=1)
-    tool_use_id: str = Field(..., min_length=1)
-    tool_input: dict
-    model_response: str
-    data_card: dict
 
 
 # --- Assistant cache ---
@@ -288,21 +271,6 @@ def _persist_chat(
             db.table("tool_calls").insert(tool_rows).execute()
             log.info("Tool calls saved: conv=%s", conv_id)
 
-        # Save pending tool call if present (not yet executed)
-        pending = result.get("pending_tool")
-        if pending:
-            db.table("tool_calls").insert(
-                {
-                    "message_id": message_id,
-                    "tool_name": "run_backtest",
-                    "input": pending["input"],
-                    "output": None,
-                    "error": None,
-                    "duration_ms": 0,
-                }
-            ).execute()
-            log.info("Pending tool call saved: conv=%s", conv_id)
-
         old_usage = conversation["usage"]
         new_usage = result["usage"]
         old_cr_tokens = old_usage.get("cache_read_tokens", 0)
@@ -374,101 +342,6 @@ def _maybe_summarize(
         )
     except Exception:
         log.exception("Failed to summarize: conv=%s", conversation["id"])
-
-
-def _persist_continuation(
-    db,
-    conversation: dict,
-    done_data: dict,
-    tool_result: str,
-    tool_input: dict | None = None,
-) -> tuple[str, bool]:
-    """Persist continuation — update existing assistant message with backtest results.
-
-    The initial stream saved a partial message with pending tool_call (output=None).
-    Now we combine the initial text with the analysis and fill in the tool output.
-    """
-    conv_id = conversation["id"]
-    message_id = ""
-    try:
-        # Find the last assistant message (the one with pending tool_call)
-        last_msg = (
-            db.table("messages")
-            .select("id, content, usage")
-            .eq("conversation_id", conv_id)
-            .eq("role", "assistant")
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        if not last_msg.data:
-            log.error("No assistant message to update: conv=%s", conv_id)
-            return "", False
-
-        message_id = last_msg.data[0]["id"]
-        existing_content = last_msg.data[0]["content"] or ""
-        combined_content = existing_content + done_data["answer"]
-        data_to_save = done_data["data"] or None
-
-        # Update the message with combined content + data
-        db.table("messages").update(
-            {
-                "content": combined_content,
-                "data": data_to_save,
-                "usage": done_data["usage"],
-            }
-        ).eq("id", message_id).execute()
-
-        # Fill in the pending tool_call (output was NULL)
-        update_fields = {"output": _parse_tool_output(tool_result)}
-        if tool_input is not None:
-            update_fields["input"] = tool_input
-        db.table("tool_calls").update(update_fields).eq(
-            "message_id",
-            message_id,
-        ).is_("output", "null").execute()
-
-        # Additional tool calls from continuation (if model called more tools)
-        if done_data.get("tool_calls"):
-            tool_rows = [
-                {
-                    "message_id": message_id,
-                    "tool_name": tc["tool_name"],
-                    "input": tc["input"],
-                    "output": _parse_tool_output(tc["output"]),
-                    "error": tc["error"],
-                    "duration_ms": tc["duration_ms"],
-                }
-                for tc in done_data["tool_calls"]
-            ]
-            db.table("tool_calls").insert(tool_rows).execute()
-
-        old_usage = conversation["usage"]
-        new_usage = done_data["usage"]
-        old_cr_tokens = old_usage.get("cache_read_tokens", 0)
-        old_cw_tokens = old_usage.get("cache_write_tokens", 0)
-        old_cr_cost = old_usage.get("cache_read_cost", 0)
-        old_cw_cost = old_usage.get("cache_write_cost", 0)
-        accumulated = {
-            "input_tokens": old_usage["input_tokens"] + new_usage["input_tokens"],
-            "output_tokens": old_usage["output_tokens"] + new_usage["output_tokens"],
-            "cache_read_tokens": old_cr_tokens + new_usage.get("cache_read_tokens", 0),
-            "cache_write_tokens": old_cw_tokens + new_usage.get("cache_write_tokens", 0),
-            "input_cost": old_usage["input_cost"] + new_usage["input_cost"],
-            "output_cost": old_usage["output_cost"] + new_usage["output_cost"],
-            "cache_read_cost": old_cr_cost + new_usage.get("cache_read_cost", 0),
-            "cache_write_cost": old_cw_cost + new_usage.get("cache_write_cost", 0),
-            "total_cost": old_usage["total_cost"] + new_usage["total_cost"],
-            "message_count": old_usage["message_count"],
-        }
-        db.table("conversations").update({"usage": accumulated}).eq("id", conv_id).execute()
-
-        log.info("Continuation persisted: conv=%s, msg_id=%s", conv_id, message_id)
-    except Exception as e:
-        log.exception("Failed to persist continuation: conv=%s, error=%s", conv_id, str(e))
-        return message_id, False
-
-    return message_id, True
 
 
 # --- Endpoints ---
@@ -555,37 +428,6 @@ def reload_data(token: str = ""):
     _get_assistant.cache_clear()
     log.info("Data and assistant caches cleared")
     return {"status": "ok"}
-
-
-@app.post("/api/backtest")
-def run_backtest_endpoint(request: BacktestRequest, user: dict = Depends(get_current_user)):
-    """Run backtest directly — no LLM, returns DataCard."""
-    from assistant.tools.backtest import _build_backtest_card, run_backtest_tool
-
-    config = get_instrument(request.instrument)
-    if not config:
-        raise HTTPException(400, f"Unknown instrument: {request.instrument}")
-
-    df_minute = load_data(request.instrument, "1m")
-
-    try:
-        bt = run_backtest_tool(
-            {
-                "strategy": request.strategy,
-                "session": request.session,
-                "period": request.period,
-            },
-            df_minute,
-            config["sessions"],
-        )
-    except Exception as e:
-        raise HTTPException(400, str(e))
-
-    card = _build_backtest_card(bt["result"], request.title)
-    return {
-        "model_response": bt["model_response"],
-        "card": card,
-    }
 
 
 @app.get("/api/user-instruments")
@@ -766,28 +608,6 @@ def get_messages(
         log.exception("Failed to load messages: conv=%s", conversation_id)
         raise HTTPException(503, "Service temporarily unavailable")
 
-    # Check for pending tool call on the last model message
-    pending_tool = None
-    messages_data = result.data
-    last_model = next((m for m in reversed(messages_data) if m["role"] != "user"), None)
-    if last_model:
-        try:
-            tc_result = (
-                db.table("tool_calls")
-                .select("id, input")
-                .eq("message_id", last_model["id"])
-                .is_("output", "null")
-                .limit(1)
-                .execute()
-            )
-            if tc_result.data:
-                pending_tool = {
-                    "tool_use_id": tc_result.data[0]["id"],
-                    "input": tc_result.data[0]["input"],
-                }
-        except Exception:
-            log.warning("Failed to check pending tool: conv=%s", conversation_id)
-
     return [
         MessageResponse(
             id=m["id"],
@@ -797,9 +617,8 @@ def get_messages(
             data=m["data"],
             usage=m["usage"],
             created_at=m["created_at"],
-            pending_tool=pending_tool if m["id"] == last_model["id"] else None,
         )
-        for m in messages_data
+        for m in result.data
     ]
 
 
@@ -917,8 +736,7 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
 
         yield _sse("persist", {"message_id": message_id, "persisted": persisted})
 
-        # Summarize context (best effort, skip for pending — conversation not complete)
-        if persisted and not done_data.get("pending_tool"):
+        if persisted:
             msg_count = conversation["usage"]["message_count"] + 1
             _maybe_summarize(
                 db,
@@ -927,90 +745,6 @@ def chat_stream(request: ChatRequest, user: dict = Depends(get_current_user)):
                 raw_history,
                 msg_count,
             )
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@app.post("/api/chat/continue")
-def chat_continue(request: ContinueRequest, user: dict = Depends(get_current_user)):
-    """Continue chat after backtest card approval — model analyzes results."""
-    db = get_db()
-
-    try:
-        conv_result = (
-            db.table("conversations")
-            .select("*")
-            .eq("id", request.conversation_id)
-            .eq("user_id", user["sub"])
-            .execute()
-        )
-    except Exception:
-        log.exception("Failed to load conversation")
-        raise HTTPException(503, "Service temporarily unavailable")
-
-    if not conv_result.data:
-        raise HTTPException(404, "Conversation not found")
-
-    conversation = conv_result.data[0]
-    instrument = conversation["instrument"]
-
-    try:
-        assistant = _get_assistant(instrument)
-    except RuntimeError:
-        raise HTTPException(500, "ANTHROPIC_API_KEY not configured")
-    except ValueError:
-        raise HTTPException(400, f"Unknown instrument: {instrument}")
-
-    _, history = _load_history(db, conversation)
-
-    def generate():
-        start = time.time()
-        done_data = None
-
-        try:
-            for event in assistant.continue_stream(
-                history,
-                request.tool_use_id,
-                request.model_response,
-                request.data_card,
-                tool_input=request.tool_input,
-            ):
-                yield _sse(event["event"], event["data"])
-                if event["event"] == "done":
-                    done_data = event["data"]
-        except Exception:
-            log.exception("Continue stream error: conv=%s", request.conversation_id)
-            yield _sse("error", {"error": "Service temporarily unavailable"})
-            return
-
-        latency = time.time() - start
-
-        if not done_data:
-            return
-
-        log.info(
-            "Continue stream user=%s conv=%s: %.2fs, $%.6f",
-            user["sub"],
-            request.conversation_id,
-            latency,
-            done_data["usage"]["total_cost"],
-        )
-
-        message_id, persisted = _persist_continuation(
-            db,
-            conversation,
-            done_data,
-            tool_result=request.model_response,
-            tool_input=request.tool_input,
-        )
-        yield _sse("persist", {"message_id": message_id, "persisted": persisted})
 
     return StreamingResponse(
         generate(),

@@ -1,6 +1,5 @@
 import type {
   Conversation,
-  DataBlock,
   Instrument,
   Message,
   SSEDataBlockEvent,
@@ -10,7 +9,6 @@ import type {
   SSETextDeltaEvent,
   SSETitleUpdateEvent,
   SSEToolEndEvent,
-  SSEToolPendingEvent,
   SSEToolStartEvent,
   UserInstrument,
 } from "@/types";
@@ -190,10 +188,6 @@ function isErrorEvent(obj: unknown): obj is SSEErrorEvent {
   return has(obj, "error") && typeof obj.error === "string";
 }
 
-function isToolPendingEvent(obj: unknown): obj is SSEToolPendingEvent {
-  return has(obj, "tool_name") && has(obj, "tool_use_id") && has(obj, "input");
-}
-
 function isDataBlockEvent(obj: unknown): obj is SSEDataBlockEvent {
   return has(obj, "title") && has(obj, "blocks");
 }
@@ -203,7 +197,6 @@ function isDataBlockEvent(obj: unknown): obj is SSEDataBlockEvent {
 export interface StreamCallbacks {
   onToolStart?: (event: SSEToolStartEvent) => void;
   onToolEnd?: (event: SSEToolEndEvent) => void;
-  onToolPending?: (event: SSEToolPendingEvent) => void;
   onDataBlock?: (event: SSEDataBlockEvent) => void;
   onTextDelta?: (event: SSETextDeltaEvent) => void;
   onDone?: (event: SSEDoneEvent) => void;
@@ -258,9 +251,6 @@ async function consumeSSE(res: Response, callbacks: StreamCallbacks): Promise<vo
         case "tool_end":
           if (isToolEndEvent(data)) callbacks.onToolEnd?.(data);
           break;
-        case "tool_pending":
-          if (isToolPendingEvent(data)) callbacks.onToolPending?.(data);
-          break;
         case "data_block":
           if (isDataBlockEvent(data)) callbacks.onDataBlock?.(data);
           break;
@@ -295,52 +285,6 @@ export async function sendMessageStream(
     method: "POST",
     headers: authHeaders(token),
     body: JSON.stringify({ conversation_id: conversationId, message }),
-    signal,
-  });
-
-  await checkAuth(res);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
-  }
-
-  await consumeSSE(res, callbacks);
-}
-
-export async function runBacktest(
-  params: {
-    instrument: string;
-    strategy: Record<string, unknown>;
-    session?: string | null;
-    period?: string | null;
-    title?: string;
-  },
-  token: string,
-): Promise<{ model_response: string; card: DataBlock }> {
-  const res = await fetch(`${API_URL}/api/backtest`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(params),
-  });
-  return handleResponse(res);
-}
-
-export async function sendContinueStream(
-  params: {
-    conversation_id: string;
-    tool_use_id: string;
-    tool_input: Record<string, unknown>;
-    model_response: string;
-    data_card: Record<string, unknown>;
-  },
-  token: string,
-  callbacks: StreamCallbacks,
-  signal?: AbortSignal,
-): Promise<void> {
-  const res = await fetch(`${API_URL}/api/chat/continue`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(params),
     signal,
   });
 

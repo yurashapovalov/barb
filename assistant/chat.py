@@ -47,87 +47,27 @@ class Assistant:
         self,
         message: str,
         history: list[dict] | None = None,
-        auto_execute: bool = False,
     ) -> Generator[dict]:
         """Process chat message, yielding SSE events.
 
         Yields dicts with "event" and "data" keys:
-            tool_start, tool_end, data_block, text_delta, tool_pending, done.
-
-        For run_backtest: yields tool_pending (with params) instead of executing.
-        Frontend shows StrategyCard, user confirms, then calls continue_stream().
-
-        Set auto_execute=True to skip the pause (for scripts/e2e).
+            tool_start, tool_end, data_block, text_delta, done.
         """
         messages = _build_messages(history or [], message)
-        yield from self._run_stream(messages, auto_execute=auto_execute)
-
-    def continue_stream(
-        self,
-        history: list[dict],
-        tool_use_id: str,
-        model_response: str,
-        data_card: dict,
-        tool_input: dict | None = None,
-    ) -> Generator[dict]:
-        """Continue after tool_pending — inject tool result and let Claude analyze.
-
-        Called after frontend runs backtest via POST /api/backtest.
-        tool_input: if user modified params in StrategyCard, pass the actual
-        input so the model sees what was really executed (not the original).
-        """
-        messages = _build_messages_from_history(history)
-
-        # Patch the pending tool_use block:
-        # 1. Fix ID so it matches tool_result (DB uses synthetic IDs)
-        # 2. Replace input with actual params if user modified them in StrategyCard
-        for msg in reversed(messages):
-            if msg["role"] == "assistant" and isinstance(msg["content"], list):
-                for block in msg["content"]:
-                    if block.get("type") == "tool_use" and block.get("name") == "run_backtest":
-                        block["id"] = tool_use_id
-                        if tool_input is not None:
-                            block["input"] = tool_input
-                        break
-                break
-
-        # Yield the data block so frontend gets it
-        yield {"event": "data_block", "data": data_card}
-
-        # Add tool result and continue
-        messages.append(
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": model_response,
-                    }
-                ],
-            }
-        )
-
-        yield from self._run_stream(messages, is_continuation=True, initial_data=[data_card])
+        yield from self._run_stream(messages)
 
     def _run_stream(
         self,
         messages: list[dict],
-        is_continuation: bool = False,
-        auto_execute: bool = False,
-        initial_data: list[dict] | None = None,
     ) -> Generator[dict]:
-        """Core streaming loop — shared by chat_stream and continue_stream."""
+        """Core streaming loop."""
         total_input_tokens = 0
         total_output_tokens = 0
         total_cache_read = 0
         total_cache_write = 0
         tool_call_log = []
-        data_blocks = list(initial_data) if initial_data else []
+        data_blocks = []
         answer = ""
-        # Pre-populate answer with placeholders for initial data blocks
-        for i in range(len(data_blocks)):
-            answer += f"\n\n{{{{data:{i}}}}}\n\n"
 
         for round_num in range(MAX_TOOL_ROUNDS):
             # Stream response with prompt caching
@@ -196,45 +136,6 @@ class Assistant:
                     "content": response.content,
                 }
             )
-
-            # Check for run_backtest — pause for user approval
-            backtest_tu = next((tu for tu in tool_uses if tu["name"] == "run_backtest"), None)
-            if backtest_tu and not is_continuation and not auto_execute:
-                # Fill in period from actual data range when AI omits it
-                if not backtest_tu["input"].get("period"):
-                    idx = self.df_minute.index
-                    start = idx[0].strftime("%Y-%m-%d")
-                    end = idx[-1].strftime("%Y-%m-%d")
-                    backtest_tu["input"]["period"] = f"{start}:{end}"
-
-                yield {
-                    "event": "tool_pending",
-                    "data": {
-                        "tool_name": "run_backtest",
-                        "tool_use_id": backtest_tu["id"],
-                        "input": backtest_tu["input"],
-                    },
-                }
-                # Yield partial done — frontend needs usage + answer so far
-                yield {
-                    "event": "done",
-                    "data": {
-                        "answer": answer,
-                        "usage": _calc_usage(
-                            total_input_tokens,
-                            total_output_tokens,
-                            total_cache_read,
-                            total_cache_write,
-                        ),
-                        "tool_calls": tool_call_log,
-                        "data": data_blocks,
-                        "pending_tool": {
-                            "tool_use_id": backtest_tu["id"],
-                            "input": backtest_tu["input"],
-                        },
-                    },
-                }
-                return  # Stop — frontend will call continue_stream
 
             # Execute tools and collect results
             tool_results = []
@@ -482,50 +383,3 @@ def _calc_usage(input_tokens: int, output_tokens: int, cache_read: int, cache_wr
         "output_cost": output_cost,
         "total_cost": input_cost + cache_read_cost + cache_write_cost + output_cost,
     }
-
-
-def _build_messages_from_history(history: list[dict]) -> list[dict]:
-    """Build Anthropic messages from DB history (for continue_stream).
-
-    Same as _build_messages but without appending a new user message.
-    The last entry should be the assistant message with tool_use.
-    """
-    messages = []
-    for msg in history:
-        role = msg.get("role", "user")
-        text = msg.get("text", "")
-        tool_calls = msg.get("tool_calls", [])
-
-        if role == "assistant" and tool_calls:
-            # Only tool_use blocks — skip answer text (same as _build_messages)
-            content = []
-            for i, tc in enumerate(tool_calls):
-                tool_id = tc.get("id", f"toolu_hist_{i}")
-                content.append(
-                    {
-                        "type": "tool_use",
-                        "id": tool_id,
-                        "name": tc["tool_name"],
-                        "input": tc.get("input", {}),
-                    }
-                )
-            messages.append({"role": "assistant", "content": content})
-
-            # Add tool results for completed tool calls (not pending ones)
-            completed = [tc for tc in tool_calls if tc.get("output") is not None]
-            if completed:
-                tool_results = []
-                for i, tc in enumerate(tool_calls):
-                    tool_id = tc.get("id", f"toolu_hist_{i}")
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_id,
-                            "content": _compact_output(tc.get("output", "done")),
-                        }
-                    )
-                messages.append({"role": "user", "content": tool_results})
-        else:
-            messages.append({"role": role, "content": text})
-
-    return messages

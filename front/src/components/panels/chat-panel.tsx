@@ -2,7 +2,6 @@ import { Conversation, ConversationContent, ConversationEmptyState, Conversation
 import { DataCard } from "@/components/ai/data-card";
 import { Loader } from "@/components/ai/loader";
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai/message";
-import { StrategyCard } from "@/components/ai/strategy-card";
 import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
 import {
   PromptInput,
@@ -24,20 +23,17 @@ interface ChatPanelProps {
   send: ChatState["send"];
   selectedData?: DataBlock | null;
   onSelectData?: (data: DataBlock) => void;
-  pendingTool?: ChatState["pendingTool"];
-  confirmBacktest?: ChatState["confirmBacktest"];
-  dismissBacktest?: ChatState["dismissBacktest"];
 }
 
-export function ChatPanel({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest, dismissBacktest }: ChatPanelProps) {
+export function ChatPanel({ header, messages, isLoading, send, selectedData, onSelectData }: ChatPanelProps) {
   return (
     <PromptInputProvider>
-      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} pendingTool={pendingTool} confirmBacktest={confirmBacktest} dismissBacktest={dismissBacktest} />
+      <ChatPanelInner header={header} messages={messages} isLoading={isLoading} send={send} selectedData={selectedData} onSelectData={onSelectData} />
     </PromptInputProvider>
   );
 }
 
-function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSelectData, pendingTool, confirmBacktest, dismissBacktest }: ChatPanelProps) {
+function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSelectData }: ChatPanelProps) {
   const { textInput } = usePromptInputController();
   const isEmpty = textInput.value.trim() === "";
 
@@ -55,7 +51,6 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
           {messages.map((msg, i) => {
             const isModel = msg.role === "model";
             const isLast = i === messages.length - 1;
-            const hasPendingTool = pendingTool?.messageId === msg.id;
             return (
               <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
                 <MessageContent>
@@ -65,14 +60,6 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
                     ) : (
                       <DataCard key={`data-${seg.index}`} data={seg.block} active={selectedData === seg.block} onClick={() => onSelectData?.(seg.block)} />
                     ),
-                  )}
-                  {hasPendingTool && confirmBacktest && (
-                    <StrategyCard
-                      input={pendingTool.input}
-                      onConfirm={confirmBacktest}
-                      onCancel={dismissBacktest ?? (() => {})}
-                      isRunning={isLoading}
-                    />
                   )}
                 </MessageContent>
                 {isModel && (

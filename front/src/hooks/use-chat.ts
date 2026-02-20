@@ -1,15 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { createConversation, getMessages, runBacktest, sendContinueStream, sendMessageStream } from "@/lib/api";
+import { createConversation, getMessages, sendMessageStream } from "@/lib/api";
 import type { DataBlock, Message } from "@/types";
-
-export interface PendingTool {
-  toolUseId: string;
-  input: Record<string, unknown>;
-  messageId: string;
-  fullText: string;
-  dataBlocks: DataBlock[];
-}
 
 interface UseChatParams {
   conversationId: string | undefined;
@@ -38,20 +30,6 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(() => !!conversationId);
   const [error, setError] = useState<string | null>(null);
-  const [pendingTool, setPendingTool] = useState<PendingTool | null>(null);
-
-  const restorePendingTool = (msgs: Message[]) => {
-    const last = [...msgs].reverse().find((m) => m.role !== "user");
-    if (last?.pending_tool) {
-      setPendingTool({
-        toolUseId: last.pending_tool.tool_use_id,
-        input: last.pending_tool.input,
-        messageId: last.id,
-        fullText: last.content,
-        dataBlocks: last.data ? [...last.data] : [],
-      });
-    }
-  };
 
   // Track current conversation ID (may change after creation)
   const convIdRef = useRef(conversationId);
@@ -75,7 +53,6 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
     const cached = messageCache.get(conversationId);
     if (cached) {
       setMessages(cached);
-      restorePendingTool(cached);
       setIsLoading(false);
       return;
     }
@@ -88,7 +65,6 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
       .then((data) => {
         if (!cancelled) {
           setMessages(data);
-          restorePendingTool(data);
           cacheSet(conversationId, data);
         }
       })
@@ -214,16 +190,6 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
             );
           }
         },
-        onToolPending(event) {
-          addAssistantMessage();
-          setPendingTool({
-            toolUseId: event.tool_use_id,
-            input: event.input,
-            messageId: assistantId,
-            fullText,
-            dataBlocks: [...dataBlocks],
-          });
-        },
         onDataBlock(event) {
           addAssistantMessage();
           if (loadingBlockIndex >= 0) {
@@ -267,12 +233,6 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
                 m.id === assistantId ? { ...m, id: event.message_id } : m,
               ),
             );
-            // Keep pendingTool.messageId in sync so confirmBacktest finds the message
-            setPendingTool((prev) =>
-              prev?.messageId === assistantId
-                ? { ...prev, messageId: event.message_id }
-                : prev,
-            );
           }
         },
         onTitleUpdate(event) {
@@ -298,108 +258,5 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
     }
   };
 
-  const confirmBacktest = async (modifiedInput: Record<string, unknown>) => {
-    if (!pendingTool || !convIdRef.current) return;
-
-    const { toolUseId, messageId, fullText: initialText, dataBlocks: initialBlocks } = pendingTool;
-    setPendingTool(null);
-    setIsLoading(true);
-    isSendingRef.current = true;
-
-    const abort = new AbortController();
-    abortRef.current = abort;
-
-    try {
-      // Run backtest directly (no LLM)
-      const bt = await runBacktest(
-        {
-          instrument,
-          strategy: (modifiedInput.strategy ?? {}) as Record<string, unknown>,
-          session: modifiedInput.session as string | undefined,
-          period: modifiedInput.period as string | undefined,
-          title: (modifiedInput.title as string) || "Backtest",
-        },
-        token,
-      );
-
-      // Continue stream — model analyzes results
-      let fullText = initialText;
-      const dataBlocks = [...initialBlocks];
-
-      await sendContinueStream(
-        {
-          conversation_id: convIdRef.current,
-          tool_use_id: toolUseId,
-          tool_input: modifiedInput,
-          model_response: bt.model_response,
-          data_card: bt.card as unknown as Record<string, unknown>,
-        },
-        token,
-        {
-          onDataBlock(event) {
-            dataBlocks.push({ ...event, status: "success" as const });
-            fullText += `\n\n{{data:${dataBlocks.length - 1}}}\n\n`;
-            const content = fullText;
-            const data = [...dataBlocks];
-            setMessages((prev) =>
-              prev.map((m) => (m.id === messageId ? { ...m, content, data } : m)),
-            );
-          },
-          onTextDelta(event) {
-            fullText += event.delta;
-            const content = fullText;
-            setMessages((prev) =>
-              prev.map((m) => (m.id === messageId ? { ...m, content } : m)),
-            );
-          },
-          onDone(event) {
-            setMessages((prev) => {
-              const updated = prev.map((m) =>
-                m.id === messageId
-                  ? {
-                      ...m,
-                      content: dataBlocks.length > 0 ? fullText : event.answer,
-                      usage: event.usage,
-                      data: dataBlocks.length > 0 ? dataBlocks : null,
-                    }
-                  : m,
-              );
-              cacheSet(convIdRef.current!, updated);
-              return updated;
-            });
-          },
-          onPersist(event) {
-            if (event.message_id) {
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === messageId ? { ...m, id: event.message_id } : m,
-                ),
-              );
-            }
-          },
-          onError(event) {
-            setError(event.error);
-            toast.error(event.error);
-          },
-        },
-        abort.signal,
-      );
-    } catch (err) {
-      if (abort.signal.aborted) return;
-      const msg = err instanceof Error ? err.message : "Failed to run backtest";
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      isSendingRef.current = false;
-      setIsLoading(false);
-      abortRef.current = null;
-    }
-  };
-
-  const dismissBacktest = () => {
-    setPendingTool(null);
-    setIsLoading(false);
-  };
-
-  return { messages, isLoading, error, send, pendingTool, confirmBacktest, dismissBacktest };
+  return { messages, isLoading, error, send };
 }
