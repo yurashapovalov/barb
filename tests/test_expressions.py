@@ -10,13 +10,15 @@ from barb.functions import FUNCTIONS
 @pytest.fixture
 def df():
     """Small DataFrame with known values for expression tests."""
-    return pd.DataFrame({
-        "open": [100.0, 102.0, 101.0, 105.0, 103.0],
-        "high": [105.0, 106.0, 104.0, 108.0, 107.0],
-        "low": [98.0, 100.0, 99.0, 103.0, 101.0],
-        "close": [103.0, 101.0, 103.0, 106.0, 104.0],
-        "volume": [1000, 1500, 1200, 2000, 800],
-    })
+    return pd.DataFrame(
+        {
+            "open": [100.0, 102.0, 101.0, 105.0, 103.0],
+            "high": [105.0, 106.0, 104.0, 108.0, 107.0],
+            "low": [98.0, 100.0, 99.0, 103.0, 101.0],
+            "close": [103.0, 101.0, 103.0, 106.0, 104.0],
+            "volume": [1000, 1500, 1200, 2000, 800],
+        }
+    )
 
 
 @pytest.fixture
@@ -30,6 +32,7 @@ def functions():
 
 
 # --- Arithmetic ---
+
 
 class TestArithmetic:
     def test_subtraction(self, df, functions):
@@ -65,6 +68,7 @@ class TestArithmetic:
 
 # --- Comparisons ---
 
+
 class TestComparisons:
     def test_greater_than(self, df, functions):
         result = evaluate("close > open", df, functions)
@@ -93,6 +97,7 @@ class TestComparisons:
 
 # --- Boolean Logic ---
 
+
 class TestBooleanLogic:
     def test_and(self, df, functions):
         result = evaluate("close > open and volume > 1000", df, functions)
@@ -110,6 +115,7 @@ class TestBooleanLogic:
 
 # --- Membership ---
 
+
 class TestMembership:
     def test_in_list(self, df, functions):
         df_with_weekday = df.copy()
@@ -119,6 +125,7 @@ class TestMembership:
 
 
 # --- Function Calls ---
+
 
 class TestFunctionCalls:
     def test_abs(self, df, functions):
@@ -151,6 +158,7 @@ class TestFunctionCalls:
 
 # --- Error Handling ---
 
+
 class TestErrors:
     def test_unknown_column(self, df, functions):
         with pytest.raises(ExpressionError, match="Unknown column 'foo'"):
@@ -171,14 +179,18 @@ class TestErrors:
 
 # --- Date Comparison ---
 
+
 class TestDateComparison:
     @pytest.fixture
     def df_with_dates(self):
         """DataFrame with datetime index for date comparison tests."""
         dates = pd.date_range("2024-03-01", periods=5, freq="D")
-        df = pd.DataFrame({
-            "close": [100.0, 101.0, 102.0, 103.0, 104.0],
-        }, index=dates)
+        df = pd.DataFrame(
+            {
+                "close": [100.0, 101.0, 102.0, 103.0, 104.0],
+            },
+            index=dates,
+        )
         df.index.name = "timestamp"
         return df
 
@@ -186,6 +198,7 @@ class TestDateComparison:
     def date_functions(self):
         """Functions including date()."""
         from barb.functions import FUNCTIONS
+
         return FUNCTIONS
 
     def test_date_greater_equal_string(self, df_with_dates, date_functions):
@@ -207,4 +220,16 @@ class TestDateComparison:
     def test_date_in_list(self, df_with_dates, date_functions):
         """date() in ['2024-03-01', '2024-03-05'] should work."""
         result = evaluate("date() in ['2024-03-01', '2024-03-05']", df_with_dates, date_functions)
+        assert list(result) == [True, False, False, False, True]
+
+    def test_date_literal_equal(self, df_with_dates, date_functions):
+        """date() == date('2024-03-03') — date literal constructor."""
+        result = evaluate("date() == date('2024-03-03')", df_with_dates, date_functions)
+        assert list(result) == [False, False, True, False, False]
+
+    def test_date_literal_in_list(self, df_with_dates, date_functions):
+        """date() in [date('2024-03-01'), date('2024-03-05')] — date literals in list."""
+        result = evaluate(
+            "date() in [date('2024-03-01'), date('2024-03-05')]", df_with_dates, date_functions
+        )
         assert list(result) == [True, False, False, False, True]

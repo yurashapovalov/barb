@@ -198,6 +198,14 @@ SCENARIOS = [
         "expect_data": True,
     },
     {
+        "name": "Date literal filtering — specific dates",
+        "messages": [
+            "покажи данные за 15 марта 2024 и 20 марта 2024 — open, high, low, close",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
         "name": "Hallucination — don't list unseen dates (long conversation)",
         "messages": [
             "last fifty sessions, between 6am and into the close — at what time is the high or low of the session typically set? show by hour",
