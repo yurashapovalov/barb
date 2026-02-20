@@ -1,5 +1,6 @@
 import { Conversation, ConversationContent, ConversationEmptyState, ConversationScrollButton } from "@/components/ai/conversation";
 import { DataCard } from "@/components/ai/data-card";
+import { Loader } from "@/components/ai/loader";
 import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai/message";
 import { StrategyCard } from "@/components/ai/strategy-card";
 import { ThumbsDownIcon, ThumbsUpIcon } from "lucide-react";
@@ -93,6 +94,16 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
               </Message>
             );
           })}
+          {isLoading && messages.length > 0 && messages[messages.length - 1].role === "user" && (
+            <Message from="assistant">
+              <MessageContent>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader size={16} />
+                  <span className="text-sm">Thinking...</span>
+                </div>
+              </MessageContent>
+            </Message>
+          )}
         </ConversationContent>
         )}
         <ConversationScrollButton />

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LoaderIcon, PlayIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 interface StrategyCardProps {
   input: Record<string, unknown>;
@@ -48,47 +49,50 @@ export function StrategyCard({ input, onConfirm, onCancel, isRunning }: Strategy
   );
 
   return (
-    <div className="my-2 w-full max-w-md rounded-lg border border-border bg-card p-4">
-      <div className="mb-3 text-sm font-medium">{title}</div>
+    <div className="my-2 w-full">
+      <div className="mb-3 text-lg font-medium tracking-tight">{title}</div>
 
-      <div className="mb-3 rounded-md bg-muted px-3 py-2 text-sm">
-        <span className="text-muted-foreground">Entry: </span>
-        {entryLabel}
-      </div>
+      <div className="mb-3 space-y-2">
+        <div className="flex items-start gap-3">
+          <span className="shrink-0 pt-2 text-sm text-muted-foreground">Entry</span>
+          <Textarea
+            className="min-h-9 resize-none text-sm"
+            value={entryLabel}
+            disabled
+            rows={1}
+          />
+        </div>
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
         {visibleFields.map(({ key, label }) => (
-          <label key={key} className="text-xs text-muted-foreground">
-            {label}
+          <div key={key} className="flex items-center gap-3">
+            <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
             <Input
-              className="mt-0.5 h-8 text-sm"
+              className="h-8 text-sm"
               value={String(strategy[key] ?? "")}
               onChange={(e) => updateStrategy(key, e.target.value)}
               disabled={isRunning}
             />
-          </label>
+          </div>
         ))}
-      </div>
 
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <label className="text-xs text-muted-foreground">
-          Session
+        <div className="flex items-center gap-3">
+          <span className="shrink-0 text-sm text-muted-foreground">Session</span>
           <Input
-            className="mt-0.5 h-8 text-sm"
+            className="h-8 text-sm"
             value={String(params.session ?? "")}
             onChange={(e) => updateParam("session", e.target.value)}
             disabled={isRunning}
           />
-        </label>
-        <label className="text-xs text-muted-foreground">
-          Period
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="shrink-0 text-sm text-muted-foreground">Period</span>
           <Input
-            className="mt-0.5 h-8 text-sm"
+            className="h-8 text-sm"
             value={String(params.period ?? "")}
             onChange={(e) => updateParam("period", e.target.value)}
             disabled={isRunning}
           />
-        </label>
+        </div>
       </div>
 
       <div className="flex gap-2">

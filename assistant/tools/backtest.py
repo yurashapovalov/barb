@@ -53,19 +53,20 @@ Common entry patterns:
 <examples>
 Example 1 — RSI oversold mean reversion:
 User: "Протестируй лонг когда RSI ниже 30, стоп 2%, тейк 3%, макс 5 дней"
-→ run_backtest(strategy={"entry": "rsi(close, 14) < 30", "direction": "long",
-    "stop_loss": "2%", "take_profit": "3%", "exit_bars": 5},
+→ run_backtest(strategy={"entry": "rsi(close, 14) < 30", "entry_label": "RSI ниже 30",
+    "direction": "long", "stop_loss": "2%", "take_profit": "3%", "exit_bars": 5},
     session="RTH", title="RSI < 30 Long")
 
 Example 2 — gap fade with target:
 User: "Шорт после гэпа вверх >50 пунктов, тейк на вчерашний клоуз, стоп 20"
-→ run_backtest(strategy={"entry": "open - prev(close) > 50", "direction": "short",
-    "exit_target": "prev(close)", "stop_loss": 20},
+→ run_backtest(strategy={"entry": "open - prev(close) > 50", "entry_label": "Гэп вверх > 50 пунктов",
+    "direction": "short", "exit_target": "prev(close)", "stop_loss": 20},
     session="RTH", period="2024", title="Gap Fade Short >50")
 
 Example 3 — trend following:
 User: "Покупка когда цена выше 200 SMA и откатилась ниже 21 EMA, стоп 1.5%"
 → run_backtest(strategy={"entry": "close > sma(close, 200) and close < ema(close, 21)",
+    "entry_label": "Цена выше SMA 200, откат ниже EMA 21",
     "direction": "long", "stop_loss": "1.5%", "take_profit": "3%", "exit_bars": 10},
     session="RTH", title="EMA Pullback in Uptrend")
 </examples>
