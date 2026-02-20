@@ -7,15 +7,17 @@ import pandas as pd
 from barb.backtest.engine import run_backtest
 from barb.backtest.metrics import BacktestResult
 from barb.backtest.strategy import Strategy
+from barb.ops import filter_period, filter_session
 
 BACKTEST_TOOL = {
     "name": "run_backtest",
     "description": """Test a trading strategy on historical data.
 
-Simulates trades bar-by-bar on daily data and returns performance metrics.
+Simulates trades bar-by-bar and returns performance metrics.
 Uses the same expression syntax as run_query for entry/exit conditions.
 
-IMPORTANT: Entry conditions are evaluated on DAILY bars. hour() and minute() always return 0 — do NOT use time-based entry conditions. For time-of-day analysis, use run_query instead.
+Default timeframe is daily. Use "from" for intraday backtests (1h, 15m, etc.).
+exit_bars and breakeven_bars count bars at the chosen timeframe.
 
 Strategy fields:
 - entry: boolean expression that triggers a trade (e.g. "rsi(close, 14) < 30")
@@ -66,7 +68,18 @@ User: "Покупка когда цена выше 200 SMA и откатилас
 → run_backtest(strategy={"entry": "close > sma(close, 200) and close < ema(close, 21)",
     "direction": "long", "stop_loss": "1.5%", "take_profit": "3%", "exit_bars": 10},
     session="RTH", title="EMA Pullback in Uptrend")
-</examples>""",
+</examples>
+
+<analysis-rules>
+After results — analyze strategy QUALITY, don't just repeat numbers:
+- Yearly stability: consistent across years, or depends on one period?
+- Exit analysis: which exit type drives profits? Are stops destroying gains?
+- Concentration: if top 3 trades dominate total PnL — flag fragility.
+- Trade count below 30 → warn about insufficient data.
+- Suggest one specific variation (tighter stop, trend filter, session filter).
+- PF > 2.0 or win rate > 70% → express skepticism, suggest stress testing.
+- 0 trades → explain why condition may be too restrictive, suggest relaxing.
+</analysis-rules>""",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -117,6 +130,10 @@ User: "Покупка когда цена выше 200 SMA и откатилас
                 },
                 "required": ["entry", "direction"],
             },
+            "from": {
+                "type": "string",
+                "description": "Bar timeframe: daily (default), 1h, 4h, 15m, 5m, etc.",
+            },
             "session": {
                 "type": "string",
                 "enum": ["RTH", "ETH"],
@@ -143,6 +160,9 @@ def run_backtest_tool(
 ) -> dict:
     """Execute backtest and return structured result.
 
+    Handles data preparation (session/period filtering) then delegates
+    to engine for simulation. Engine receives pre-filtered data + timeframe.
+
     Returns dict with:
         - model_response: compact summary for model
         - backtest: full data for UI (metrics, trades, equity_curve, strategy)
@@ -161,13 +181,18 @@ def run_backtest_tool(
         commission=strat.get("commission", 0.0),
     )
 
-    result = run_backtest(
-        df_minute,
-        strategy,
-        sessions,
-        session=input_data.get("session"),
-        period=input_data.get("period"),
-    )
+    # Data preparation — uses interpreter functions (same as query engine)
+    df = df_minute
+    session = input_data.get("session")
+    period = input_data.get("period")
+    timeframe = input_data.get("from", "daily")
+
+    if session:
+        df, _ = filter_session(df, session, sessions)
+    if period:
+        df = filter_period(df, period)
+
+    result = run_backtest(df, strategy, timeframe=timeframe)
 
     return {
         "model_response": _format_summary(result),

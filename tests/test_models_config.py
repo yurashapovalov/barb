@@ -45,26 +45,26 @@ class TestCalculateCost:
     def test_cached_tokens_reduce_input_cost(self):
         p = get_model().pricing
         result = calculate_cost(
-            input_tokens=1_000_000, output_tokens=0, cached_tokens=600_000,
+            input_tokens=1_000_000,
+            output_tokens=0,
+            cached_tokens=600_000,
         )
         # 400k fresh + 600k cached
-        expected = 400_000 / 1_000_000 * p.input + 600_000 / 1_000_000 * p.cache
+        expected = 400_000 / 1_000_000 * p.input + 600_000 / 1_000_000 * p.cache_read
         assert abs(result["input_cost"] - expected) < 1e-10
         assert result["cached_tokens"] == 600_000
 
-    def test_thinking_tokens(self):
-        p = get_model().pricing
-        result = calculate_cost(
-            input_tokens=0, output_tokens=0, thinking_tokens=1_000_000,
-        )
-        assert result["thinking_cost"] == p.thinking
-        assert result["total_cost"] == p.thinking
-
     def test_return_structure(self):
         result = calculate_cost(
-            input_tokens=100, output_tokens=200, thinking_tokens=50, cached_tokens=10,
+            input_tokens=100,
+            output_tokens=200,
+            cached_tokens=10,
         )
         assert set(result.keys()) == {
-            "input_tokens", "output_tokens", "thinking_tokens", "cached_tokens",
-            "input_cost", "output_cost", "thinking_cost", "total_cost",
+            "input_tokens",
+            "output_tokens",
+            "cached_tokens",
+            "input_cost",
+            "output_cost",
+            "total_cost",
         }

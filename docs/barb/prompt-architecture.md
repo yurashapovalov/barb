@@ -10,30 +10,36 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │ System Prompt (assistant/prompt/system.py)                         │
 │                                                                     │
-│  Identity         — "You are Barb..." (статический)                │
+│  Identity         — "You are Barb..." (2 lines)                    │
 │  <instrument>     — symbol, sessions, tick, data range             │
 │  <holidays>       — closed/early close days                        │
 │  <events>         — FOMC, NFP, OPEX + impact levels                │
-│  <behavior>       — 9 behavior rules                               │
+│  <data-flow>      — summary vs full table, when to re-query        │
+│  <response>       — how to respond (call tool, language, title)     │
+│  <limits>         — what to do when feature is missing              │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Tool Descriptions                                                  │
 │                                                                     │
 │  BARB_TOOL (assistant/tools/__init__.py):                          │
 │    Barb Script syntax (fields, execution order, notes)             │
+│    Multi-step queries (steps) — filter then compute               │
 │    <patterns>     — multi-function patterns (MACD cross, NFP)      │
-│    <examples>     — 5 query examples                               │
+│    <examples>     — 7 query examples (incl. 2 steps examples)      │
+│    <data-protocol>— summary format, "run another query" rule       │
+│    <query-rules>  — pct(), period, session, dayname rules          │
 │    Expression reference (auto-generated from barb.functions)       │
-│      15 function groups, 106 functions                             │
+│      15 function groups, 107 functions                             │
 │      compact groups (one line) + expanded groups (with description)│
 │                                                                     │
 │  BACKTEST_TOOL (assistant/tools/backtest.py):                      │
 │    Strategy fields (entry, direction, stop_loss, take_profit, etc) │
 │    3 examples (RSI, gap fade, trend following)                     │
+│    <analysis-rules> — quality analysis (stability, exits, conc.)   │
 │    Same expression syntax as run_query                             │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-System prompt — контекст и поведение. Tool description — как пользоваться `run_query` (синтаксис, паттерны, примеры, справочник функций). Знание о tool'е живёт рядом с tool'ом — Claude видит всё нужное когда решает вызвать инструмент.
+System prompt — идентичность, data flow, контекст и поведение. Tool description — как пользоваться `run_query` (синтаксис, паттерны, примеры, data protocol, справочник функций) и `run_backtest` (стратегия, примеры, правила анализа). Знание о tool'е живёт рядом с tool'ом — Claude видит всё нужное когда решает вызвать инструмент. Query-specific правила (проценты, сессии, периоды) — в tool description, не в system prompt.
 
 ---
 
@@ -46,9 +52,8 @@ System prompt — контекст и поведение. Tool description — �
 ### Identity
 
 ```
-You are Barb — a trading data analyst for {instrument} ({name}).
-You help traders explore historical market data through natural conversation.
-Users don't need to know technical indicators — you translate their questions into data.
+You are Barb — a data interface for {instrument} ({name}).
+You translate user questions into tool calls and present results.
 ```
 
 ### Context blocks
@@ -109,24 +114,23 @@ When user asks about event days → calculate dates and query those dates.
 
 ### Behavior
 
-`<behavior>` — 9 правил поведения (объединяет бывшие `<instructions>`, `<transparency>`, `<acknowledgment>`, `<data_titles>`):
+Три секции вместо одного `<behavior>` — каждая про своё:
 
-1. Data questions → run_query + comment. Knowledge questions → answer directly
-2. Percentage questions → TWO queries (total + filtered)
-3. Without session → settlement. With session → session-specific
-4. No period → all data. Keep period context from conversation
-5. Answer in user's language. Only cite numbers from tool result
-6. Don't repeat raw data — shown automatically. Use dayname()/monthname()
-7. Brief confirmation before run_query. Every call needs "title" (3-6 words)
-8. After results, explain what you measured. Mention alternative indicators. State thresholds
-9. Strategy testing → run_backtest. Always include stop_loss. After results — quality analysis:
-   a) Yearly stability — consistent or one-period dependent?
-   b) Exit analysis — which exit type drives profits?
-   c) Concentration — top 3 trades dominate PnL → flag fragility
-   d) Trade count < 30 → warn insufficient data
-   e) Suggest one variation (tighter stop, trend/session filter)
-   f) PF > 2.0 or win rate > 70% → skepticism, suggest stress test.
-   If 0 trades — explain why condition may be too restrictive
+**`<data-flow>`** — как модель получает данные:
+- Модель видит summary (row count, stats, first/last row)
+- Пользователь видит полную таблицу в UI
+- Для деталей — ещё один запрос
+
+**`<response>`** — как отвечать:
+- Data questions → call tool + comment. Knowledge → answer directly
+- Язык пользователя
+- Confirmation перед вызовом, "title" для UI-карточки
+- После результатов — methodology и alternatives
+
+**`<limits>`** — что делать когда функция недоступна:
+- Сказать что доступно, предложить альтернативу
+
+Query-specific правила (проценты, сессии, периоды) — в `<query-rules>` внутри tool description. Backtest-specific — в `<analysis-rules>` внутри backtest tool.
 
 ---
 
@@ -137,11 +141,14 @@ When user asks about event days → calculate dates and query those dates.
 Inline tool description содержит:
 1. Barb Script syntax (все поля с типами)
 2. Execution order: `session → period → from → map → where → group_by → select → sort → limit`
-3. Important notes (group_by requires column name, select supports aggregates only)
-4. Output format rules — `columns` field for projection, naming conventions
-5. `<patterns>` — multi-function patterns (MACD cross, breakout, NFP, OPEX, opening/closing range)
-6. `<examples>` — 5 query examples (filter, indicator, raw data, hidden helper, group_by)
-7. Expression reference (auto-generated)
+3. Important notes (group_by requires column name, select supports aggregates only, pct() for percentages)
+4. Multi-step queries (`steps`) — filter then compute, sub-window, breakdown
+5. Output format rules — `columns` field for projection, naming conventions
+6. `<patterns>` — multi-function patterns (MACD cross, breakout, NFP, OPEX, opening/closing range)
+7. `<examples>` — 7 query examples (filter, indicator, raw data, hidden helper, group_by, 2× steps)
+8. `<data-protocol>` — explains summary format, "run another query" for details
+9. `<query-rules>` — pct(condition), period (ALL if omitted), session (settlement default), dayname()
+9. Expression reference (auto-generated)
 
 ### Expression Reference
 
@@ -314,7 +321,7 @@ INSERT instrument в Supabase → context auto-generated → Claude знает.
 assistant/
   prompt/
     __init__.py           — exports build_system_prompt
-    system.py             — build_system_prompt() (identity, context, 9 behavior rules)
+    system.py             — build_system_prompt() (identity, context, data-flow, response, limits)
     context.py            — build_instrument/holiday/event_context(config)
   tools/
     __init__.py           — BARB_TOOL dict, run_query(), _format_summary_for_model()
@@ -331,7 +338,8 @@ prompt/system.py  ← config/market/instruments.py (get_instrument)
                                        ← config/market/events.py (get_event_types, EventImpact)
 
 tools/__init__.py ← tools/reference.py ← barb/functions (SIGNATURES + DESCRIPTIONS)
-                  ← barb/interpreter    (execute, QueryError)
+                  ← barb/interpreter    (execute)
+                  ← barb/ops            (BarbError)
 
 tools/backtest.py ← barb/backtest      (run_backtest, Strategy, BacktestMetrics)
 

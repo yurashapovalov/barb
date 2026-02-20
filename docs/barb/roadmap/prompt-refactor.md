@@ -2,347 +2,329 @@
 
 ## Проблема
 
-System prompt ~140 строк. Всё свалено в кучу: identity, контекст инструмента, правила поведения, рецепты, примеры, правила форматирования, transparency. Claude частично игнорирует инструкции потому что всё конкурирует за внимание на одном уровне приоритета.
-
-Function reference (106 функций) живёт в tool description — правильное место. Но правила поведения, примеры запросов и микро-правила (acknowledgment, data_titles, transparency) сидят в system prompt где разбавляют основное сообщение.
-
-## Что говорит Anthropic
-
-Из [официальной документации](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices):
-
-**1. "Be explicit with your instructions"**
-Claude 4.x точно следует инструкциям. Не нужно объяснять по пять раз. Одно чёткое предложение лучше пяти расплывчатых.
-
-**2. "Tune anti-laziness prompting"**
-Если в промпте были агрессивные инструкции типа "ВСЕГДА делай X" — убрать. Claude Opus 4.6 / Sonnet 4.5 перестараются и будут overtrigger-ить.
-
-**3. "Use XML tags to structure prompts"**
-Теги `<instructions>`, `<examples>` помогают Claude различать части промпта. Без них Claude может перепутать инструкции с примерами.
-
-**4. "Put longform data at the top"**
-Длинные документы вверху, запрос внизу. Улучшает качество ответов на 30%.
-
-**5. Tool description = часть промпта**
-Claude читает описание тула когда решает его вызвать. Знания о том КАК использовать тул — в tool description, не в system prompt.
-
-**6. "Add context to improve performance"**
-Объясни ПОЧЕМУ правило существует, не только ЧТО. Claude обобщает из объяснений.
-
-## Текущая структура
+Модель галлюцинирует данные которые не видит. Пример из продакшена (Feb 2026):
 
 ```
-System prompt (~140 строк):
-  Identity                    3 строки   ← ок
-  <instrument>               ~15 строк   ← ок, динамический контекст
-  <holidays>                 ~5 строк    ← ок
-  <events>                   ~10 строк   ← ок
-  <recipes>                   8 строк    ← должно быть в tool description
-  <instructions>             12 правил   ← смесь поведения и логики запросов
-  <transparency>             10 строк    ← микро-менеджмент
-  <acknowledgment>            5 строк    ← микро-менеджмент
-  <data_titles>               4 строки   ← микро-менеджмент
-  <examples>                 40 строк    ← должно быть в tool description
+Tool result (что видит модель):
+  Result: 44 rows
+  first: date=2026-01-29, time=09:45
+  last: date=2026-02-17, time=10:00
 
-Tool description (run_query):
-  Синтаксис запросов         ~20 строк   ← ок
-  Function reference        ~100 строк   ← ок, авто-генерация
+Что модель написала пользователю:
+  "Occurred: 5 times — Jan 29, Feb 3, Feb 10, Feb 13, Feb 17"
+  "Average move to session high: +127 points"
+  "Win rate: 100%"
+
+Реальность:
+  - В данных 6 уникальных дат, не 5
+  - Feb 10, Feb 13 отсутствуют в данных (Feb 4, Feb 5 есть)
+  - "+127 points" и "100% win rate" — полностью выдуманы
 ```
 
-### Что не так
+Модель получает только summary (кол-во рядов, min/max, first/last). Полная таблица уходит напрямую в UI. Модель не видит отдельные строки, но притворяется что видит.
 
-**1. Instructions мешают разные уровни.**
-"Отвечай на языке пользователя" (всегда, каждый ход) стоит рядом с "для процентов делай два запроса" (конкретный кейс при вызове тула). Claude воспринимает их с одинаковым весом.
+Другой пример: модель захардкодила даты в следующий query (`date() in ['2026-02-10', ...]`) — даты которых нет в данных. Галлюцинация стала входом для следующего tool call.
 
-**2. Примеры не на месте.**
-Примеры показывают как конструировать JSON-запрос. Это знание о тулe, а не о поведении. Они должны быть в tool description, рядом с синтаксисом.
-
-**3. Три секции для мелочей.**
-`<transparency>`, `<acknowledgment>`, `<data_titles>` — три отдельных XML-блока для минорных правил поведения. Можно сжать в 3 строки.
-
-**4. Recipes — это паттерны запросов.**
-MACD cross, breakout, NFP filter — это примеры использования тула. Они должны быть в tool description рядом с function reference.
-
-**5. Нет объяснения ПОЧЕМУ.**
-"Для процентов делай два запроса" — а почему? Потому что движок не умеет считать проценты, нужно два count(). Claude следует правилам лучше когда понимает причину.
-
-## Предлагаемая структура
-
-### System prompt (~30 строк)
-
-Только: кто ты, как себя вести, динамический контекст рынка.
+## Архитектура данных (как это работает)
 
 ```
-You are Barb — a trading data analyst for {instrument} ({name}).
-You help traders explore historical market data through natural conversation.
-Users don't need to know technical indicators — you translate their questions into data.
-
-<instrument>
-  ... (без изменений — символ, биржа, сессии, тик, период данных)
-</instrument>
-
-<holidays>
-  ... (без изменений — если есть)
-</holidays>
-
-<events>
-  ... (без изменений — если есть)
-</events>
-
-<behavior>
-1. Data questions → call run_query, then comment on results (1-2 sentences).
-2. Knowledge questions ("what is RSI?") → answer directly, no tools. 2-4 sentences, offer to explore.
-3. Answer in the same language the user writes in.
-4. Only cite numbers from tool results. Never invent values.
-5. Don't repeat raw numbers — the data table is shown to the user automatically.
-6. Before calling run_query, write a brief confirmation (10-20 words) so user sees you understood.
-7. Every run_query call must include "title" — a short label for the data card (3-6 words, same language as user).
-8. After showing results, briefly mention what you measured and any alternative approaches.
-</behavior>
+User question
+    ↓
+Model generates run_query(query={...})
+    ↓
+Engine executes → returns {summary, table, source_rows, chart}
+    ↓
+Model gets: summary only (compact text)
+UI gets: full table + chart (user sees this directly)
 ```
 
-**Что изменилось:**
-- `<instructions>` сократились с 12 правил до 8 — логика запросов ушла в tool description
-- `<transparency>`, `<acknowledgment>`, `<data_titles>` схлопнулись в правила 6, 7, 8
-- `<recipes>` переехали в tool description
-- `<examples>` переехали в tool description
-- Было ~140 строк → стало ~30 строк + динамические блоки контекста
+### Что модель видит в tool result
 
-### Tool description (run_query)
-
-Вся информация о запросах: синтаксис, правила, паттерны, примеры, function reference.
-
+**Table result (N rows):**
 ```
-Execute a Barb Script query against market data.
-
-<syntax>
-Query — плоский JSON-объект, все поля опциональные:
-- session: сессия (RTH, ETH). Без неё — settlement данные.
-- from: "1m", "5m", "15m", "30m", "1h", "daily", "weekly" (по умолчанию: "1m")
-- period: "2024", "2024-03", "2024-01:2024-06", "last_year"
-- map: {"col": "expression"} — вычислить колонки
-- where: "expression" — фильтр строк
-- group_by: "column" или ["col1", "col2"] — только имя колонки, не выражение
-- select: только агрегатные функции: count(), sum(), mean(), min(), max(),
-          std(), median(), percentile(), correlation(), last()
-- sort: "column desc" или "column asc"
-- limit: число
-
-Порядок выполнения: session → period → from → map → where → group_by → select → sort → limit
-</syntax>
-
-<rules>
-- group_by принимает ИМЯ КОЛОНКИ. Создай колонку в map, потом группируй.
-- Без period → ВСЕ доступные данные. Не придумывай период по умолчанию.
-- Сохраняй период из контекста разговора (если пользователь сказал "2024" — используй в продолжении).
-- Для процентов: два запроса (общий count + отфильтрованный count).
-  Движок не умеет проценты — считай вручную из двух чисел.
-- Без session → settlement данные. С session → данные конкретной сессии.
-- Используй dayname()/monthname() для читаемого вывода, не dayofweek()/month().
-- Используй встроенные функции (rsi, atr, macd, crossover) — не считай вручную.
-- Если пользователь спрашивает о празднике → скажи что рынок был закрыт и почему.
-</rules>
-
-<patterns>
-Частые мультифункциональные паттерны:
-  MACD cross      → crossover(macd(close,12,26), macd_signal(close,12,26,9))
-  breakout up     → close > rolling_max(high, 20)
-  breakdown       → close < rolling_min(low, 20)
-  NFP days        → dayofweek() == 4 and day() <= 7
-  OPEX            → dayofweek() == 4 and day() >= 15 and day() <= 21
-  opening range   → первые 30-60 минут RTH сессии
-  closing range   → последние 60 минут RTH сессии
-</patterns>
-
-<examples>
-Пример 1 — простой фильтр:
-"Покажи дни когда рынок упал на 2.5%+ в 2024"
-→ {"from":"daily","period":"2024",
-   "map":{"chg":"change_pct(close,1)"}, "where":"chg <= -2.5"}
-  title: "Падения >2.5%"
-
-Пример 2 — индикатор без периода (все данные):
-"Когда рынок был в перепроданности?"
-→ {"from":"daily",
-   "map":{"rsi":"rsi(close,14)"}, "where":"rsi < 30"}
-  title: "Перепроданность"
-
-Пример 3 — group_by (колонка в map, потом группировка):
-"Средний рейндж по дням недели за 2024"
-→ {"from":"daily","period":"2024",
-   "map":{"r":"range()","dow":"dayname()"}, "group_by":"dow", "select":"mean(r)"}
-  title: "Рейндж по дням"
-
-Пример 4 — фильтр по событию:
-"Средний рейндж в дни NFP?"
-→ {"from":"daily","period":"2024",
-   "map":{"r":"range()","dow":"dayofweek()","d":"day()"},
-   "where":"dow == 4 and d <= 7", "select":"mean(r)"}
-  title: "Рейндж NFP"
-
-Пример 5 — follow-up (сохраняй период):
-"Средний ATR за 2024?"  →  {"from":"daily","period":"2024",...}
-"А за 2023?"            →  {"from":"daily","period":"2023",...}
-</examples>
-
-{function_reference}
+Result: 44 rows
+  col_name: min=X, max=Y, mean=Z
+  first: date=2026-01-29, time=09:45
+  last: date=2026-02-17, time=10:00
 ```
+Модель НЕ видит 44 строк. Только агрегаты + first/last.
 
-## Почему это лучше
+**Scalar result:**
+```
+Result: 21 (from 21 rows)
+```
+Полный результат — одно число.
 
-### 1. Разделение ответственности
+**Grouped result:**
+```
+Result: 5 groups by dow
+  min: dow=Friday, mean_r=180.5
+  max: dow=Monday, mean_r=245.3
+```
+Модель видит количество групп + min/max строку. Все группы показаны в UI.
 
-| | System prompt | Tool description |
-|---|---|---|
-| **Назначение** | Кто ты, как себя вести | Что умеешь, как этим пользоваться |
-| **Меняется** | Для каждого инструмента | Никогда (статично) |
-| **Claude читает** | Всегда, каждый ход | Когда решает вызвать тул |
-| **Размер** | Маленький (~30 строк + контекст) | Может быть большим (справочник) |
+**Backtest result:**
+```
+Backtest: 53 trades | Win Rate 49.1% | PF 1.32 | ...
+Avg win: +171.2 | Avg loss: -124.6 | ...
+By year: 2008 +140.9 (16) | 2010 +4.4 (3) | ...
+Exits: stop 26 (...) | take_profit 24 (...)
+Top 3 trades: +1606.6 pts (147.8% of total PnL)
+```
+Полный breakdown — backtest summary содержит всё для анализа.
 
-### 2. Распределение внимания
+### Корень проблемы
 
-**Сейчас:** Claude видит 140 строк system prompt + tool description каждый ход. Большая часть — синтаксис запросов и примеры, которые нужны только при вызове run_query.
+1. **Модель не знает что не видит таблицу.** Нигде в промпте не сказано: "ты получаешь summary, пользователь видит полную таблицу".
+2. **Роль "analyst" провоцирует.** Аналитик делает выводы. Модель должна быть интерфейсом.
+3. **Запретительные правила не работают.** "Never invent values" — модель не считает что "определить уникальные даты из 44 рядов" это "invent".
+4. **Правильное поведение не показано примером.** Нет примера "получил N rows → нужны детали → group_by".
 
-**После:** Claude видит ~30 строк поведения + контекст каждый ход. Детали запросов загружаются в внимание только когда Claude собирается вызвать run_query. Меньше шума = лучше следует инструкциям.
+## Текущий промпт — полная анатомия
 
-### 3. Масштабируется на несколько тулов
-
-Когда добавим `backtest`, `risk_analysis`, `scan` — у каждого будет своё описание со своими примерами и правилами. System prompt останется на ~30 строках. Без рефакторинга system prompt вырастет до 300+ строк.
-
-### 4. Prompt caching не ломается
-
-System prompt кешируется (первый блок, статичен между ходами). Tool definitions тоже кешируются (не меняются между ходами). Перенос контента между ними не влияет на кеширование — оба в кешированном префиксе.
-
-## Влияние на токены
-
-| | Сейчас | После |
-|---|---|---|
-| System prompt | ~1,200 токенов | ~400 токенов + контекст |
-| Tool description | ~1,500 токенов | ~2,300 токенов |
-| **Итого** | ~2,700 токенов | ~2,700 токенов |
-
-Общее количество токенов примерно одинаковое. Разница в том ГДЕ они находятся, что влияет на распределение внимания Claude.
-
-## Связь с display columns
-
-Рефакторинг промпта — возможность научить модель правильно работать с отображением результатов. Сейчас модель не знает о формате вывода (см. `docs/barb/roadmap/display-columns.md`).
-
-### Что модель должна знать о выводе
-
-В секцию `<rules>` tool description нужно добавить:
-
-1. **Автоколонки** — `date` (и `time` для intraday) генерируются автоматически. Не надо маппить `date()` для отображения.
-2. **OHLCV** — `open`, `high`, `low`, `close`, `volume` всегда включаются в результат. Не надо маппить их.
-3. **Порядок** — колонки выводятся: date, time, group_keys, OHLCV, volume, map-колонки.
-4. **Имена map-колонок** — давать на языке пользователя, короткие и понятные.
-5. **Контекстная полезность** — если вопрос общий ("покажи торговые дни"), добавь через map что-то полезное (change%, range) — не голые OHLCV.
-
-### Будущее: поле `display`
-
-Если промптовых правил недостаточно (модель всё равно дублирует колонки или показывает лишнее), следующий шаг — поле `display` в запросе, которое даёт модели явный контроль над отображением. Это отдельная задача, но промпт-рефакторинг закладывает фундамент.
-
-## План реализации
-
-### Файлы
-
-| Файл | Что делаем |
-|------|-----------|
-| `assistant/prompt/system.py` | Переписать `build_system_prompt()` — убрать recipes, examples, transparency, acknowledgment, data_titles. Оставить identity + контекст + `<behavior>` |
-| `assistant/tools/__init__.py` | Расширить tool description — добавить `<rules>`, `<patterns>`, `<examples>`, правила про автоколонки |
-| `assistant/tools/reference.py` | Без изменений (function reference остаётся) |
-| `assistant/prompt/context.py` | Без изменений (instrument/holidays/events остаются) |
-| `docs/barb/prompt-architecture.md` | Обновить документацию |
-| `tests/test_prompt.py` | Обновить тесты |
-
-### Шаг 1: System prompt (`system.py`)
-
-**Убираем** из system prompt (переезжают в tool description):
-- `<recipes>` (строки 43-53) → `<patterns>` в tool description
-- `<examples>` (строки 99-138) → `<examples>` в tool description
-- Из `<instructions>`: правила 3, 4, 5, 9, 10, 12 (логика запросов) → `<rules>` в tool description
-
-**Убираем** из system prompt (сжимаем в `<behavior>`):
-- `<transparency>` (строки 70-82) → правило 8 в `<behavior>`
-- `<acknowledgment>` (строки 84-90) → правило 6 в `<behavior>`
-- `<data_titles>` (строки 92-97) → правило 7 в `<behavior>`
-
-**Оставляем** в system prompt:
-- Identity (строки 37-39) — без изменений
-- `<instrument>`, `<holidays>`, `<events>` — без изменений (динамический контекст)
-- `<instructions>` → переименовать в `<behavior>`, оставить правила 1, 2, 6, 7, 8 (поведение)
-
-**Новый system prompt** (~30 строк + контекст):
+### 1. System prompt (`assistant/prompt/system.py`)
 
 ```python
-f"""\
 You are Barb — a trading data analyst for {instrument} ({config["name"]}).
 You help traders explore historical market data through natural conversation.
 Users don't need to know technical indicators — you translate their questions into data.
 
-{context_section}
+<instrument>...</instrument>    # ~15 строк, динамический
+<holidays>...</holidays>        # ~5 строк, если есть
+<events>...</events>            # ~10 строк, если есть
 
 <behavior>
-1. Data questions → call run_query, then comment on results (1-2 sentences).
-2. Knowledge questions ("what is RSI?") → answer directly, no tools. 2-4 sentences, offer to explore.
-3. Answer in the same language the user writes in.
-4. Only cite numbers from tool results. Never invent values.
-5. Don't repeat raw numbers — the data table is shown to the user automatically.
-6. Before calling run_query, write a brief confirmation (10-20 words) so user sees you understood.
-7. Every run_query call must include "title" — a short label for the data card (3-6 words, same language as user).
-8. After showing results, briefly mention what you measured and any alternative approaches.
-</behavior>"""
+1. Data questions → call run_query, comment on results (1-2 sentences).
+   Knowledge questions → answer directly, 2-4 sentences.
+2. Percentage questions → TWO queries (total count + filtered count), calculate %.
+3. Without session → settlement data. With session → session-specific.
+4. No period specified → use ALL data. Keep period context from conversation.
+5. Answer in user's language. Only cite numbers from tool result — never invent values.
+6. Don't repeat raw data — it's shown to user automatically.
+   Use dayname()/monthname() for readability.
+7. Before calling run_query, write a brief confirmation (10-20 words).
+   Every call MUST include "title" (3-6 words, user's language).
+8. After results, briefly explain what you measured.
+   If multiple indicators fit, mention the alternative.
+   If you chose a threshold, state it.
+9. Strategy testing → call run_backtest. Always include stop_loss.
+   After results — analyze strategy QUALITY:
+   a) Yearly stability   b) Exit analysis   c) Concentration
+   d) Trade count < 30 = warn   e) Suggest variation   f) PF > 2 = skepticism
+10. Know your limits. If request needs features Barb doesn't have — say so.
+    Don't attempt workarounds that produce misleading results.
+</behavior>
 ```
 
-### Шаг 2: Tool description (`tools/__init__.py`)
+**Проблемы:**
+- Роль "data analyst" → модель думает что может анализировать данные в голове
+- `<behavior>` — 10 правил разного характера (протокол, целостность, бэктест, честность)
+- Правило 5 слабое: "never invent values" не объясняет ЧТО модель не видит
+- Нет объяснения архитектуры: summary vs full table
+- Правило 9 (бэктест анализ) далеко от backtest tool
 
-Расширить описание `BARB_TOOL["description"]`. Текущий контент (синтаксис + IMPORTANT) остаётся, добавляем:
+### 2. Tool description — run_query (`assistant/tools/__init__.py`)
 
-```
-<rules>
-- group_by requires COLUMN NAME. Create in map first, then group.
-- Without period → ALL available data. Don't invent defaults. Keep period context from conversation.
-- Percentage questions → TWO queries (total count + filtered count). Engine can't calculate percentages.
-- Without session → settlement data. With session → session-specific.
-- Use dayname()/monthname() for readable output, not dayofweek()/month().
-- Use built-in functions (rsi, atr, macd, crossover) — don't calculate manually.
-- If user asks about a holiday → tell them market was closed and why.
+~90 строк:
+- Описание полей query: session, from, period, map, where, group_by, select, sort, limit
+- Output format: columns array
+- `<patterns>` — рецепты (MACD cross, breakout, NFP, OPEX)
+- `<examples>` — 5 примеров вызовов
+- Expression Reference (auto-generated) — все 106 функций
 
-Output format:
-- Results always include: date column (auto-generated), OHLCV, volume, then map columns.
-- Do NOT map date() for display — the date column is created automatically.
-- Do NOT map open/high/low/close/volume — they are always included.
-- Name map columns in the user's language, short and clear.
-- For general questions ("show trading days"), add useful map columns (change_pct, range) — not just bare OHLCV.
-</rules>
+**Проблемы:**
+- Примеры показывают **как вызвать** tool, но не **как интерпретировать** результат
+- Нет объяснения что модель видит в ответе (summary vs table)
+- Нет примера "получил N rows → нужны детали → ещё один query"
 
-<patterns>
-Common multi-function patterns:
-  MACD cross      → crossover(macd(close,12,26), macd_signal(close,12,26,9))
-  breakout up     → close > rolling_max(high, 20)
-  breakdown       → close < rolling_min(low, 20)
-  NFP days        → dayofweek() == 4 and day() <= 7
-  OPEX            → dayofweek() == 4 and day() >= 15 and day() <= 21
-  opening range   → first 30-60 min of RTH session
-  closing range   → last 60 min of RTH session
-</patterns>
+### 3. Tool description — run_backtest (`assistant/tools/backtest.py`)
+
+~60 строк:
+- Описание полей strategy
+- `<patterns>` — entry patterns
+- `<examples>` — 3 примера вызовов
+
+**Проблемы:**
+- Анализ бэктеста (rule 9) живёт в system prompt, далеко от tool
+- Нет примера интерпретации результата
+
+### 4. Размер и кеширование
+
+| Компонент | Токены (≈) | Кешируется? |
+|---|---|---|
+| System prompt | ~400 | Да (prompt caching) |
+| run_query description | ~2,500 | Да |
+| run_backtest description | ~800 | Да |
+| Expression reference | ~1,200 | Да |
+| **Итого кешированного** | **~4,900** | |
+
+Всё в кешированном префиксе. Перемещение контента между system prompt и tool descriptions не влияет на стоимость.
+
+## Принципы рефакторинга
+
+Из Anthropic docs (`docs/antropic/prompt-engineering/`):
+
+### Role prompting (`role.md`)
+Роль определяет поведение сильнее чем правила. "Data analyst" → модель анализирует в голове. "Data interface" → модель передаёт данные.
+
+### XML tags (`use-xml-tags.md`)
+Разделить concerns по тегам. Каждый блок — одна тема. Prevent mixing up instructions with examples or context.
+
+### Examples (`use-examples.md`)
+3-5 примеров правильного поведения > 10 запретительных правил. "Examples reduce misinterpretation of instructions."
+
+### Chain prompts (`chain-complex-prompts.md`)
+Каждый subtask gets full attention. Не пытаться всё за один вызов. Применимо: каждый tool call = одна задача.
+
+## Предложение
+
+### System prompt — роль + архитектура + примеры поведения
+
+```python
+f"""\
+You are Barb — a data interface for {instrument} ({config["name"]}).
+You translate user questions into tool calls and present results.
+All facts must come from tool results — you never compute, estimate, or list data yourself.
+
+<data-flow>
+When you call run_query or run_backtest:
+- You receive a SUMMARY: row count, column stats (min/max/mean), first and last row.
+- The user sees the FULL TABLE directly in the UI.
+- You do NOT see individual rows. Never list dates, prices, or values that aren't in the summary.
+- If you need specific values or breakdowns — make another query (group_by, select, where).
+</data-flow>
+
+{context_section}
+
+<response-rules>
+1. Data questions → call tool, then comment on results (1-2 sentences). Knowledge questions → answer directly.
+2. Answer in user's language.
+3. Before calling a tool, write a brief confirmation (10-20 words). Every call needs "title" (3-6 words, user's language).
+4. Don't repeat data — it's shown to the user. Comment on what the data means.
+5. After results, briefly explain what you measured and mention alternatives if relevant.
+6. Know your limits. If Barb can't do it — say so. Don't attempt workarounds that mislead.
+</response-rules>
 
 <examples>
-... (5 примеров, переносятся из system.py без изменений)
-</examples>
+Good — scalar result, cite directly:
+  Summary: "Result: 21 (from 21 rows)"
+  Response: "В марте 2025 был 21 торговый день."
 
-{_EXPRESSIONS_MD}
+Good — table result, summarize what you know:
+  Summary: "Result: 12 rows\\n  first: date=2024-01-18\\n  last: date=2024-11-15"
+  Response: "RSI опускался ниже 30 в 12 дней за 2024 год."
+
+Good — need details from table, make another query:
+  Summary: "Result: 44 rows\\n  first: date=2026-01-29\\n  last: date=2026-02-17"
+  → Instead of listing dates, call run_query with group_by to get the breakdown.
+
+Bad — hallucinating data not in summary:
+  Summary: "Result: 44 rows\\n  first: date=2026-01-29"
+  Response: "This occurred on Jan 29, Feb 3, Feb 10..." ← you don't see these dates
+
+Good — backtest result, analyze quality:
+  Summary: "Backtest: 53 trades | Win Rate 49.1% | PF 1.32 | ..."
+  Response: analyze yearly stability, exit breakdown, concentration risk (all numbers are in the summary).
+</examples>"""
 ```
 
-### Шаг 3: Обновить документацию и тесты
+### run_query tool description — добавить data protocol
 
-- `docs/barb/prompt-architecture.md` — обновить описание структуры
-- `tests/test_prompt.py` — обновить assertions (секции изменились)
+К текущему описанию добавить секцию:
 
-### Проверка
+```
+<data-protocol>
+Your tool result is a SUMMARY — not the full data:
+- Table: row count + column stats + first/last row. You don't see individual rows.
+- Scalar: the number directly.
+- Grouped: group count + min/max group. All groups shown to user.
 
-1. `pytest tests/test_prompt.py` — тесты промпта
-2. `pytest tests/` — все тесты
-3. Деплой → задать тестовые вопросы:
-   - "сколько торговых дней в январе 2026" → нет дублирования `date`/`дата`, map-колонки на русском
-   - "покажи RSI ниже 30" → правильный запрос, acknowledgment перед вызовом
-   - "средний gap по дням недели за 2024" → group_by с колонкой из map
-   - "что такое ATR?" → ответ без tool call
+The user sees the complete table/chart in the UI.
+If you need dates, values, or breakdowns not in the summary — run another query.
+Never hardcode values you haven't received (e.g. date() in ['...'] with guessed dates).
+</data-protocol>
+```
+
+### run_query tool description — перенести правила из behavior
+
+```
+<query-rules>
+- Percentage questions → TWO queries (total count + filtered count). Engine can't compute percentages.
+- Without period → ALL data. Keep period context from conversation.
+- Without session → settlement data. With session → session-specific.
+- Use dayname()/monthname() for readable output.
+</query-rules>
+```
+
+### run_backtest tool description — перенести анализ из behavior 9
+
+```
+<analysis-rules>
+After results, analyze strategy QUALITY — don't just repeat numbers:
+- Yearly stability: consistent or depends on one period?
+- Exit analysis: which exit type drives profits? Stops destroying gains?
+- Concentration: top 3 trades dominate PnL → flag fragility.
+- Trade count below 30 → warn about insufficient data.
+- Suggest one specific variation (tighter stop, trend filter, session filter).
+- PF > 2.0 or win rate > 70% → express skepticism, suggest stress testing.
+- 0 trades → explain why, suggest relaxing conditions.
+</analysis-rules>
+```
+
+## Что переносить куда
+
+| Текущее место | Правило | Новое место |
+|---|---|---|
+| behavior 1 | Data → tool, knowledge → answer | system prompt (response-rules 1) |
+| behavior 2 | Percentages → TWO queries | run_query description (query-rules) |
+| behavior 3 | Session semantics | run_query description (query-rules) |
+| behavior 4 | No period → all data | run_query description (query-rules) |
+| behavior 5 | Never invent values | system prompt (data-flow) + examples |
+| behavior 6 | Don't repeat raw data | system prompt (response-rules 4) |
+| behavior 7 | Brief confirmation + title | system prompt (response-rules 3) |
+| behavior 8 | Explain methodology | system prompt (response-rules 5) |
+| behavior 9 | Backtest analysis quality | run_backtest description (analysis-rules) |
+| behavior 10 | Know your limits | system prompt (response-rules 6) |
+
+## Ключевые изменения
+
+### 1. Роль: "data analyst" → "data interface"
+Модель не анализирует данные в голове. Она переводит вопросы в queries и передаёт результаты.
+
+### 2. `<data-flow>` — новая секция
+Объясняет архитектуру: что модель видит (summary), что пользователь видит (table). Это корень проблемы галлюцинаций.
+
+### 3. Примеры правильного/неправильного поведения
+Вместо "never invent values" — показать конкретно: вот summary, вот правильный ответ, вот галлюцинация. 3-5 примеров (Anthropic docs: "examples reduce misinterpretation").
+
+### 4. Правила рядом с инструментом
+Backtest анализ — в backtest tool. Query правила — в query tool. System prompt — только поведение.
+
+### 5. `<behavior>` 10 правил → `<response-rules>` 6 правил
+4 правила переехали в tool descriptions. Оставшиеся 6 — про поведение, не про инструменты.
+
+## Верификация
+
+1. `pytest tests/test_prompt.py` — обновить assertions
+2. e2e: прогнать все 19 сценариев, сравнить с baseline (results/e2e/)
+3. Добавить проблемный сценарий в e2e_scenarios.py (session high/low timing)
+4. Проверить: модель НЕ перечисляет данные которых нет в summary
+5. Проверить: модель делает доп. query когда нужны детали
+
+## Риски
+
+- Может сломать хорошее поведение — нужно A/B через e2e
+- "Data interface" может быть слишком passive — модель перестанет предлагать follow-up вопросы
+- Общий размер токенов не меняется, но распределение внимания — да
+- Примеры поведения увеличивают system prompt на ~15 строк
+
+## Файлы
+
+```
+assistant/prompt/system.py       — переписать: роль + data-flow + examples + response-rules
+assistant/tools/__init__.py      — добавить: data-protocol + query-rules
+assistant/tools/backtest.py      — добавить: analysis-rules
+scripts/e2e_scenarios.py         — добавить проблемный сценарий
+docs/barb/prompt-architecture.md — обновить
+tests/test_prompt.py             — обновить
+```

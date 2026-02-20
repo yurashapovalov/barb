@@ -39,6 +39,7 @@ DISPLAY_GROUPS = [
             "std",
             "median",
             "count",
+            "pct",
             "percentile",
             "correlation",
             "last",
@@ -159,6 +160,11 @@ DISPLAY_GROUPS = [
         ["obv", "vwap_day", "ad_line", "volume_ratio", "volume_sma"],
         True,
     ),
+    (
+        "Session",
+        ["session_high", "session_low", "session_open", "session_close"],
+        True,
+    ),
 ]
 
 
@@ -177,7 +183,7 @@ def build_function_reference() -> str:
     sections.append("")
     sections.append("## Operators")
     sections.append("")
-    sections.append("Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`")
+    sections.append("Arithmetic: `+`, `-`, `*`, `/`, `//`, `%`, `**`")
     sections.append("Comparison: `>`, `<`, `>=`, `<=`, `==`, `!=`")
     sections.append("Boolean: `and`, `or`, `not`")
     sections.append("Membership: `dayofweek() in [0, 1, 4]`")

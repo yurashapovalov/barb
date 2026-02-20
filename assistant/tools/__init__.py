@@ -1,7 +1,8 @@
 """Single Barb Script tool for Anthropic Claude."""
 
 from assistant.tools.reference import build_function_reference
-from barb.interpreter import QueryError, execute
+from barb.interpreter import execute
+from barb.ops import BarbError
 
 _EXPRESSIONS_MD = build_function_reference()
 
@@ -13,7 +14,7 @@ BARB_TOOL = {
 Query is a flat JSON object with these fields (all optional):
 - session: trading session name (RTH, ETH). Omit for settlement data. Use with any timeframe including daily.
 - from: "1m", "5m", "15m", "30m", "1h", "daily", "weekly" — timeframe (default: "1m")
-- period: "2024", "2024-03", "2024-01:2024-06", "2023:", "last_year" — date filter
+- period: "2024", "2024-03", "2024-01:2024-06", "2023:", "last_year", "last_50" — date filter. last_N = last N trading days.
 - map: {{"col_name": "expression"}} — compute derived columns
 - where: "expression" — filter rows (boolean expression)
 - group_by: "column" or ["col1", "col2"] — group rows (must be column name, not expression)
@@ -25,9 +26,21 @@ Execution order is FIXED: session → period → from → map → where → grou
 
 IMPORTANT:
 - group_by requires a COLUMN NAME, not an expression. Create column in map first.
-- select only supports aggregate functions: count(), sum(col), mean(col), min(col), max(col), std(col), median(col), percentile(col, p), correlation(col1, col2), last(col)
-- For percentage calculations, run TWO queries: total count and filtered count.
+- select with group_by supports: count(), sum(col), mean(col), min(col), max(col), std(col), median(col), pct(condition).
+- select without group_by: any expression including last(col), percentile(col, p), correlation(col1, col2).
+- pct(condition) returns fraction (0.0-1.0): pct(gap_pct() > 0) → 0.58.
 - hour() and minute() return 0 on daily/weekly/monthly data (no time component). Use intraday timeframe (1m, 5m, 1h) for time-of-day analysis.
+
+Multi-step queries — use "steps" instead of flat fields when filtering must happen before computation:
+  {{"steps": [
+    {{"from": "daily", "map": {{"rsi": "rsi(close,14)"}}, "where": "rsi < 30"}},
+    {{"map": {{"ret": "change_pct(close,5)"}}, "select": "mean(ret)"}}
+  ]}}
+Step 1 sets scope (session/period/from) + map/where/group_by/select. Steps 2+: map/where/group_by/select on previous output.
+Last step also has sort/limit. "columns" goes at query level (outside steps).
+Each step's group_by output becomes the input for the next step — use this for nested aggregation:
+  count per (date, hour) → then count per hour = "how many sessions per hour" (not bars).
+Don't use steps for simple queries — flat fields work fine.
 
 Output format:
 - Use "columns" to control which columns appear in the result table. Order in array = order in output.
@@ -46,8 +59,8 @@ Common multi-function patterns:
   OPEX            → 3rd Friday: dayofweek() == 4 and day() >= 15 and day() <= 21
   opening range   → first 30-60 min of RTH session
   closing range   → last 60 min of RTH session
-  session high/low by hour → from:"1h", map: hr=hour(), is_high=high==rolling_max(high,23), where: is_high, group_by: hr, select: count()
-                             (23 = hours in ETH session; use rolling_min for lows)
+  session high by hour → where: high == session_high(), map: hr=hour(), group_by: hr, select: count()
+  move from session low → session_close() - session_low()
 </patterns>
 
 <examples>
@@ -86,7 +99,89 @@ User: Average range by day of week for 2024?
 → run_query(query={{"from":"daily","period":"2024",
   "map":{{"r":"range()","dow":"dayname()"}}, "group_by":"dow", "select":"mean(r)"}},
   title="Range by day")
+
+Example 6 — steps (nested aggregation, count sessions not bars):
+User: At what hour does the session high typically occur?
+→ run_query(query={{"steps":[
+  {{"session":"ETH","from":"1m","period":"last_50",
+    "map":{{"hr":"hour()","is_high":"high == session_high()"}},"where":"is_high"}},
+  {{"map":{{"dt":"date()"}},"group_by":["dt","hr"],"select":"count()"}},
+  {{"group_by":"hr","select":"count()","sort":"count desc"}}
+  ]}},
+  title="Session high by hour")
+
+Example 7 — steps (breakdown of filtered data):
+User: RSI below 40 — which months?
+→ run_query(query={{"steps":[
+  {{"from":"daily","period":"2024","map":{{"rsi":"rsi(close,14)"}},"where":"rsi < 40"}},
+  {{"map":{{"mo":"monthname()"}},"group_by":"mo","select":"count()"}}
+  ]}},
+  title="Oversold by month")
+
+Example 8 — time range spanning two hours:
+User: On which days did the session low occur between 9:45 and 10:15?
+→ run_query(query={{"session":"ETH","from":"1m","period":"last_50",
+  "map":{{"hr":"hour()","min":"minute()","is_low":"low == session_low()",
+  "time_ok":"(hr == 9 and min >= 45) or (hr == 10 and min <= 15)"}},
+  "where":"is_low and time_ok",
+  "columns":["date","time"]}},
+  title="Session low 9:45-10:15")
+
+Example 9 — bucketing into 10-minute intervals:
+User: Group session highs/lows by 10-minute intervals
+→ run_query(query={{"steps":[
+  {{"session":"ETH","from":"1m","period":"last_22",
+    "map":{{"hr":"hour()","min":"minute()","is_high":"high == session_high()","is_low":"low == session_low()"}},
+    "where":"is_high or is_low"}},
+  {{"map":{{"dt":"date()","type":"if(is_high, 'high', 'low')","interval":"hr * 100 + (min // 10) * 10"}},
+    "group_by":["dt","interval","type"],"select":"count()"}},
+  {{"group_by":["interval","type"],"select":"count()","sort":"count desc"}}
+  ]}},
+  title="High/low by 10-min interval")
 </examples>
+
+<data-protocol>
+Tool results are SUMMARIES — you don't see the full table:
+- Table: row count, column stats (min/max/mean), first/last row only.
+- Scalar: the computed value.
+- Grouped: group count, min/max group row. All groups shown to user in UI.
+The user sees the complete table directly. If you need dates, values, or breakdowns — run another query.
+Never hardcode values you haven't received (e.g. date() in [...] with guessed dates).
+</data-protocol>
+
+<commentary-examples>
+How to comment on results — cite ONLY what's in the summary:
+
+<example>
+Summary: "Result: 27 groups by hr  min: hr=(7, 'high'), count=1  max: hr=(9, 'high'), count=8"
+Good: "9am leads with 8 session highs, 7am had just 1."
+Bad: "Lows are scattered throughout the day" — both min/max show type='high', you can't see lows distribution from this summary.
+</example>
+
+<example>
+Summary: "Result: 44 rows  first: date=2024-01-29  last: date=2024-11-15"
+Good: "44 instances between January and November 2024."
+Bad: "This occurred on Jan 29, Feb 3, Feb 10..." — you only see first and last row, not the ones in between.
+</example>
+
+<example>
+Summary: "Result: 0 rows"
+Good: "No session highs occurred in that time window."
+Bad: Any fabricated dates, counts, or values.
+</example>
+
+<example>
+Summary: "Result: 21 (from 252 rows)"
+Good: "21 trading days out of 252."
+</example>
+</commentary-examples>
+
+<query-rules>
+- Percentage questions → use pct(condition) in select. One query, not two.
+- Without period → ALL data. Don't add a default period. Keep period from conversation context.
+- Without session → settlement data. With session (RTH/ETH) → session-specific. Works on any timeframe.
+- Use dayname()/monthname() for readable output.
+</query-rules>
 
 {_EXPRESSIONS_MD}
 """,
@@ -110,6 +205,24 @@ User: Average range by day of week for 2024?
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Columns to show in result. Order matters.",
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "session": {"type": "string"},
+                                "from": {"type": "string"},
+                                "period": {"type": "string"},
+                                "map": {"type": "object"},
+                                "where": {"type": "string"},
+                                "group_by": {},
+                                "select": {},
+                                "sort": {"type": "string"},
+                                "limit": {"type": "integer", "minimum": 1},
+                            },
+                        },
+                        "description": "Multi-step query. Use instead of flat fields.",
                     },
                 },
             },
@@ -144,7 +257,7 @@ def run_query(query: dict, df, sessions: dict) -> dict:
             "chart": result.get("chart"),
         }
 
-    except QueryError as e:
+    except BarbError as e:
         return {"model_response": f"Error: {e}", "table": None, "source_rows": None, "chart": None}
     except Exception as e:
         msg = f"Error: {type(e).__name__}: {e}"

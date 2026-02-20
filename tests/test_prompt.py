@@ -1,13 +1,14 @@
 """Tests for system prompt and tool description.
 
-System prompt: identity, instrument context, behavioral rules.
-Tool description: query syntax, patterns, examples, function reference.
+System prompt: identity, data-flow, instrument context, response rules, limits.
+Tool description: query syntax, patterns, examples, data protocol, function reference.
 """
 
 import pytest
 
 from assistant.prompt import build_system_prompt
 from assistant.tools import BARB_TOOL
+from assistant.tools.backtest import BACKTEST_TOOL
 
 
 class TestBuildSystemPrompt:
@@ -30,28 +31,22 @@ class TestBuildSystemPrompt:
         prompt = build_system_prompt("NQ")
         assert "2008" in prompt
 
-    def test_data_shown_separately(self):
-        prompt = build_system_prompt("NQ")
-        assert "shown to user automatically" in prompt.lower()
-
     def test_has_structured_sections(self):
         prompt = build_system_prompt("NQ")
         assert "<instrument>" in prompt
-        assert "<behavior>" in prompt
+        assert "<data-flow>" in prompt
+        assert "<response>" in prompt
+        assert "<limits>" in prompt
 
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError, match="Unknown instrument"):
             build_system_prompt("BOGUS")
 
-    def test_has_percentage_instructions(self):
+    def test_has_data_flow_explanation(self):
+        """System prompt explains that model sees summary, user sees full table."""
         prompt = build_system_prompt("NQ")
-        assert "percentage" in prompt.lower()
-        assert "TWO queries" in prompt
-
-    def test_has_session_instruction(self):
-        prompt = build_system_prompt("NQ")
-        assert "without session" in prompt.lower()
-        assert "settlement" in prompt.lower()
+        assert "summary" in prompt.lower()
+        assert "user sees the full table" in prompt.lower()
 
     def test_has_barb_script_fields(self):
         """Tool description has query field names."""
@@ -91,3 +86,37 @@ class TestToolDescription:
         assert '"columns"' in desc
         assert "Available columns:" in desc or "Available:" in desc
         assert "date" in desc
+
+    def test_tool_has_data_protocol(self):
+        """run_query description contains <data-protocol> explaining summaries."""
+        desc = BARB_TOOL["description"]
+        assert "<data-protocol>" in desc
+        assert "SUMMARIES" in desc
+        assert "run another query" in desc.lower()
+
+    def test_tool_has_query_rules(self):
+        """run_query description contains percentage/session/period rules."""
+        desc = BARB_TOOL["description"]
+        assert "<query-rules>" in desc
+        assert "pct(" in desc
+        assert "settlement" in desc.lower()
+        assert "ALL data" in desc
+
+    def test_tool_has_steps(self):
+        """run_query description and schema contain steps for multi-step queries."""
+        desc = BARB_TOOL["description"]
+        assert "steps" in desc
+        assert "Step 1" in desc
+        schema = BARB_TOOL["input_schema"]
+        assert "steps" in schema["properties"]["query"]["properties"]
+
+
+class TestBacktestTool:
+    def test_backtest_has_analysis_rules(self):
+        """Backtest description contains <analysis-rules> for strategy quality."""
+        desc = BACKTEST_TOOL["description"]
+        assert "<analysis-rules>" in desc
+        assert "Yearly stability" in desc
+        assert "Exit analysis" in desc
+        assert "Concentration" in desc
+        assert "skepticism" in desc

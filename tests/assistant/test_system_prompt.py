@@ -45,11 +45,10 @@ class TestBuildSystemPrompt:
 
     def test_behavior_rules(self):
         result = build_system_prompt("NQ")
-        assert "<behavior>" in result
-        assert "settlement" in result
-        assert "session" in result.lower()
+        assert "<response>" in result
+        assert "<data-flow>" in result
         assert "alternative" in result
-        assert "title" in result
+        assert "title" in result.lower()
         assert "confirmation" in result
 
     def test_unknown_instrument_raises(self):
@@ -63,7 +62,7 @@ class TestBuildSystemPrompt:
             "<instrument>",
             "<holidays>",
             "<events>",
-            "<behavior>",
+            "<response>",
         ]:
             assert result.count(tag) == 1, f"Duplicate tag: {tag}"
 

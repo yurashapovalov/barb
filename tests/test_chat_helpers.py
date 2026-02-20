@@ -41,11 +41,11 @@ class TestBuildMessages:
             },
         ]
         messages = _build_messages(history, "follow up")
-        # user + assistant (with tool_use) + user (tool_result) + user
+        # user + assistant (tool_use only, no text) + user (tool_result) + user
         assert len(messages) == 4
         assert messages[1]["role"] == "assistant"
-        assert messages[1]["content"][0]["type"] == "text"
-        assert messages[1]["content"][1]["type"] == "tool_use"
+        # Text is stripped from history to prevent hallucinations
+        assert messages[1]["content"][0]["type"] == "tool_use"
         assert messages[2]["role"] == "user"
         assert messages[2]["content"][0]["type"] == "tool_result"
 

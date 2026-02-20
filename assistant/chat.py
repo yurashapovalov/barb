@@ -11,12 +11,13 @@ import pandas as pd
 from assistant.prompt import build_system_prompt
 from assistant.tools import BARB_TOOL, run_query
 from assistant.tools.backtest import BACKTEST_TOOL, run_backtest_tool
-from barb.interpreter import _INTRADAY_TIMEFRAMES as _INTRADAY
+from barb.ops import INTRADAY_TIMEFRAMES as _INTRADAY
+from config.models import DEFAULT_MODEL, get_model
 
 log = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 5
-MODEL = "claude-sonnet-4-5-20250929"
+MODEL = DEFAULT_MODEL
 
 
 class Assistant:
@@ -318,8 +319,11 @@ class Assistant:
     def _exec_query(self, input_data: dict, title: str) -> tuple[str, dict | None]:
         """Execute run_query tool. Returns (model_response, data_card)."""
         query = input_data.get("query", {})
-        timeframe = query.get("from", "daily")
-        session_name = query.get("session")
+
+        # For steps queries, from/session are inside steps[0]
+        step0 = query["steps"][0] if query.get("steps") else query
+        timeframe = step0.get("from", "daily")
+        session_name = step0.get("session")
 
         if timeframe in _INTRADAY:
             df = self.df_minute
@@ -403,10 +407,10 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
         tool_calls = msg.get("tool_calls", [])
 
         if role == "assistant" and tool_calls:
-            # Assistant message with tool calls
+            # Assistant message — only tool_use blocks, skip verbose answer text.
+            # Model's previous commentary pollutes context and causes hallucinations.
             content = []
             for i, tc in enumerate(tool_calls):
-                # Generate consistent ID for both tool_use and tool_result
                 tool_id = tc.get("id", f"toolu_hist_{i}")
                 content.append(
                     {
@@ -416,8 +420,6 @@ def _build_messages(history: list[dict], message: str) -> list[dict]:
                         "input": tc.get("input", {}),
                     }
                 )
-            if text:
-                content.insert(0, {"type": "text", "text": text})
             messages.append({"role": "assistant", "content": content})
 
             # Tool results (user message)
@@ -451,14 +453,12 @@ def _compact_output(*_args) -> str:
 
 
 def _calc_usage(input_tokens: int, output_tokens: int, cache_read: int, cache_write: int) -> dict:
-    """Calculate token costs.
-
-    Sonnet 4.5: $3/MTok input, $0.30/MTok cached read, $3.75/MTok cache write, $15/MTok output.
-    """
-    input_cost = input_tokens * 3.0 / 1_000_000
-    cache_read_cost = cache_read * 0.30 / 1_000_000
-    cache_write_cost = cache_write * 3.75 / 1_000_000
-    output_cost = output_tokens * 15.0 / 1_000_000
+    """Calculate token costs from model config."""
+    p = get_model(MODEL).pricing
+    input_cost = input_tokens * p.input / 1_000_000
+    cache_read_cost = cache_read * p.cache_read / 1_000_000
+    cache_write_cost = cache_write * p.cache_write / 1_000_000
+    output_cost = output_tokens * p.output / 1_000_000
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -485,6 +485,7 @@ def _build_messages_from_history(history: list[dict]) -> list[dict]:
         tool_calls = msg.get("tool_calls", [])
 
         if role == "assistant" and tool_calls:
+            # Only tool_use blocks — skip answer text (same as _build_messages)
             content = []
             for i, tc in enumerate(tool_calls):
                 tool_id = tc.get("id", f"toolu_hist_{i}")
@@ -496,8 +497,6 @@ def _build_messages_from_history(history: list[dict]) -> list[dict]:
                         "input": tc.get("input", {}),
                     }
                 )
-            if text:
-                content.insert(0, {"type": "text", "text": text})
             messages.append({"role": "assistant", "content": content})
 
             # Add tool results for completed tool calls (not pending ones)
