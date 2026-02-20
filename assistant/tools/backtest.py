@@ -46,29 +46,38 @@ Common entry patterns:
   inside day                  → high < prev(high) and low > prev(low)
   NR7 (narrowest range 7d)    → range() == rolling_min(range(), 7)
   above moving average        → close > sma(close, 200)
-  oversold bounce             → rsi(close, 14) < 30
   breakout                    → close > rolling_max(high, 20)
 </patterns>
 
 <examples>
-Example 1 — RSI oversold mean reversion:
-User: "Протестируй лонг когда RSI ниже 30, стоп 2%, тейк 3%, макс 5 дней"
-→ run_backtest(strategy={"entry": "rsi(close, 14) < 30", "entry_label": "RSI ниже 30",
+Example 1 — full spec, execute:
+User: Test long when RSI below 30, stop 2%, target 3%, max 5 days
+→ run_backtest(strategy={"entry": "rsi(close, 14) < 30", "entry_label": "RSI < 30",
     "direction": "long", "stop_loss": "2%", "take_profit": "3%", "exit_bars": 5},
     session="RTH", title="RSI < 30 Long")
 
-Example 2 — gap fade with target:
-User: "Шорт после гэпа вверх >50 пунктов, тейк на вчерашний клоуз, стоп 20"
-→ run_backtest(strategy={"entry": "open - prev(close) > 50", "entry_label": "Гэп вверх > 50 пунктов",
-    "direction": "short", "exit_target": "prev(close)", "stop_loss": 20},
-    session="RTH", period="2024", title="Gap Fade Short >50")
+Example 2 — clear entry, no exit params:
+User: Test buying after 3 consecutive red days
+→ Entry is clear, but I need exit parameters: stop loss, take profit, max holding period?
 
-Example 3 — trend following:
-User: "Покупка когда цена выше 200 SMA и откатилась ниже 21 EMA, стоп 1.5%"
-→ run_backtest(strategy={"entry": "close > sma(close, 200) and close < ema(close, 21)",
-    "entry_label": "Цена выше SMA 200, откат ниже EMA 21",
-    "direction": "long", "stop_loss": "1.5%", "take_profit": "3%", "exit_bars": 10},
-    session="RTH", title="EMA Pullback in Uptrend")
+Example 3 — vague entry concept:
+User: Test buying when the market is oversold
+→ "Oversold" can be defined in different ways — RSI below 30? 20? A different indicator? And what stop/target?
+
+Example 4 — partially specified:
+User: Buy after big drops, stop 2%
+→ What counts as a "big drop"? Daily decline over 2%? 3%? Multiple red days? And I need a target or max holding period.
+
+Example 5 — informal but complete:
+User: Buy the 20-day high breakout, trailing stop 2%, max 10 days, RTH
+→ run_backtest(strategy={"entry": "close > rolling_max(high, 20)",
+    "entry_label": "20-day high breakout",
+    "direction": "long", "trailing_stop": "2%", "exit_bars": 10},
+    session="RTH", title="20-Day Breakout Long")
+
+Example 6 — unsupported feature:
+User: Test with scaling out 50% at +1% and hold rest to +2%
+→ The backtester supports one exit per trade. I can test with a single target at +1% or +2% — which one?
 </examples>
 
 <analysis-rules>
