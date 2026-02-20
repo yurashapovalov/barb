@@ -198,6 +198,7 @@ Bad: "В 18:00 зафиксировано 7 минимумов" — hr=18 is the
 - Percentage questions → use pct(condition) in select. One query, not two.
 - Without period → ALL data. Don't add a default period. Keep period from conversation context.
 - Without session → settlement data. With session (RTH/ETH) → session-specific. Works on any timeframe.
+- User asks "which days/dates" from intraday data → use steps: filter in step 1, group_by date in step 2. One query, not two.
 </query-rules>
 
 {_EXPRESSIONS_MD}
