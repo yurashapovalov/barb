@@ -195,6 +195,13 @@ class Assistant:
             # Check for run_backtest — pause for user approval
             backtest_tu = next((tu for tu in tool_uses if tu["name"] == "run_backtest"), None)
             if backtest_tu and not is_continuation and not auto_execute:
+                # Fill in period from actual data range when AI omits it
+                if not backtest_tu["input"].get("period"):
+                    idx = self.df_minute.index
+                    start = idx[0].strftime("%Y-%m-%d")
+                    end = idx[-1].strftime("%Y-%m-%d")
+                    backtest_tu["input"]["period"] = f"{start}:{end}"
+
                 yield {
                     "event": "tool_pending",
                     "data": {

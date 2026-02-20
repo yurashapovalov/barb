@@ -1,6 +1,16 @@
 import { useState } from "react";
-import { LoaderIcon, PlayIcon } from "lucide-react";
+import { ChevronDownIcon, LoaderIcon, PlayIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DividedList } from "@/components/ui/divided-list";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -25,6 +35,60 @@ const STRATEGY_FIELDS = [
 
 // Fields shown even if not in the original input
 const ALWAYS_VISIBLE = new Set(["direction", "stop_loss", "take_profit"]);
+
+function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center py-2">
+      <div className="w-[35%] shrink-0 text-sm">{label}</div>
+      <div className="w-[65%]">{children}</div>
+    </div>
+  );
+}
+
+function SelectField({
+  value,
+  options,
+  onChange,
+  disabled,
+  allowClear,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  allowClear?: boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        disabled={disabled}
+        className="border-input flex h-9 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none disabled:pointer-events-none disabled:opacity-50"
+      >
+        <span className={value ? "" : "text-muted-foreground"}>
+          {value || "—"}
+        </span>
+        <ChevronDownIcon className="text-muted-foreground size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {options.map((opt) => (
+            <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        {allowClear && value && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onChange("")}>
+              Clear
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function StrategyCard({ input, onConfirm, onCancel, isRunning }: StrategyCardProps) {
   const [params, setParams] = useState(() => structuredClone(input));
@@ -52,48 +116,60 @@ export function StrategyCard({ input, onConfirm, onCancel, isRunning }: Strategy
     <div className="my-2 w-full">
       <div className="mb-3 text-lg font-medium tracking-tight">{title}</div>
 
-      <div className="mb-3 space-y-2">
-        <div className="flex items-start gap-3">
-          <span className="w-28 shrink-0 pt-2 text-sm text-muted-foreground">Entry</span>
+      <DividedList className="mb-3">
+        <FieldRow label="Entry">
           <Textarea
             className="min-h-9 resize-none text-sm"
             value={entryLabel}
             disabled
             rows={1}
           />
-        </div>
+        </FieldRow>
 
         {visibleFields.map(({ key, label }) => (
-          <div key={key} className="flex items-center gap-3">
-            <span className="w-28 shrink-0 text-sm text-muted-foreground">{label}</span>
-            <Input
-              className="h-9 text-sm"
-              value={String(strategy[key] ?? "")}
-              onChange={(e) => updateStrategy(key, e.target.value)}
-              disabled={isRunning}
-            />
-          </div>
+          <FieldRow key={key} label={label}>
+            {key === "direction" ? (
+              <SelectField
+                value={String(strategy[key] ?? "")}
+                options={[
+                  { value: "long", label: "long" },
+                  { value: "short", label: "short" },
+                ]}
+                onChange={(v) => updateStrategy(key, v)}
+                disabled={isRunning}
+              />
+            ) : (
+              <Input
+                className="h-9 text-sm"
+                value={String(strategy[key] ?? "")}
+                onChange={(e) => updateStrategy(key, e.target.value)}
+                disabled={isRunning}
+              />
+            )}
+          </FieldRow>
         ))}
 
-        <div className="flex items-center gap-3">
-          <span className="w-28 shrink-0 text-sm text-muted-foreground">Session</span>
-          <Input
-            className="h-9 text-sm"
+        <FieldRow label="Session">
+          <SelectField
             value={String(params.session ?? "")}
-            onChange={(e) => updateParam("session", e.target.value)}
+            options={[
+              { value: "RTH", label: "RTH" },
+              { value: "ETH", label: "ETH" },
+            ]}
+            onChange={(v) => updateParam("session", v)}
             disabled={isRunning}
+            allowClear
           />
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="w-28 shrink-0 text-sm text-muted-foreground">Period</span>
+        </FieldRow>
+        <FieldRow label="Period">
           <Input
             className="h-9 text-sm"
             value={String(params.period ?? "")}
             onChange={(e) => updateParam("period", e.target.value)}
             disabled={isRunning}
           />
-        </div>
-      </div>
+        </FieldRow>
+      </DividedList>
 
       <div className="flex gap-2">
         <Button className="flex-1" size="sm" onClick={() => onConfirm(params)} disabled={isRunning}>
