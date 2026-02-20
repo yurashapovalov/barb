@@ -26,6 +26,37 @@ from barb.validation import validate_expressions
 # Standard OHLC column order
 _OHLC_COLUMNS = ["open", "high", "low", "close"]
 
+# Auto-format time functions for display.
+# Filtering uses numbers; output shows readable labels.
+_DAY_NAMES = {
+    0: "Monday",
+    1: "Tuesday",
+    2: "Wednesday",
+    3: "Thursday",
+    4: "Friday",
+    5: "Saturday",
+    6: "Sunday",
+}
+_MONTH_NAMES = {
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December",
+}
+DISPLAY_FORMATS = {
+    "dayofweek()": lambda v: v.map(_DAY_NAMES),
+    "month()": lambda v: v.map(_MONTH_NAMES),
+    "hour()": lambda v: v.map(lambda h: f"{int(h):02d}:00-{int(h):02d}:59"),
+}
+
 # Columns to preserve original precision (source data, not calculated)
 _PRESERVE_PRECISION = {"open", "high", "low", "close", "volume"}
 
@@ -526,7 +557,16 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
         if col not in ordered:
             ordered.append(col)
 
-    return df[ordered]
+    df = df[ordered]
+
+    # Auto-format time columns for display (dayofweek→Monday, month→January, hour→09:00-09:59)
+    map_exprs = query.get("map", {})
+    for col_name, expr in map_exprs.items():
+        fmt = DISPLAY_FORMATS.get(expr)
+        if fmt and col_name in df.columns:
+            df[col_name] = fmt(df[col_name])
+
+    return df
 
 
 def _serialize_records(records: list[dict]) -> list[dict]:
@@ -595,7 +635,6 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
         is_grouped = query.get("group_by") is not None
 
         summary = _build_summary_for_table(
-            result,
             table,
             query,
             summary_columns,
@@ -660,18 +699,16 @@ def _build_response(result, query, rows, session, timeframe, warnings, source_df
 
 
 def _build_summary_for_table(
-    df: pd.DataFrame,
     table: list,
     query: dict,
     summary_columns: set,
     map_columns: list,
     is_grouped: bool,
 ) -> dict:
-    """Build summary metadata for table results."""
+    """Build summary metadata from the formatted table (what the user sees)."""
     summary = {
         "type": "grouped" if is_grouped else "table",
         "rows": len(table),
-        "columns": list(df.columns),
     }
 
     if is_grouped:
@@ -679,21 +716,24 @@ def _build_summary_for_table(
         summary["by"] = group_by if isinstance(group_by, str) else group_by[0]
 
     # Stats for numeric columns in summary_columns
-    stats = {}
-    for col in summary_columns:
-        if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
-            stats[col] = {
-                "min": float(df[col].min()) if not df[col].isna().all() else None,
-                "max": float(df[col].max()) if not df[col].isna().all() else None,
-                "mean": float(df[col].mean()) if not df[col].isna().all() else None,
-            }
-    if stats:
-        summary["stats"] = stats
+    if table:
+        stats = {}
+        for col in summary_columns:
+            if col not in table[0]:
+                continue
+            vals = [r[col] for r in table if isinstance(r.get(col), (int, float))]
+            if vals:
+                stats[col] = {
+                    "min": min(vals),
+                    "max": max(vals),
+                    "mean": round(sum(vals) / len(vals), 2),
+                }
+        if stats:
+            summary["stats"] = stats
 
     # First/last rows with date/time + map columns
     if table:
         first_last_cols = ["date", "time"] + map_columns
-        # Filter to columns that exist in serialized output
         first_last_cols = [c for c in first_last_cols if c in table[0]]
 
         first_row = {k: table[0][k] for k in first_last_cols if k in table[0]}
@@ -706,13 +746,17 @@ def _build_summary_for_table(
 
     # For grouped: find min/max rows by first aggregate column
     if is_grouped and table:
-        agg_cols = [c for c in df.columns if c not in (query.get("group_by") or [])]
+        group_by = query.get("group_by")
+        group_keys = [group_by] if isinstance(group_by, str) else (group_by or [])
+        agg_cols = [c for c in table[0] if c not in group_keys]
         if agg_cols:
             agg_col = agg_cols[0]
-            if pd.api.types.is_numeric_dtype(df[agg_col]):
-                min_idx = df[agg_col].idxmin()
-                max_idx = df[agg_col].idxmax()
-                summary["min_row"] = {summary["by"]: min_idx, agg_col: float(df[agg_col].min())}
-                summary["max_row"] = {summary["by"]: max_idx, agg_col: float(df[agg_col].max())}
+            numeric_rows = [r for r in table if isinstance(r.get(agg_col), (int, float))]
+            if numeric_rows:
+                min_row = min(numeric_rows, key=lambda r: r[agg_col])
+                max_row = max(numeric_rows, key=lambda r: r[agg_col])
+                keys = group_keys + [agg_col]
+                summary["min_row"] = {k: min_row[k] for k in keys if k in min_row}
+                summary["max_row"] = {k: max_row[k] for k in keys if k in max_row}
 
     return summary

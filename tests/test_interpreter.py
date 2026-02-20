@@ -376,8 +376,10 @@ class TestSteps:
             sessions,
         )
         # All hours in result should be between 10 and 14
+        # hour() auto-formats to "HH:00-HH:59"
         for row in result["table"]:
-            assert 10 <= row["hr"] <= 14
+            hour = int(row["hr"][:2])
+            assert 10 <= hour <= 14
 
     def test_breakdown(self, nq_minute_slice, sessions):
         """Step 1 filters, step 2 groups for breakdown."""
@@ -390,7 +392,7 @@ class TestSteps:
                         "map": {"rsi": "rsi(close,14)"},
                         "where": "rsi < 40",
                     },
-                    {"map": {"mo": "monthname()"}, "group_by": "mo", "select": "count()"},
+                    {"map": {"mo": "month()"}, "group_by": "mo", "select": "count()"},
                 ],
             },
             nq_minute_slice,
@@ -437,7 +439,7 @@ class TestSteps:
                     {
                         "from": "daily",
                         "period": "2024",
-                        "map": {"dow": "dayname()"},
+                        "map": {"dow": "dayofweek()"},
                         "group_by": "dow",
                         "select": "count()",
                     },
@@ -474,9 +476,11 @@ class TestSteps:
             sessions,
         )
         # Should have hours 9-16 (RTH range)
+        # hour() auto-formats to "HH:00-HH:59"
         assert len(result["table"]) > 0
         for row in result["table"]:
-            assert 9 <= row["hr"] <= 16
+            hour = int(row["hr"][:2])
+            assert 9 <= hour <= 16
 
 
 # --- Sort + Limit ---
@@ -598,7 +602,7 @@ class TestColumns:
             {
                 "from": "daily",
                 "period": "2024-01",
-                "map": {"день": "dayname()"},
+                "map": {"день": "dayofweek()"},
                 "columns": ["date", "день"],
             },
             nq_minute_slice,
@@ -675,7 +679,7 @@ class TestColumns:
             {
                 "from": "daily",
                 "period": "2024-01",
-                "map": {"dow": "dayname()", "r": "range()"},
+                "map": {"dow": "dayofweek()", "r": "range()"},
                 "group_by": "dow",
                 "select": "mean(r)",
                 "columns": ["date", "close"],

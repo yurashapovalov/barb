@@ -291,5 +291,5 @@ def _suggest_column_name(expr: str) -> str:
     if not match:
         return "col"
     func = match.group(1)
-    suggestions = {"dayofweek": "weekday", "dayname": "day_name", "monthname": "month_name"}
+    suggestions = {"dayofweek": "weekday", "day_of_month": "dom", "month": "mo"}
     return suggestions.get(func, func)

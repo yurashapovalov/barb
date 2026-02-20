@@ -189,6 +189,15 @@ SCENARIOS = [
         "expect_data": False,
     },
     {
+        "name": "Precision — hour grouping should not imply exact time",
+        "instrument": "CL",
+        "messages": [
+            "последние пятьдесят сессий, с 6 утра до закрытия — в какое время обычно устанавливается максимум или минимум сессии? показать по часам",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
         "name": "Hallucination — don't list unseen dates (long conversation)",
         "messages": [
             "last fifty sessions, between 6am and into the close — at what time is the high or low of the session typically set? show by hour",

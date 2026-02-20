@@ -55,11 +55,11 @@ Common multi-function patterns:
   MACD cross      → crossover(macd(close,12,26), macd_signal(close,12,26,9))
   breakout up     → close > rolling_max(high, 20)
   breakdown       → close < rolling_min(low, 20)
-  NFP days        → dayofweek() == 4 and day() <= 7
-  OPEX            → 3rd Friday: dayofweek() == 4 and day() >= 15 and day() <= 21
+  NFP days        → dayofweek() == 4 and day_of_month() <= 7
+  OPEX            → 3rd Friday: dayofweek() == 4 and day_of_month() >= 15 and day_of_month() <= 21
   opening range   → first 30-60 min of RTH session
   closing range   → last 60 min of RTH session
-  session high by hour → where: high == session_high(), map: hr=hour(), group_by: hr, select: count()
+  when session high set → where: high == session_high(), group_by: date, select: max(hr) → then group_by: max_hr, select: count()
   move from session low → session_close() - session_low()
 </patterns>
 
@@ -97,16 +97,16 @@ User: Golden cross dates in 2024?
 Example 5 — group_by (no columns needed):
 User: Average range by day of week for 2024?
 → run_query(query={{"from":"daily","period":"2024",
-  "map":{{"r":"range()","dow":"dayname()"}}, "group_by":"dow", "select":"mean(r)"}},
+  "map":{{"r":"range()","dow":"dayofweek()"}}, "group_by":"dow", "select":"mean(r)"}},
   title="Range by day")
 
-Example 6 — steps (nested aggregation, count sessions not bars):
+Example 6 — steps (one hour per session, not all bars that touched the high):
 User: At what hour does the session high typically occur?
 → run_query(query={{"steps":[
   {{"session":"ETH","from":"1m","period":"last_50",
     "map":{{"hr":"hour()","is_high":"high == session_high()"}},"where":"is_high"}},
-  {{"map":{{"dt":"date()"}},"group_by":["dt","hr"],"select":"count()"}},
-  {{"group_by":"hr","select":"count()","sort":"count desc"}}
+  {{"map":{{"dt":"date()"}},"group_by":"dt","select":"max(hr)"}},
+  {{"group_by":"max_hr","select":"count()","sort":"count desc"}}
   ]}},
   title="Session high by hour")
 
@@ -114,7 +114,7 @@ Example 7 — steps (breakdown of filtered data):
 User: RSI below 40 — which months?
 → run_query(query={{"steps":[
   {{"from":"daily","period":"2024","map":{{"rsi":"rsi(close,14)"}},"where":"rsi < 40"}},
-  {{"map":{{"mo":"monthname()"}},"group_by":"mo","select":"count()"}}
+  {{"map":{{"mo":"month()"}},"group_by":"mo","select":"count()"}}
   ]}},
   title="Oversold by month")
 
@@ -174,13 +174,18 @@ Bad: Any fabricated dates, counts, or values.
 Summary: "Result: 21 (from 252 rows)"
 Good: "21 trading days out of 252."
 </example>
+
+<example>
+Summary: "Result: 27 groups by hr  max: hr=18, count=7"
+Good: "Час 18 лидирует с 7 минимумами сессии."
+Bad: "В 18:00 зафиксировано 7 минимумов" — hr=18 is the whole hour (18:00-18:59), not a specific minute.
+</example>
 </commentary-examples>
 
 <query-rules>
 - Percentage questions → use pct(condition) in select. One query, not two.
 - Without period → ALL data. Don't add a default period. Keep period from conversation context.
 - Without session → settlement data. With session (RTH/ETH) → session-specific. Works on any timeframe.
-- Use dayname()/monthname() for readable output.
 </query-rules>
 
 {_EXPRESSIONS_MD}
