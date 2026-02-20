@@ -139,6 +139,17 @@ User: Group session highs/lows by 10-minute intervals
   {{"group_by":["interval","type"],"select":"count()","sort":"count desc"}}
   ]}},
   title="High/low by 10-min interval")
+
+Example 10 — find specific days from intraday data (filter → group by date):
+User: Which days in 2024 had price within 1% of the weekly open during the first hour?
+→ run_query(query={{"steps":[
+  {{"session":"ETH","from":"1m","period":"2024",
+    "map":{{"wk_open":"valuewhen(dayofweek() == 6 and hour() == 18, open, 0)",
+    "diff_pct":"abs(close - wk_open) / wk_open * 100","hr":"hour()"}},
+    "where":"hr < 19 and diff_pct <= 1"}},
+  {{"map":{{"dt":"date()"}},"group_by":"dt","select":["count()","min(diff_pct)"],"sort":"min_diff_pct asc"}}
+  ]}},
+  title="Days near weekly open, first hour")
 </examples>
 
 <data-protocol>
