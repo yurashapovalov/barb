@@ -198,6 +198,14 @@ SCENARIOS = [
         "expect_data": True,
     },
     {
+        "name": "Friday near week open — multi-step filtering",
+        "messages": [
+            "from 2020 find all Fridays which was near week open price around 5-6 am",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+    },
+    {
         "name": "Date literal filtering — specific dates",
         "messages": [
             "покажи данные за 15 марта 2024 и 20 марта 2024 — open, high, low, close",
