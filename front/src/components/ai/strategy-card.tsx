@@ -1,6 +1,11 @@
-import { useState } from "react";
-import { ChevronDownIcon, LoaderIcon, PlayIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+import { format, parse } from "date-fns";
+import type { DateRange } from "react-day-picker";
+import { CalendarIcon, ChevronDownIcon, LoaderIcon, PlayIcon, XIcon } from "lucide-react";
+import { useOHLC } from "@/hooks/use-ohlc";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { DividedList } from "@/components/ui/divided-list";
 import {
   DropdownMenu,
@@ -12,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 
 interface StrategyCardProps {
@@ -90,6 +96,101 @@ function SelectField({
   );
 }
 
+/** Parse "YYYY-MM-DD:YYYY-MM-DD" into DateRange, or undefined if invalid */
+function parsePeriod(period: string): DateRange | undefined {
+  if (!period) return undefined;
+  const parts = period.split(":");
+  if (parts.length !== 2) return undefined;
+  const from = parse(parts[0], "yyyy-MM-dd", new Date());
+  const to = parse(parts[1], "yyyy-MM-dd", new Date());
+  if (isNaN(from.getTime()) || isNaN(to.getTime())) return undefined;
+  return { from, to };
+}
+
+function formatPeriodLabel(range: DateRange | undefined): string {
+  if (!range?.from) return "";
+  const from = format(range.from, "MMM d, yyyy");
+  if (!range.to) return from;
+  return `${from} — ${format(range.to, "MMM d, yyyy")}`;
+}
+
+function DateRangePicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const { symbol } = useParams<{ symbol: string }>();
+  const { data: ohlc } = useOHLC(symbol);
+  const [open, setOpen] = useState(false);
+  const range = useMemo(() => parsePeriod(value), [value]);
+
+  // Restrict calendar to actual data range
+  const dataRange = useMemo(() => {
+    if (!ohlc || ohlc.length === 0) return undefined;
+    return {
+      from: new Date(ohlc[0].time),
+      to: new Date(ohlc[ohlc.length - 1].time),
+    };
+  }, [ohlc]);
+
+  const handleSelect = (selected: DateRange | undefined) => {
+    if (!selected?.from) {
+      onChange("");
+      return;
+    }
+    const from = format(selected.from, "yyyy-MM-dd");
+    const to = selected.to ? format(selected.to, "yyyy-MM-dd") : from;
+    onChange(`${from}:${to}`);
+  };
+
+  const label = formatPeriodLabel(range);
+
+  return (
+    <div className="flex gap-1">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            disabled={disabled}
+            className="border-input flex h-9 w-full items-center gap-2 rounded-md border bg-background px-3 text-sm outline-none disabled:pointer-events-none disabled:opacity-50"
+          >
+            <CalendarIcon className="text-muted-foreground size-4 shrink-0" />
+            <span className={label ? "truncate" : "text-muted-foreground"}>
+              {label || "All data"}
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="range"
+            selected={range}
+            onSelect={handleSelect}
+            defaultMonth={range?.from}
+            numberOfMonths={2}
+            disabled={dataRange
+              ? { before: dataRange.from, after: dataRange.to }
+              : { after: new Date() }
+            }
+          />
+        </PopoverContent>
+      </Popover>
+      {value && !disabled && (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="shrink-0 self-center"
+          onClick={() => onChange("")}
+        >
+          <XIcon />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function StrategyCard({ input, onConfirm, onCancel, isRunning }: StrategyCardProps) {
   const [params, setParams] = useState(() => structuredClone(input));
 
@@ -162,10 +263,9 @@ export function StrategyCard({ input, onConfirm, onCancel, isRunning }: Strategy
           />
         </FieldRow>
         <FieldRow label="Period">
-          <Input
-            className="h-9 text-sm"
+          <DateRangePicker
             value={String(params.period ?? "")}
-            onChange={(e) => updateParam("period", e.target.value)}
+            onChange={(v) => updateParam("period", v)}
             disabled={isRunning}
           />
         </FieldRow>
