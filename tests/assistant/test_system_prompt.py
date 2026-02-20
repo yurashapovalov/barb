@@ -49,7 +49,7 @@ class TestBuildSystemPrompt:
         assert "<data-flow>" in result
         assert "alternative" in result
         assert "title" in result.lower()
-        assert "confirmation" in result
+        assert "confirm" in result
 
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError, match="Unknown instrument"):
