@@ -48,6 +48,7 @@ def _coerce_for_date_comparison(left, right):
 
 class ExpressionError(Exception):
     """Raised when an expression cannot be parsed or evaluated."""
+
     pass
 
 
@@ -59,7 +60,7 @@ _REVERSE_ALIASES = {v: k for k, v in _KEYWORD_ALIASES.items()}
 def _preprocess_keywords(expr: str) -> str:
     """Replace keyword function names with safe aliases before ast.parse."""
     for kw, alias in _KEYWORD_ALIASES.items():
-        expr = re.sub(rf'\b{kw}\s*\(', f'{alias}(', expr)
+        expr = re.sub(rf"\b{kw}\s*\(", f"{alias}(", expr)
     return expr
 
 
@@ -69,6 +70,8 @@ _BINARY_OPS = {
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
     ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+    ast.FloorDiv: operator.floordiv,
 }
 
 _COMPARE_OPS = {
@@ -122,9 +125,7 @@ def _eval_node(node: ast.AST, df: pd.DataFrame, functions: dict):
             return False
         if name in df.columns:
             return df[name]
-        raise ExpressionError(
-            f"Unknown column '{name}'. Available: {', '.join(df.columns)}"
-        )
+        raise ExpressionError(f"Unknown column '{name}'. Available: {', '.join(df.columns)}")
 
     # Arithmetic: high - low, close * volume
     if isinstance(node, ast.BinOp):
@@ -221,6 +222,4 @@ def _eval_node(node: ast.AST, df: pd.DataFrame, functions: dict):
     if isinstance(node, ast.List):
         return [_eval_node(el, df, functions) for el in node.elts]
 
-    raise ExpressionError(
-        f"Unsupported expression type: {type(node).__name__}"
-    )
+    raise ExpressionError(f"Unsupported expression type: {type(node).__name__}")

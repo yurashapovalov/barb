@@ -1,8 +1,8 @@
 """Barb Script interpreter.
 
-Executes a flat JSON query against a pandas DataFrame.
-9-step pipeline, fixed execution order regardless of JSON key order:
-  session → period → from → map → where → group_by → select → sort → limit
+Executes a JSON query against a pandas DataFrame.
+Single-step pipeline: session → period → from → map → where → group_by → select → sort → limit
+Multi-step (steps): each step's output is the next step's input.
 """
 
 import datetime
@@ -12,42 +12,16 @@ import pandas as pd
 
 from barb.expressions import ExpressionError, evaluate
 from barb.functions import AGGREGATE_FUNCS, FUNCTIONS
+from barb.ops import (
+    INTRADAY_TIMEFRAMES,
+    TIMEFRAMES,
+    BarbError,
+    add_session_id,
+    filter_period,
+    filter_session,
+    resample,
+)
 from barb.validation import validate_expressions
-
-# Valid values for the "from" field
-TIMEFRAMES = {
-    "1m",
-    "5m",
-    "15m",
-    "30m",
-    "1h",
-    "2h",
-    "4h",
-    "daily",
-    "weekly",
-    "monthly",
-    "quarterly",
-    "yearly",
-}
-
-# Resample rules for pandas
-RESAMPLE_RULES = {
-    "1m": None,  # no resampling
-    "5m": "5min",
-    "15m": "15min",
-    "30m": "30min",
-    "1h": "h",
-    "2h": "2h",
-    "4h": "4h",
-    "daily": "D",
-    "weekly": "W",
-    "monthly": "ME",
-    "quarterly": "QE",
-    "yearly": "YE",
-}
-
-# Timeframes that need both date and time columns
-_INTRADAY_TIMEFRAMES = {"1m", "5m", "15m", "30m", "1h", "2h", "4h"}
 
 # Standard OHLC column order
 _OHLC_COLUMNS = ["open", "high", "low", "close"]
@@ -70,30 +44,15 @@ _VALID_FIELDS = {
     "sort",
     "limit",
     "columns",
+    "steps",
 }
-
-
-class QueryError(Exception):
-    """Raised when a query is invalid or execution fails."""
-
-    def __init__(
-        self,
-        message: str,
-        error_type: str = "QueryError",
-        step: str = "",
-        expression: str = "",
-    ):
-        super().__init__(message)
-        self.error_type = error_type
-        self.step = step
-        self.expression = expression
 
 
 def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     """Execute a Barb Script query.
 
     Args:
-        query: Flat JSON query dict
+        query: JSON query dict (flat or with steps)
         df: DataFrame with DatetimeIndex and OHLCV columns (daily or minute)
         sessions: {"RTH": ("09:30", "17:00"), ...}
 
@@ -102,9 +61,13 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
          "source_row_count": ..., "metadata": {...}, "query": query, "chart": ...}
 
     Raises:
-        QueryError: On validation or execution failure
+        BarbError: On validation or execution failure
     """
     _validate(query)
+
+    if "steps" in query:
+        return _execute_steps(query, df, sessions)
+
     validate_expressions(query)
 
     warnings = []
@@ -128,6 +91,10 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
 
     # 3. FROM — resample to target timeframe
     df = resample(df, timeframe)
+
+    # 3.5. SESSION BOUNDARIES — for session_high/low/open/close
+    if session_name and session_name.upper() in sessions:
+        df = add_session_id(df, sessions[session_name.upper()])
 
     # 4. MAP — compute derived columns
     if query.get("map"):
@@ -168,6 +135,105 @@ def execute(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
     )
 
 
+def _execute_steps(query: dict, df: pd.DataFrame, sessions: dict) -> dict:
+    """Execute a multi-step query. Each step's output feeds the next."""
+    steps = query["steps"]
+    if not isinstance(steps, list) or len(steps) == 0:
+        raise BarbError(
+            "steps must be a non-empty array",
+            error_type="ValidationError",
+            step="validate",
+        )
+
+    warnings = []
+    timeframe = "1m"
+    session_name = None
+
+    for i, step in enumerate(steps):
+        # Step 1: scope data (session → period → from)
+        if i == 0:
+            session_name = step.get("session")
+            timeframe = step.get("from", "1m")
+
+            if session_name:
+                has_time = hasattr(df.index, "hour") and (df.index.hour != 0).any()
+                if has_time:
+                    df, warn = filter_session(df, session_name, sessions)
+                    if warn:
+                        warnings.append(warn)
+
+            period = step.get("period")
+            if period:
+                df = filter_period(df, period)
+
+            df = resample(df, timeframe)
+
+            # Session boundaries for session_high/low/open/close
+            if session_name and session_name.upper() in sessions:
+                df = add_session_id(df, sessions[session_name.upper()])
+
+        # All steps: map → where
+        if step.get("map"):
+            df = compute_map(df, step["map"])
+        if step.get("where"):
+            df = filter_where(df, step["where"])
+
+        # Intermediate steps: group_by → select (output feeds next step)
+        is_last = i == len(steps) - 1
+        if not is_last:
+            group_by = step.get("group_by")
+            select_raw = step.get("select")
+            if group_by:
+                select = _normalize_select(select_raw or "count()")
+                df = _group_aggregate(df, group_by, select)
+                df = df.reset_index()
+
+    # Finalize with last step: group_by → select → sort → limit
+    last = steps[-1]
+    rows_after_filter = len(df)
+    source_df = df
+
+    group_by = last.get("group_by")
+    select_raw = last.get("select")
+
+    if group_by:
+        select = _normalize_select(select_raw or "count()")
+        result_df = _group_aggregate(df, group_by, select)
+    elif select_raw:
+        select = _normalize_select(select_raw)
+        result_df = _aggregate(df, select)
+    else:
+        result_df = df
+
+    if last.get("sort") and isinstance(result_df, pd.DataFrame):
+        result_df = sort_df(result_df, last["sort"])
+
+    if last.get("limit") and isinstance(result_df, pd.DataFrame):
+        result_df = result_df.head(last["limit"])
+
+    # Build virtual query for response formatting
+    all_maps = {}
+    for step in steps:
+        all_maps.update(step.get("map", {}))
+
+    virtual_query = {"from": timeframe, "map": all_maps}
+    if query.get("columns"):
+        virtual_query["columns"] = query["columns"]
+    for field in ("group_by", "select", "sort", "limit"):
+        if field in last:
+            virtual_query[field] = last[field]
+
+    return _build_response(
+        result_df,
+        virtual_query,
+        rows_after_filter,
+        session_name,
+        timeframe,
+        warnings,
+        source_df,
+    )
+
+
 # --- Normalization ---
 
 
@@ -185,7 +251,7 @@ def _validate(query: dict):
     """Lightweight schema check."""
     unknown = set(query.keys()) - _VALID_FIELDS
     if unknown:
-        raise QueryError(
+        raise BarbError(
             f"Unknown fields: {', '.join(unknown)}. Valid: {', '.join(sorted(_VALID_FIELDS))}",
             error_type="ValidationError",
             step="validate",
@@ -193,127 +259,28 @@ def _validate(query: dict):
 
     tf = query.get("from", "1m")
     if tf not in TIMEFRAMES:
-        raise QueryError(
+        raise BarbError(
             f"Invalid timeframe '{tf}'. Valid: {', '.join(sorted(TIMEFRAMES))}",
             error_type="ValidationError",
             step="validate",
         )
 
     if "limit" in query and (not isinstance(query["limit"], int) or query["limit"] < 1):
-        raise QueryError(
+        raise BarbError(
             "limit must be a positive integer",
             error_type="ValidationError",
             step="validate",
         )
 
     if "map" in query and not isinstance(query["map"], dict):
-        raise QueryError(
+        raise BarbError(
             "map must be an object {name: expression}",
             error_type="ValidationError",
             step="validate",
         )
 
 
-# --- Pipeline steps ---
-
-
-def filter_session(
-    df: pd.DataFrame,
-    session: str,
-    sessions: dict,
-) -> tuple[pd.DataFrame, str | None]:
-    """Step 1: Filter by session time range."""
-    key = session.upper()
-    if key not in sessions:
-        return df, f"Unknown session '{session}', using all data"
-
-    start_str, end_str = sessions[key]
-    start_t = pd.Timestamp(start_str).time()
-    end_t = pd.Timestamp(end_str).time()
-
-    # Wrap-around sessions (18:00-09:30) span midnight
-    if start_t > end_t:
-        mask = (df.index.time >= start_t) | (df.index.time < end_t)
-    else:
-        mask = (df.index.time >= start_t) & (df.index.time < end_t)
-
-    return df[mask], None
-
-
-_RELATIVE_PERIODS = {"last_year", "last_month", "last_week"}
-# Year "2024", month "2024-03", date "2024-03-15", range "2024-01-01:2024-06-30"
-_PERIOD_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
-
-
-def filter_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
-    """Step 2: Filter by date range."""
-    if df.empty:
-        return df
-
-    if ":" in period:
-        # Range: "2024-01:2024-06", "2023:", ":2024"
-        parts = period.split(":", 1)
-        start, end = parts[0], parts[1]
-
-        # Validate non-empty parts
-        if start and not _PERIOD_RE.match(start):
-            raise QueryError(
-                f"Invalid period start '{start}'. Use YYYY, YYYY-MM, or YYYY-MM-DD",
-                error_type="ValidationError",
-                step="period",
-                expression=period,
-            )
-        if end and not _PERIOD_RE.match(end):
-            raise QueryError(
-                f"Invalid period end '{end}'. Use YYYY, YYYY-MM, or YYYY-MM-DD",
-                error_type="ValidationError",
-                step="period",
-                expression=period,
-            )
-
-        # Open-ended ranges: "2023:" or ":2024"
-        return df.loc[start if start else None : end if end else None]
-
-    if period in _RELATIVE_PERIODS:
-        offsets = {
-            "last_year": pd.DateOffset(years=1),
-            "last_month": pd.DateOffset(months=1),
-            "last_week": pd.DateOffset(weeks=1),
-        }
-        cutoff = df.index[-1] - offsets[period]
-        return df[df.index >= cutoff]
-
-    # Year: "2024" or month: "2024-01"
-    if not _PERIOD_RE.match(period):
-        raise QueryError(
-            f"Invalid period '{period}'. "
-            f"Valid: 'YYYY', 'YYYY-MM', 'YYYY-MM-DD', 'YYYY-MM-DD:YYYY-MM-DD', "
-            f"'last_year', 'last_month', 'last_week'",
-            error_type="ValidationError",
-            step="period",
-            expression=period,
-        )
-    return df.loc[period]
-
-
-def resample(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
-    """Step 3: Resample to target timeframe."""
-    rule = RESAMPLE_RULES.get(timeframe)
-    if not rule:
-        return df
-
-    resampled = df.resample(rule).agg(
-        {
-            "open": "first",
-            "high": "max",
-            "low": "min",
-            "close": "last",
-            "volume": "sum",
-        }
-    )
-    # Drop periods with no data. Can't use dropna(how="all") because
-    # volume.sum() returns 0 for empty groups, not NaN.
-    return resampled.dropna(subset=["open"])
+# --- Pipeline steps (session, period, resample are in barb/ops.py) ---
 
 
 def compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
@@ -321,7 +288,7 @@ def compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
     df = df.copy()
     for name, expr in map_config.items():
         if not isinstance(expr, str):
-            raise QueryError(
+            raise BarbError(
                 f"map value for '{name}' must be a string expression, got {type(expr).__name__}",
                 error_type="TypeError",
                 step="map",
@@ -330,7 +297,7 @@ def compute_map(df: pd.DataFrame, map_config: dict) -> pd.DataFrame:
         try:
             df[name] = evaluate(expr, df, FUNCTIONS)
         except ExpressionError as e:
-            raise QueryError(
+            raise BarbError(
                 str(e),
                 error_type="ExpressionError",
                 step="map",
@@ -344,7 +311,7 @@ def filter_where(df: pd.DataFrame, where_expr: str) -> pd.DataFrame:
     try:
         mask = evaluate(where_expr, df, FUNCTIONS)
     except ExpressionError as e:
-        raise QueryError(
+        raise BarbError(
             str(e),
             error_type="ExpressionError",
             step="where",
@@ -352,7 +319,7 @@ def filter_where(df: pd.DataFrame, where_expr: str) -> pd.DataFrame:
         ) from e
 
     if not isinstance(mask, pd.Series):
-        raise QueryError(
+        raise BarbError(
             f"WHERE must produce a boolean series, got {type(mask).__name__}",
             error_type="TypeError",
             step="where",
@@ -371,7 +338,7 @@ def _group_aggregate(df: pd.DataFrame, group_by, select) -> pd.DataFrame:
     for col in group_by:
         if col not in df.columns:
             available = ", ".join(sorted(df.columns))
-            raise QueryError(
+            raise BarbError(
                 f"Column '{col}' not found. Available: {available}",
                 error_type="ValidationError",
                 step="group_by",
@@ -395,7 +362,7 @@ def _aggregate(df: pd.DataFrame, select) -> float | int | dict:
         try:
             result = evaluate(select, df, FUNCTIONS)
         except ExpressionError as e:
-            raise QueryError(
+            raise BarbError(
                 str(e),
                 error_type="ExpressionError",
                 step="select",
@@ -409,7 +376,7 @@ def _aggregate(df: pd.DataFrame, select) -> float | int | dict:
         try:
             val = evaluate(s, df, FUNCTIONS)
         except ExpressionError as e:
-            raise QueryError(
+            raise BarbError(
                 str(e),
                 error_type="ExpressionError",
                 step="select",
@@ -430,7 +397,7 @@ def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd
     # Parse: mean(range) → func=mean, col=range
     match = re.match(r"(\w+)\((\w+)\)", select_expr.strip())
     if not match:
-        raise QueryError(
+        raise BarbError(
             f"Cannot parse aggregate expression: '{select_expr}'",
             error_type="ParseError",
             step="select",
@@ -440,7 +407,7 @@ def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd
     func_name, col = match.groups()
 
     if func_name not in AGGREGATE_FUNCS:
-        raise QueryError(
+        raise BarbError(
             f"Unknown aggregate function '{func_name}' in group context",
             error_type="UnknownFunction",
             step="select",
@@ -449,7 +416,7 @@ def _eval_aggregate(groups, df: pd.DataFrame, select_expr: str) -> tuple[str, pd
 
     if col not in df.columns:
         available = ", ".join(sorted(df.columns))
-        raise QueryError(
+        raise BarbError(
             f"Column '{col}' not found. Available: {available}",
             error_type="ValidationError",
             step="select",
@@ -488,7 +455,7 @@ def sort_df(df: pd.DataFrame, sort: str) -> pd.DataFrame:
         return df.sort_values(col, ascending=ascending)
 
     available = ", ".join(sorted(list(df.columns) + index_names))
-    raise QueryError(
+    raise BarbError(
         f"Sort column '{col}' not found. Available: {available}",
         error_type="ValidationError",
         step="sort",
@@ -512,12 +479,17 @@ def _prepare_for_output(df: pd.DataFrame, query: dict) -> pd.DataFrame:
     """
     df = df.reset_index()
 
+    # Drop internal columns (e.g. __session_id)
+    internal = [c for c in df.columns if c.startswith("__")]
+    if internal:
+        df = df.drop(columns=internal)
+
     # Split timestamp into date + time based on timeframe
     timeframe = query.get("from", "1m")
     if "timestamp" in df.columns:
         ts = pd.to_datetime(df["timestamp"])
         df["date"] = ts.dt.strftime("%Y-%m-%d")
-        if timeframe in _INTRADAY_TIMEFRAMES:
+        if timeframe in INTRADAY_TIMEFRAMES:
             df["time"] = ts.dt.strftime("%H:%M")
         df = df.drop(columns=["timestamp"])
 

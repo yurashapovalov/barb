@@ -37,3 +37,16 @@ class TestAggregate:
 
     def test_last(self, df):
         assert FUNCTIONS["last"](df, df["close"]) == 102
+
+    def test_pct(self, df):
+        # close > 103: values 106, 104, 107, 105 = 4 out of 10
+        result = FUNCTIONS["pct"](df, df["close"] > 103)
+        assert abs(result - 0.4) < 1e-10
+
+    def test_pct_all_true(self, df):
+        result = FUNCTIONS["pct"](df, df["close"] > 0)
+        assert abs(result - 1.0) < 1e-10
+
+    def test_pct_none_true(self, df):
+        result = FUNCTIONS["pct"](df, df["close"] > 9999)
+        assert result == 0.0

@@ -6,7 +6,8 @@ Tests the full pipeline: query → execute → result.
 
 import pytest
 
-from barb.interpreter import QueryError, execute
+from barb.interpreter import execute
+from barb.ops import BarbError
 from barb.validation import ValidationError
 
 # --- Validation ---
@@ -14,15 +15,15 @@ from barb.validation import ValidationError
 
 class TestValidation:
     def test_unknown_field(self, nq_minute_slice, sessions):
-        with pytest.raises(QueryError, match="Unknown fields"):
+        with pytest.raises(BarbError, match="Unknown fields"):
             execute({"foo": "bar"}, nq_minute_slice, sessions)
 
     def test_invalid_timeframe(self, nq_minute_slice, sessions):
-        with pytest.raises(QueryError, match="Invalid timeframe"):
+        with pytest.raises(BarbError, match="Invalid timeframe"):
             execute({"from": "3m"}, nq_minute_slice, sessions)
 
     def test_invalid_limit(self, nq_minute_slice, sessions):
-        with pytest.raises(QueryError, match="limit must be"):
+        with pytest.raises(BarbError, match="limit must be"):
             execute({"from": "daily", "limit": -1}, nq_minute_slice, sessions)
 
     def test_empty_query(self, nq_minute_slice, sessions):
@@ -243,7 +244,7 @@ class TestGroupBy:
 
     def test_group_by_missing_column(self, nq_minute_slice, sessions):
         """group_by on non-existent column gives clear error."""
-        with pytest.raises(QueryError, match="Column 'bogus' not found") as exc_info:
+        with pytest.raises(BarbError, match="Column 'bogus' not found") as exc_info:
             execute(
                 {
                     "session": "RTH",
@@ -258,7 +259,7 @@ class TestGroupBy:
 
     def test_select_missing_column(self, nq_minute_slice, sessions):
         """select aggregate on non-existent column gives clear error."""
-        with pytest.raises(QueryError, match="Column 'bogus' not found") as exc_info:
+        with pytest.raises(BarbError, match="Column 'bogus' not found") as exc_info:
             execute(
                 {
                     "session": "RTH",
@@ -288,6 +289,194 @@ class TestGroupBy:
         # Each weekday should have ~25 days in 6 months
         for row in result["table"]:
             assert row["count"] > 15
+
+
+# --- Pct ---
+
+
+class TestPct:
+    def test_pct_scalar(self, nq_minute_slice, sessions):
+        """pct() in select returns proportion as scalar."""
+        result = execute(
+            {
+                "from": "daily",
+                "period": "2024",
+                "select": "pct(gap_pct() > 0)",
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        value = result["summary"]["value"]
+        assert 0.0 < value < 1.0
+
+    def test_pct_grouped(self, nq_minute_slice, sessions):
+        """pct() in group_by context returns per-group proportion."""
+        result = execute(
+            {
+                "session": "RTH",
+                "from": "daily",
+                "period": "2024",
+                "map": {"up": "green()", "dow": "dayofweek()"},
+                "group_by": "dow",
+                "select": "pct(up)",
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        assert len(result["table"]) == 5
+        for row in result["table"]:
+            assert 0.0 <= row["pct_up"] <= 1.0
+
+
+# --- Steps ---
+
+
+class TestSteps:
+    def test_two_step_chain(self, nq_minute_slice, sessions):
+        """Step 1 filters, step 2 aggregates on filtered data."""
+        result = execute(
+            {
+                "steps": [
+                    {
+                        "from": "daily",
+                        "period": "2024",
+                        "map": {"rsi": "rsi(close,14)"},
+                        "where": "rsi < 30",
+                    },
+                    {"select": "count()"},
+                ],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        count = result["summary"]["value"]
+        assert isinstance(count, int)
+        assert count > 0
+
+    def test_sub_window(self, nq_minute_slice, sessions):
+        """Step 1 filters time window, step 2 computes on filtered data."""
+        result = execute(
+            {
+                "steps": [
+                    {
+                        "session": "RTH",
+                        "period": "2024-01",
+                        "from": "1h",
+                        "where": "hour() >= 10 and hour() <= 14",
+                    },
+                    {
+                        "map": {"sh": "session_high()", "hr": "hour()"},
+                        "where": "high == sh",
+                        "group_by": "hr",
+                        "select": "count()",
+                    },
+                ],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        # All hours in result should be between 10 and 14
+        for row in result["table"]:
+            assert 10 <= row["hr"] <= 14
+
+    def test_breakdown(self, nq_minute_slice, sessions):
+        """Step 1 filters, step 2 groups for breakdown."""
+        result = execute(
+            {
+                "steps": [
+                    {
+                        "from": "daily",
+                        "period": "2024",
+                        "map": {"rsi": "rsi(close,14)"},
+                        "where": "rsi < 40",
+                    },
+                    {"map": {"mo": "monthname()"}, "group_by": "mo", "select": "count()"},
+                ],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        assert len(result["table"]) > 0
+        for row in result["table"]:
+            assert row["count"] > 0
+
+    def test_flat_query_unchanged(self, nq_minute_slice, sessions):
+        """Flat query (no steps) still works exactly as before."""
+        result = execute(
+            {"from": "daily", "period": "2024", "select": "count()"},
+            nq_minute_slice,
+            sessions,
+        )
+        assert result["summary"]["type"] == "scalar"
+        assert result["summary"]["value"] > 100
+
+    def test_empty_steps_error(self, nq_minute_slice, sessions):
+        with pytest.raises(BarbError, match="non-empty"):
+            execute({"steps": []}, nq_minute_slice, sessions)
+
+    def test_single_step(self, nq_minute_slice, sessions):
+        """Single step works like a flat query."""
+        result = execute(
+            {
+                "steps": [
+                    {"from": "daily", "period": "2024", "select": "count()"},
+                ],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        assert result["summary"]["type"] == "scalar"
+        assert result["summary"]["value"] > 100
+
+    def test_nested_aggregation(self, nq_minute_slice, sessions):
+        """Intermediate group_by feeds next step: count sessions per DOW."""
+        result = execute(
+            {
+                "steps": [
+                    # Step 1: one row per (date, dow)
+                    {
+                        "from": "daily",
+                        "period": "2024",
+                        "map": {"dow": "dayname()"},
+                        "group_by": "dow",
+                        "select": "count()",
+                    },
+                    # Step 2: count should equal 1 per dow (daily already has 1 row/day)
+                    # Just verify step 2 can operate on grouped result
+                    {"select": "count()"},
+                ],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        # 5-6 days (futures trade Sunday evening)
+        assert result["summary"]["value"] in (5, 6)
+
+    def test_nested_aggregation_three_steps(self, nq_minute_slice, sessions):
+        """Three steps: filter → group by (date, hour) → group by hour."""
+        result = execute(
+            {
+                "steps": [
+                    # Step 1: intraday bars, RTH Jan 2024
+                    {
+                        "session": "RTH",
+                        "period": "2024-01",
+                        "from": "1h",
+                        "map": {"hr": "hour()", "dt": "date()"},
+                    },
+                    # Step 2: one row per (date, hour) with row count
+                    {"group_by": ["dt", "hr"], "select": "count()"},
+                    # Step 3: count dates per hour
+                    {"group_by": "hr", "select": "count()"},
+                ],
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        # Should have hours 9-16 (RTH range)
+        assert len(result["table"]) > 0
+        for row in result["table"]:
+            assert 9 <= row["hr"] <= 16
 
 
 # --- Sort + Limit ---
@@ -330,7 +519,7 @@ class TestSortLimit:
 
     def test_sort_unknown_column(self, nq_minute_slice, sessions):
         """Sort on non-existent column gives clear error."""
-        with pytest.raises(QueryError, match="Sort column 'bogus' not found") as exc_info:
+        with pytest.raises(BarbError, match="Sort column 'bogus' not found") as exc_info:
             execute(
                 {
                     "session": "RTH",
@@ -365,7 +554,7 @@ class TestSortLimit:
 
     def test_join_field_rejected(self, nq_minute_slice, sessions):
         """'join' is not a valid field (unimplemented)."""
-        with pytest.raises(QueryError, match="Unknown fields"):
+        with pytest.raises(BarbError, match="Unknown fields"):
             execute({"join": "events", "from": "daily"}, nq_minute_slice, sessions)
 
 
@@ -577,12 +766,12 @@ class TestPeriod:
 
     def test_invalid_period_string(self, nq_minute_slice, sessions):
         """Invalid period like 'all' gives clear error, not internal crash."""
-        with pytest.raises(QueryError, match="Invalid period 'all'") as exc_info:
+        with pytest.raises(BarbError, match="Invalid period 'all'") as exc_info:
             execute({"period": "all", "from": "daily"}, nq_minute_slice, sessions)
         assert exc_info.value.step == "period"
 
     def test_invalid_period_range(self, nq_minute_slice, sessions):
-        with pytest.raises(QueryError, match="Invalid period start"):
+        with pytest.raises(BarbError, match="Invalid period start"):
             execute({"period": "start:end", "from": "daily"}, nq_minute_slice, sessions)
 
     def test_relative_period_last_month(self, nq_minute_slice, sessions):
@@ -596,6 +785,67 @@ class TestPeriod:
             sessions,
         )
         assert result["summary"]["value"] > 0
+
+    def test_last_n_trading_days(self, nq_minute_slice, sessions):
+        """last_50 scopes to last 50 trading days."""
+        result = execute(
+            {
+                "period": "last_50",
+                "from": "daily",
+                "select": "count()",
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        assert result["summary"]["value"] == 50
+
+    def test_last_n_on_intraday(self, nq_minute_slice, sessions):
+        """last_20 on hourly data: scopes by trading days, not bars."""
+        result = execute(
+            {
+                "period": "last_20",
+                "session": "RTH",
+                "from": "1h",
+                "select": "count()",
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        # 20 trading days × ~7 RTH hours = ~140 bars
+        count = result["summary"]["value"]
+        assert 100 < count < 200
+
+    def test_last_n_with_group_by(self, nq_minute_slice, sessions):
+        """last_20 + group_by: aggregation only over scoped data."""
+        result = execute(
+            {
+                "period": "last_20",
+                "session": "RTH",
+                "from": "1h",
+                "map": {"hr": "hour()"},
+                "group_by": "hr",
+                "select": "count()",
+            },
+            nq_minute_slice,
+            sessions,
+        )
+        # Each hour should have ≤ 20 (one per trading day)
+        for row in result["table"]:
+            assert row["count"] <= 20
+
+    def test_last_n_exceeds_data(self, nq_minute_slice, sessions):
+        """last_9999 when data has fewer days returns all data."""
+        all_result = execute(
+            {"from": "daily", "select": "count()"},
+            nq_minute_slice,
+            sessions,
+        )
+        last_n_result = execute(
+            {"period": "last_9999", "from": "daily", "select": "count()"},
+            nq_minute_slice,
+            sessions,
+        )
+        assert last_n_result["summary"]["value"] == all_result["summary"]["value"]
 
 
 # --- Response Format ---
@@ -650,7 +900,7 @@ class TestResponse:
         assert meta["from"] == "daily"
 
     def test_error_response(self, nq_minute_slice, sessions):
-        with pytest.raises(QueryError) as exc_info:
+        with pytest.raises(BarbError) as exc_info:
             execute(
                 {
                     "from": "daily",

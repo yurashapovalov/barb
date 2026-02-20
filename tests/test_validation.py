@@ -27,10 +27,12 @@ class TestSyntaxErrors:
     def test_multiple_lone_equals(self):
         """Multiple = errors across fields are all caught."""
         with pytest.raises(ValidationError) as exc_info:
-            validate_expressions({
-                "map": {"flag": "close = open"},
-                "where": "volume = 1000",
-            })
+            validate_expressions(
+                {
+                    "map": {"flag": "close = open"},
+                    "where": "volume = 1000",
+                }
+            )
         assert len(exc_info.value.errors) == 2
 
     def test_unbalanced_parens(self):
@@ -63,7 +65,7 @@ class TestUnknownFunctions:
 class TestUnsupportedOperators:
     def test_unsupported_binary_op(self):
         with pytest.raises(ValidationError) as exc_info:
-            validate_expressions({"map": {"x": "close % 10"}})
+            validate_expressions({"map": {"x": "close ** 2"}})
         assert "Unsupported operator" in exc_info.value.errors[0]["message"]
 
 
@@ -88,36 +90,46 @@ class TestGroupByValidation:
 class TestGroupSelectValidation:
     def test_unknown_aggregate_function(self):
         with pytest.raises(ValidationError) as exc_info:
-            validate_expressions({
-                "group_by": "weekday",
-                "select": "bogus(close)",
-            })
+            validate_expressions(
+                {
+                    "group_by": "weekday",
+                    "select": "bogus(close)",
+                }
+            )
         assert "Unknown aggregate function" in exc_info.value.errors[0]["message"]
 
     def test_valid_aggregate_passes(self):
-        validate_expressions({
-            "group_by": "weekday",
-            "select": "mean(range)",
-        })
+        validate_expressions(
+            {
+                "group_by": "weekday",
+                "select": "mean(range)",
+            }
+        )
 
     def test_count_passes(self):
-        validate_expressions({
-            "group_by": "weekday",
-            "select": "count()",
-        })
+        validate_expressions(
+            {
+                "group_by": "weekday",
+                "select": "count()",
+            }
+        )
 
     def test_comma_separated_select(self):
-        validate_expressions({
-            "group_by": "weekday",
-            "select": "mean(high), mean(low)",
-        })
+        validate_expressions(
+            {
+                "group_by": "weekday",
+                "select": "mean(high), mean(low)",
+            }
+        )
 
     def test_comma_separated_with_error(self):
         with pytest.raises(ValidationError) as exc_info:
-            validate_expressions({
-                "group_by": "weekday",
-                "select": "mean(high), bogus(low)",
-            })
+            validate_expressions(
+                {
+                    "group_by": "weekday",
+                    "select": "mean(high), bogus(low)",
+                }
+            )
         assert len(exc_info.value.errors) == 1
         assert "bogus" in exc_info.value.errors[0]["message"]
 
@@ -126,21 +138,25 @@ class TestMultipleErrors:
     def test_errors_across_all_fields(self):
         """All errors from map, where, group_by collected at once."""
         with pytest.raises(ValidationError) as exc_info:
-            validate_expressions({
-                "map": {"x": "close = open", "y": "bogus(close)"},
-                "where": "volume = 1000",
-                "group_by": "dayofweek()",
-                "select": "count()",
-            })
+            validate_expressions(
+                {
+                    "map": {"x": "close = open", "y": "bogus(close)"},
+                    "where": "volume = 1000",
+                    "group_by": "dayofweek()",
+                    "select": "count()",
+                }
+            )
         errors = exc_info.value.errors
         assert len(errors) >= 4
 
     def test_error_count_in_message(self):
         with pytest.raises(ValidationError) as exc_info:
-            validate_expressions({
-                "map": {"x": "close = open"},
-                "where": "volume = 1000",
-            })
+            validate_expressions(
+                {
+                    "map": {"x": "close = open"},
+                    "where": "volume = 1000",
+                }
+            )
         assert "2 expression error(s)" in str(exc_info.value)
 
 
@@ -149,22 +165,29 @@ class TestValidQueriesPass:
         validate_expressions({})
 
     def test_full_valid_query(self):
-        validate_expressions({
-            "map": {"range": "high - low", "weekday": "dayofweek()"},
-            "where": "close > open and volume > 1000",
-            "group_by": "weekday",
-            "select": "mean(range)",
-        })
+        validate_expressions(
+            {
+                "map": {"range": "high - low", "weekday": "dayofweek()"},
+                "where": "close > open and volume > 1000",
+                "group_by": "weekday",
+                "select": "mean(range)",
+            }
+        )
 
     def test_complex_expressions(self):
-        validate_expressions({
-            "map": {
-                "gap": "open - prev(close)",
-                "range": "high - low",
-                "nr7": "rolling_min(range, 7)",
-            },
-            "where": "range == nr7 and gap != 0",
-        })
+        validate_expressions(
+            {
+                "map": {
+                    "gap": "open - prev(close)",
+                    "range": "high - low",
+                    "nr7": "rolling_min(range, 7)",
+                },
+                "where": "range == nr7 and gap != 0",
+            }
+        )
+
+    def test_modulo_and_floordiv(self):
+        validate_expressions({"map": {"bucket": "minute() % 10", "hr": "minute() // 60"}})
 
     def test_select_without_group_by(self):
         validate_expressions({"select": "mean(close)"})
