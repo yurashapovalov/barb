@@ -181,6 +181,22 @@ def print_trace(result, show_prompt=False):
             print(prefix)
 
 
+def _count_date_mentions(text: str) -> int:
+    """Count specific date mentions in text (hallucination signal)."""
+    import re
+
+    ru_months = "января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря"
+    patterns = [
+        r"202[456]-\d{2}-\d{2}",  # ISO dates
+        r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2}",  # English
+        rf"\d{{1,2}}\s(?:{ru_months})",  # Russian
+    ]
+    dates = set()
+    for p in patterns:
+        dates.update(re.findall(p, text))
+    return len(dates)
+
+
 def run_checks(turns, scenario):
     """Run soft checks across all turns. Returns list of warnings."""
     warnings = []
@@ -200,6 +216,15 @@ def run_checks(turns, scenario):
         warnings.append("Expected tool call but got none")
     elif not expect_tool and all_tools:
         warnings.append(f"Expected no tools, got: {all_tools}")
+
+    # Check for date hallucination: model lists 4+ specific dates it couldn't have seen
+    if scenario.get("no_date_list"):
+        for turn in turns:
+            answer = turn.get("answer", "")
+            count = _count_date_mentions(answer)
+            if count >= 4:
+                warnings.append(f"Possible date hallucination: {count} dates listed in answer")
+                break
 
     return warnings
 

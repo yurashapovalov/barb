@@ -188,4 +188,19 @@ SCENARIOS = [
         "expect_tool": False,
         "expect_data": False,
     },
+    {
+        "name": "Hallucination — don't list unseen dates (long conversation)",
+        "messages": [
+            "last fifty sessions, between 6am and into the close — at what time is the high or low of the session typically set? show by hour",
+            "yes, ETH",
+            "now show the top 20 exact minutes of RTH when high or low occurs most often, last 50 sessions",
+            "on last 22 ETH sessions what exact time (up to minute) was the session high and low? show by frequency descending",
+            "good. now group it into 10 minute intervals, descending frequency",
+            "over last 22 sessions: on which days did the session low occur between 9:45 and 10:15 AM? and what was the move from that low to session close?",
+            "same but for session high between 10:15 and 10:45 AM",
+        ],
+        "expect_tool": True,
+        "expect_data": True,
+        "no_date_list": True,
+    },
 ]

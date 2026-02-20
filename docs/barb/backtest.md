@@ -11,7 +11,7 @@ Claude пишет: "Тестирую стратегию RSI oversold..."
     ↓
 Claude вызывает run_backtest({strategy: {entry: "rsi(close,14) < 30", ...}})
     ↓
-Engine: session → period → group minutes → resample → evaluate → simulate → metrics
+Tool: session → period → Engine: resample → minute index → evaluate → simulate → metrics
     ↓
 Результат: 53 trades, PF 1.32, equity curve
 ```
@@ -22,7 +22,7 @@ Engine: session → period → group minutes → resample → evaluate → simul
 barb/backtest/
   __init__.py      — exports Strategy, run_backtest
   strategy.py      — Strategy dataclass + resolve_level
-  engine.py        — pipeline: filter → resample → evaluate → simulate
+  engine.py        — pipeline: validate → resample → minute index → evaluate → simulate
   metrics.py       — Trade, BacktestMetrics, BacktestResult, calculate_metrics
 
 assistant/tools/
@@ -36,14 +36,16 @@ assistant/tools/
 ```python
 @dataclass
 class Strategy:
-    entry: str                      # "rsi(close, 14) < 30"
-    direction: str                  # "long" | "short"
-    exit_target: str | None = None  # expression → fixed target price
+    entry: str                              # "rsi(close, 14) < 30"
+    direction: str                          # "long" | "short"
+    exit_target: str | None = None          # expression → fixed target price
     stop_loss: float | str | None = None    # 20 (points) or "2%" (percentage)
     take_profit: float | str | None = None  # 50 (points) or "3%" (percentage)
-    exit_bars: int | None = None    # force exit after N bars
-    slippage: float = 0.0          # points per side
-    commission: float = 0.0        # points per round-trip
+    trailing_stop: float | str | None = None  # trail distance (points or "1.5%")
+    breakeven_bars: int | None = None       # after N bars in profit, move stop to entry
+    exit_bars: int | None = None            # force exit after N bars
+    slippage: float = 0.0                   # points per side
+    commission: float = 0.0                 # points per round-trip
 ```
 
 ### Stop/Target: пункты vs проценты
@@ -68,27 +70,30 @@ Expression, вычисляется ОДИН РАЗ при входе в сдел
 
 ## Engine Pipeline
 
-`engine.py` → `run_backtest()`:
+`engine.py` → `run_backtest(df, strategy, timeframe="daily")`:
 
 ```
-Минутный DataFrame
+Pre-filtered DataFrame (session/period filtering done by caller)
     ↓
-1. filter_session(df, session, sessions)     — из barb/interpreter
-2. filter_period(df, period)                 — из barb/interpreter
-3. group minute bars by date                 — сохраняем минутки для exit resolution
-4. resample(df, "daily")                     — из barb/interpreter
-5. evaluate(strategy.entry, daily, FUNCTIONS) — из barb/expressions
-6. _simulate(daily, entry_mask, strategy, minute_by_date) — бар за баром
-7. calculate_metrics(trades) + build_equity_curve(trades) — метрики и equity
+1. Validate timeframe (allowed: 5m, 15m, 30m, 1h, 2h, 4h, daily)
+2. resample(df, timeframe)                          — из barb/interpreter
+3. _build_minute_index(df, bars)                    — map bar → minute rows (searchsorted, O(m log n))
+4. evaluate(strategy.entry, bars, FUNCTIONS)         — из barb/expressions
+5. _simulate(bars, entry_mask, strategy, minute_by_bar) — бар за баром
+6. calculate_metrics(trades) + build_equity_curve(trades)
     ↓
 BacktestResult(trades, metrics, equity_curve)
 ```
 
-Движок переиспользует session/period/resample из Query Engine. Expressions — те же что в `run_query` (RSI, SMA, gap, streak — все 106 функций доступны).
+**Разделение ответственности**: engine получает уже отфильтрованные данные. Session/period filtering — задача tool wrapper (`assistant/tools/backtest.py`). Engine только resample + simulate.
+
+Timeframes: `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `daily`. 1m excluded (millions of bars, pointless exit resolution). Weekly+ excluded (too few bars).
+
+Expressions — те же что в `run_query` (RSI, SMA, gap, streak — все 106 функций доступны).
 
 ### Entry Logic
 
-- Условие входа вычисляется на **дневных** барах (все OHLCV доступны)
+- Условие входа вычисляется на барах выбранного timeframe (все OHLCV доступны)
 - **Вход на open СЛЕДУЮЩЕГО бара** после сигнала — стандарт в бэктестинге
 - Одна позиция одновременно — сигналы при открытой позиции пропускаются
 
@@ -115,7 +120,7 @@ Bar N+1: entry at open (adjusted for slippage)
 Те же проверки на дневном баре. Приоритет: stop → take_profit → target. Если оба могли сработать на одном баре — стоп первый (conservative assumption).
 
 **После price-based проверок** (оба уровня):
-4. **Exit bars** — timeout, выход по close (считается в днях, не в минутах)
+4. **Exit bars** — timeout, выход по close (считается в барах выбранного timeframe)
 5. **End of data** — принудительное закрытие на последнем баре
 
 ```
@@ -155,7 +160,7 @@ class Trade:
     exit_price: float
     direction: str              # "long" | "short"
     pnl: float                  # points (after slippage)
-    exit_reason: str            # "stop" | "take_profit" | "target" | "timeout" | "end"
+    exit_reason: str            # "stop" | "take_profit" | "target" | "trailing_stop" | "breakeven" | "timeout" | "end"
     bars_held: int
 ```
 
@@ -198,11 +203,16 @@ class BacktestResult:
 
 ### BACKTEST_TOOL
 
-Tool schema для Claude. Описание с примерами стратегий (RSI, gap fade, trend following). Все поля strategy с типами. `session`, `period`, `title` — top-level.
+Tool schema для Claude. Описание с примерами стратегий (RSI, gap fade, trend following). Все поля strategy с типами. `from` (timeframe), `session`, `period`, `title` — top-level.
 
 ### run_backtest_tool()
 
-Обёртка: dict → Strategy → `run_backtest()` → `BacktestResult`.
+Обёртка с data preparation: session/period filtering → Strategy → `run_backtest(df, strategy, timeframe)` → `BacktestResult`.
+
+Data prep pipeline (before engine):
+1. `filter_session(df, session, sessions)` — если указан session
+2. `filter_period(df, period)` — если указан period
+3. Передаёт timeframe (`from` field, default "daily") в engine
 
 Возвращает:
 
@@ -277,7 +287,7 @@ else:
 
 `_exec_query()` и `_exec_backtest()` — извлечённые методы. Оба возвращают `(model_response, block)`. Общий dispatch loop обрабатывает tool_start/tool_end, error handling, data_block events.
 
-Backtest всегда использует `df_minute` — engine сам ресемплит в daily.
+Backtest всегда получает `df_minute`. Tool wrapper фильтрует session/period, engine ресемплит в нужный timeframe.
 
 ## SSE Events
 
@@ -323,10 +333,12 @@ Query и backtest блоки используют одинаковый форм�
 | Решение | Почему |
 |---------|--------|
 | Entry на open следующего бара | Условия часто используют close, который известен только по завершении бара |
-| Минутки для exit, дневки для entry | Entry evaluation на дневных (быстро, все индикаторы). Exit resolution на минутных (точно, устраняет conservative assumption) |
-| Fallback на дневной бар | Синтетические тесты и данные без минуток → `_check_exit_levels()` с conservative assumption (стоп первый) |
+| Минутки для exit, timeframe бары для entry | Entry evaluation на ресемплированных барах (быстро, все индикаторы). Exit resolution на минутных (точно, устраняет conservative assumption) |
+| Fallback на бар timeframe | Синтетические тесты и данные без минуток → `_check_exit_levels()` с conservative assumption (стоп первый) |
+| Tool wrapper = data prep, engine = simulation | Чистое разделение: engine не знает про sessions/periods. Tool wrapper фильтрует данные, engine ресемплит и считает |
+| Timeframe validation whitelist | 1m excluded (millions of bars). Weekly+ excluded (too few bars, exit_bars semantics absurd) |
 | Одна позиция одновременно | Простота. Position sizing — v2 |
-| exit_bars в днях | Timeout считает дневные бары, не минуты. 5 дней = 5 дней |
+| exit_bars в барах timeframe | Timeout считает бары выбранного timeframe. exit_bars=5 на 1h = 5 часовых баров |
 | Slippage default 0 | Не навязываем, но Claude может предложить |
 | Commission в пунктах | Те же единицы что P&L и slippage. Вычитается из P&L после slippage |
 | Recovery Factor, не Sharpe | RF = profit per unit of pain, понятен трейдерам. Sharpe нужна annualization и % returns — Phase 2 |
@@ -334,19 +346,22 @@ Query и backtest блоки используют одинаковый форм�
 
 ## Тесты
 
-`tests/test_backtest.py` — 56 тестов:
+`tests/test_backtest.py` — 76 тестов:
 
 - **TestStrategy** — dataclass creation
 - **TestResolveLevel** — points, percentage conversion
 - **TestMetrics** — calculate_metrics, build_equity_curve, edge cases (0 trades, all wins, all losses)
-- **TestEngineBasic** — синтетические данные (10-day predictable OHLCV), entry/exit logic, slippage, exit_bars timeout, same-bar exit. Без минутных данных → fallback на `_check_exit_levels()`
-- **TestEngineRealData** — реальные NQ minute данные, RSI strategy, period filter, 0 trades case. Минутные данные → `_find_exit_in_minutes()`
+- **TestEngineBasic** — синтетические данные (10-day predictable OHLCV), entry/exit logic, slippage, exit_bars timeout, same-bar exit
+- **TestEngineRealData** — реальные NQ minute данные (pre-filtered RTH), RSI strategy, period filter. Минутные данные → `_find_exit_in_minutes()`
 - **TestFindExitInMinutes** — unit tests для минутного разрешения: stop first, TP first, both on same bar, no exit, target, short positions
-- **TestResolveExit** — dispatch: минутки vs дневной fallback, timeout после price check
-- **TestMinuteResolutionIntegration** — integration test: одинаковые данные, разный результат с/без минуток (TP first vs conservative stop first)
-- **TestNewMetrics** — recovery_factor, gross_profit/gross_loss, edge cases (0 trades, no drawdown)
+- **TestResolveExit** — dispatch: минутки vs fallback, timeout после price check
+- **TestMinuteResolutionIntegration** — integration test: одинаковые данные, разный результат с/без минуток
+- **TestNewMetrics** — recovery_factor, gross_profit/gross_loss, edge cases
 - **TestCommission** — commission reduces PnL, default zero, works with slippage
 - **TestFormatSummary** — 5-line output, yearly breakdown, exit types, concentration, recovery factor
+- **TestTrailingStop** — trailing stop: long/short, percentage, with fixed stop, minute precision
+- **TestBreakeven** — breakeven: long/short, not-in-profit, raises stop, with trailing
+- **TestTimeframe** — timeframe validation, daily default, 1h and 15m on real data, intraday vs daily trade count
 
 ```bash
 .venv/bin/pytest tests/test_backtest.py -v
@@ -365,7 +380,7 @@ assistant/tools/
   backtest.py         — BACKTEST_TOOL schema, run_backtest_tool(), _build_backtest_card(), _format_summary()
 
 tests/
-  test_backtest.py    — 56 tests (synthetic + real + minute resolution + metrics + commission + format)
+  test_backtest.py    — 76 tests (synthetic + real + minute resolution + metrics + trailing + breakeven + timeframe)
   test_data_blocks.py — 13 tests (query cards + backtest cards)
 ```
 
@@ -376,11 +391,12 @@ barb/backtest/engine.py  ← barb/backtest/strategy.py (Strategy, resolve_level)
                          ← barb/backtest/metrics.py (Trade, BacktestResult, build_equity_curve, calculate_metrics)
                          ← barb/expressions (evaluate)
                          ← barb/functions (FUNCTIONS)
-                         ← barb/interpreter (filter_session, filter_period, resample, QueryError)
+                         ← barb/ops (BarbError, resample)
 
 assistant/tools/backtest.py ← barb/backtest/engine (run_backtest)
                             ← barb/backtest/strategy (Strategy)
                             ← barb/backtest/metrics (BacktestResult)
+                            ← barb/ops (filter_session, filter_period)
 
 assistant/chat.py ← assistant/tools/backtest (BACKTEST_TOOL, run_backtest_tool, _build_backtest_card)
 ```

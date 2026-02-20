@@ -12,6 +12,7 @@ from barb.backtest.engine import (
 )
 from barb.backtest.metrics import Trade, build_equity_curve, calculate_metrics
 from barb.backtest.strategy import Strategy, resolve_level
+from barb.ops import BarbError, filter_period, filter_session
 
 # --- Fixtures: synthetic daily data ---
 
@@ -38,12 +39,6 @@ def daily_df():
         index=dates,
         dtype=float,
     )
-
-
-@pytest.fixture
-def empty_sessions():
-    """Empty sessions dict — no session filtering needed for daily data."""
-    return {"RTH": ("09:30", "16:15")}
 
 
 # --- Strategy dataclass ---
@@ -151,71 +146,71 @@ class TestMetrics:
 
 
 class TestEngineBasic:
-    def test_simple_long_entry(self, daily_df, empty_sessions):
+    def test_simple_long_entry(self, daily_df):
         """Long when close > 107 → entry next bar's open."""
         strategy = Strategy(entry="close > 107", direction="long", exit_bars=1)
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         assert len(result.trades) > 0
         for trade in result.trades:
             assert trade.direction == "long"
             assert trade.exit_reason == "timeout"
             assert trade.bars_held == 1
 
-    def test_simple_short_entry(self, daily_df, empty_sessions):
+    def test_simple_short_entry(self, daily_df):
         """Short when close < 103 → entry next bar's open."""
         strategy = Strategy(entry="close < 103", direction="short", exit_bars=1)
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         assert len(result.trades) > 0
         for trade in result.trades:
             assert trade.direction == "short"
 
-    def test_stop_loss_long(self, daily_df, empty_sessions):
+    def test_stop_loss_long(self, daily_df):
         """Long with tight stop → should get stopped out."""
         strategy = Strategy(entry="close > 107", direction="long", stop_loss=1)
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         stopped = [t for t in result.trades if t.exit_reason == "stop"]
         # With stop of 1 point, likely to get stopped
         assert len(stopped) >= 0  # May or may not depending on data
 
-    def test_take_profit_long(self, daily_df, empty_sessions):
+    def test_take_profit_long(self, daily_df):
         """Long with take profit."""
         strategy = Strategy(entry="close > 107", direction="long", take_profit=5)
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         for trade in result.trades:
             if trade.exit_reason == "take_profit":
                 assert trade.pnl > 0
 
-    def test_no_signals(self, daily_df, empty_sessions):
+    def test_no_signals(self, daily_df):
         """Entry condition never true → no trades."""
         strategy = Strategy(entry="close > 999", direction="long")
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         assert len(result.trades) == 0
         assert result.metrics.total_trades == 0
 
-    def test_slippage_reduces_pnl(self, daily_df, empty_sessions):
+    def test_slippage_reduces_pnl(self, daily_df):
         """Same strategy with and without slippage."""
         strategy_no_slip = Strategy(entry="close > 107", direction="long", exit_bars=1)
         strategy_slip = Strategy(entry="close > 107", direction="long", exit_bars=1, slippage=0.5)
-        r1 = run_backtest(daily_df, strategy_no_slip, empty_sessions)
-        r2 = run_backtest(daily_df, strategy_slip, empty_sessions)
+        r1 = run_backtest(daily_df, strategy_no_slip)
+        r2 = run_backtest(daily_df, strategy_slip)
         if r1.trades and r2.trades:
             # Each trade loses 1.0 points (0.5 entry + 0.5 exit)
             assert r2.metrics.total_pnl < r1.metrics.total_pnl
 
-    def test_percentage_stop(self, daily_df, empty_sessions):
+    def test_percentage_stop(self, daily_df):
         """Stop loss as percentage."""
         strategy = Strategy(entry="close > 107", direction="long", stop_loss="1%")
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         # Should not crash, percentage gets resolved
         assert isinstance(result.metrics.total_trades, int)
 
-    def test_invalid_direction(self, daily_df, empty_sessions):
+    def test_invalid_direction(self, daily_df):
         """Invalid direction raises error."""
         strategy = Strategy(entry="close > 100", direction="sideways")
         with pytest.raises(Exception, match="Invalid direction"):
-            run_backtest(daily_df, strategy, empty_sessions)
+            run_backtest(daily_df, strategy)
 
-    def test_empty_data(self, empty_sessions):
+    def test_empty_data(self):
         """Empty DataFrame → no trades."""
         empty = pd.DataFrame(
             columns=["open", "high", "low", "close", "volume"],
@@ -223,31 +218,31 @@ class TestEngineBasic:
         )
         empty.index = pd.DatetimeIndex([], name="timestamp")
         strategy = Strategy(entry="close > 100", direction="long")
-        result = run_backtest(empty, strategy, empty_sessions)
+        result = run_backtest(empty, strategy)
         assert result.trades == []
 
-    def test_exit_bars(self, daily_df, empty_sessions):
+    def test_exit_bars(self, daily_df):
         """Exit after N bars."""
         strategy = Strategy(entry="close > 107", direction="long", exit_bars=2)
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         for trade in result.trades:
             if trade.exit_reason == "timeout":
                 assert trade.bars_held == 2
 
-    def test_end_of_data_exit(self, daily_df, empty_sessions):
+    def test_end_of_data_exit(self, daily_df):
         """Position open at end of data → forced close."""
         # Entry on last possible bar → forced close on last bar
         strategy = Strategy(entry="close > 100", direction="long")
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         if result.trades:
             last_trade = result.trades[-1]
             # Last trade either exits normally or gets force-closed
             assert last_trade.exit_reason in ("stop", "target", "take_profit", "timeout", "end")
 
-    def test_result_structure(self, daily_df, empty_sessions):
+    def test_result_structure(self, daily_df):
         """BacktestResult has all expected fields."""
         strategy = Strategy(entry="close > 107", direction="long", exit_bars=1)
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         assert hasattr(result, "trades")
         assert hasattr(result, "metrics")
         assert hasattr(result, "equity_curve")
@@ -258,7 +253,13 @@ class TestEngineBasic:
 
 
 class TestEngineRealData:
-    def test_rsi_oversold_long(self, nq_minute_slice, sessions):
+    @pytest.fixture
+    def nq_rth(self, nq_minute_slice, sessions):
+        """NQ minute data pre-filtered to RTH session."""
+        df, _ = filter_session(nq_minute_slice, "RTH", sessions)
+        return df
+
+    def test_rsi_oversold_long(self, nq_rth):
         """RSI < 30 → long, stop 2%, take 3%, max 5 bars."""
         strategy = Strategy(
             entry="rsi(close, 14) < 30",
@@ -267,30 +268,31 @@ class TestEngineRealData:
             take_profit="3%",
             exit_bars=5,
         )
-        result = run_backtest(nq_minute_slice, strategy, sessions, session="RTH")
+        result = run_backtest(nq_rth, strategy)
         assert result.metrics.total_trades >= 0
         assert len(result.equity_curve) == len(result.trades)
 
-    def test_big_drop_reversal(self, nq_minute_slice, sessions):
+    def test_big_drop_reversal(self, nq_rth):
         """Long after 2.5%+ drop, hold 3 days."""
         strategy = Strategy(
             entry="change_pct(close, 1) <= -2.5",
             direction="long",
             exit_bars=3,
         )
-        result = run_backtest(nq_minute_slice, strategy, sessions, session="RTH")
+        result = run_backtest(nq_rth, strategy)
         assert result.metrics.total_trades >= 0
         for trade in result.trades:
             assert trade.bars_held <= 3 or trade.exit_reason == "end"
 
-    def test_with_period_filter(self, nq_minute_slice, sessions):
+    def test_with_period_filter(self, nq_rth):
         """Period filter narrows data."""
         strategy = Strategy(entry="close > prev(close)", direction="long", exit_bars=1)
-        r_full = run_backtest(nq_minute_slice, strategy, sessions, session="RTH")
-        r_month = run_backtest(nq_minute_slice, strategy, sessions, session="RTH", period="2024-03")
+        r_full = run_backtest(nq_rth, strategy)
+        nq_march = filter_period(nq_rth, "2024-03")
+        r_month = run_backtest(nq_march, strategy)
         assert r_month.metrics.total_trades <= r_full.metrics.total_trades
 
-    def test_short_strategy(self, nq_minute_slice, sessions):
+    def test_short_strategy(self, nq_rth):
         """Short when overbought."""
         strategy = Strategy(
             entry="rsi(close, 14) > 70",
@@ -298,12 +300,12 @@ class TestEngineRealData:
             stop_loss="1%",
             take_profit="2%",
         )
-        result = run_backtest(nq_minute_slice, strategy, sessions, session="RTH")
+        result = run_backtest(nq_rth, strategy)
         assert result.metrics.total_trades >= 0
         for trade in result.trades:
             assert trade.direction == "short"
 
-    def test_exit_target_expression(self, nq_minute_slice, sessions):
+    def test_exit_target_expression(self, nq_rth):
         """Exit target evaluated at entry."""
         strategy = Strategy(
             entry="change_pct(close, 1) <= -1.5",
@@ -311,7 +313,7 @@ class TestEngineRealData:
             exit_target="close",  # target = signal bar's close
             stop_loss="1%",
         )
-        result = run_backtest(nq_minute_slice, strategy, sessions, session="RTH")
+        result = run_backtest(nq_rth, strategy)
         for trade in result.trades:
             if trade.exit_reason == "target":
                 assert trade.pnl != 0  # Should have some P&L
@@ -526,14 +528,13 @@ class TestMinuteResolutionIntegration:
             dtype=float,
         )
 
-        sessions = {"RTH": ("09:30", "16:15")}
         strategy = Strategy(
             entry="close > 99",
             direction="long",
             stop_loss=3,  # stop at 97 (entry 100 - 3)
             take_profit=5,  # TP at 105 (entry 100 + 5)
         )
-        result = run_backtest(df_minute, strategy, sessions)
+        result = run_backtest(df_minute, strategy)
 
         # With minute data: TP should be hit first (in first 15 minutes)
         assert len(result.trades) >= 1
@@ -594,12 +595,12 @@ class TestNewMetrics:
 
 
 class TestCommission:
-    def test_commission_basic(self, daily_df, empty_sessions):
+    def test_commission_basic(self, daily_df):
         """Commission reduces PnL by fixed amount per trade."""
         strategy_no_comm = Strategy(entry="close > 107", direction="long", exit_bars=1)
         strategy_comm = Strategy(entry="close > 107", direction="long", exit_bars=1, commission=2.0)
-        r1 = run_backtest(daily_df, strategy_no_comm, empty_sessions)
-        r2 = run_backtest(daily_df, strategy_comm, empty_sessions)
+        r1 = run_backtest(daily_df, strategy_no_comm)
+        r2 = run_backtest(daily_df, strategy_comm)
         assert r1.trades, "Need trades to test commission"
         # Each trade should lose exactly 2.0 pts from commission
         for t1, t2 in zip(r1.trades, r2.trades):
@@ -610,14 +611,14 @@ class TestCommission:
         s = Strategy(entry="close > 100", direction="long")
         assert s.commission == 0.0
 
-    def test_commission_with_slippage(self, daily_df, empty_sessions):
+    def test_commission_with_slippage(self, daily_df):
         """Commission and slippage both applied correctly."""
         strategy_base = Strategy(entry="close > 107", direction="long", exit_bars=1)
         strategy_both = Strategy(
             entry="close > 107", direction="long", exit_bars=1, slippage=0.5, commission=1.0
         )
-        r1 = run_backtest(daily_df, strategy_base, empty_sessions)
-        r2 = run_backtest(daily_df, strategy_both, empty_sessions)
+        r1 = run_backtest(daily_df, strategy_base)
+        r2 = run_backtest(daily_df, strategy_both)
         assert r1.trades, "Need trades to test"
         # Each trade loses 1.0 (slippage: 0.5*2 sides) + 1.0 (commission) = 2.0
         for t1, t2 in zip(r1.trades, r2.trades):
@@ -757,7 +758,7 @@ class TestFormatSummary:
 
 
 class TestTrailingStop:
-    def test_trailing_stop_basic_long(self, daily_df, empty_sessions):
+    def test_trailing_stop_basic_long(self, daily_df):
         """Long with trailing stop: price moves up, trail follows, exits on retrace."""
         # daily_df: close goes 102, 108, 106, 105, 109, 104, 110, 106, 112, 108
         # Entry when close > 107 → signal on bar 1 (close=108), enter bar 2 (open=107)
@@ -768,12 +769,12 @@ class TestTrailingStop:
             direction="long",
             trailing_stop=5,
         )
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         assert len(result.trades) >= 1
         first = result.trades[0]
         assert first.exit_reason == "trailing_stop"
 
-    def test_trailing_stop_short(self, daily_df, empty_sessions):
+    def test_trailing_stop_short(self, daily_df):
         """Short with trailing stop: trail follows price down."""
         # Entry when close < 103 → signal on bar 0 (close=102), enter bar 1 (open=105)
         # Trail = 5pts → initial stop = 110
@@ -783,26 +784,26 @@ class TestTrailingStop:
             direction="short",
             trailing_stop=5,
         )
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         assert len(result.trades) >= 1
         for trade in result.trades:
             if trade.exit_reason == "trailing_stop":
                 # Short trailing: exited when price retraced up
                 assert trade.exit_reason == "trailing_stop"
 
-    def test_trailing_stop_percentage(self, daily_df, empty_sessions):
+    def test_trailing_stop_percentage(self, daily_df):
         """Trailing stop as percentage string."""
         strategy = Strategy(
             entry="close > 107",
             direction="long",
             trailing_stop="5%",
         )
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         # Should not crash, percentage resolves correctly
         assert isinstance(result.metrics.total_trades, int)
         assert result.metrics.total_trades >= 1
 
-    def test_trailing_stop_with_fixed_stop(self, daily_df, empty_sessions):
+    def test_trailing_stop_with_fixed_stop(self, daily_df):
         """Fixed stop acts as floor — trailing can only improve it."""
         # With wide trailing (50pts from entry ~107) and tight fixed stop (2pts),
         # the fixed stop is tighter initially → should hit "stop" not "trailing_stop"
@@ -812,7 +813,7 @@ class TestTrailingStop:
             stop_loss=2,
             trailing_stop=50,
         )
-        result = run_backtest(daily_df, strategy, empty_sessions)
+        result = run_backtest(daily_df, strategy)
         if result.trades:
             stopped = [t for t in result.trades if t.exit_reason == "stop"]
             # Fixed stop at 105 should dominate over trail at 57
@@ -938,14 +939,13 @@ class TestBreakeven:
             index=dates,
             dtype=float,
         )
-        sessions = {"RTH": ("09:30", "16:15")}
         strategy = Strategy(
             entry="close > 101",
             direction="long",
             stop_loss=10,
             breakeven_bars=2,
         )
-        result = run_backtest(df, strategy, sessions)
+        result = run_backtest(df, strategy)
         assert len(result.trades) >= 1
         trade = result.trades[0]
         assert trade.exit_reason == "breakeven"
@@ -965,14 +965,13 @@ class TestBreakeven:
             index=dates,
             dtype=float,
         )
-        sessions = {"RTH": ("09:30", "16:15")}
         strategy = Strategy(
             entry="close < 99",
             direction="short",
             stop_loss=10,
             breakeven_bars=2,
         )
-        result = run_backtest(df, strategy, sessions)
+        result = run_backtest(df, strategy)
         be_trades = [t for t in result.trades if t.exit_reason == "breakeven"]
         assert len(be_trades) >= 1
 
@@ -990,14 +989,13 @@ class TestBreakeven:
             index=dates,
             dtype=float,
         )
-        sessions = {"RTH": ("09:30", "16:15")}
         strategy = Strategy(
             entry="close > 101",
             direction="long",
             stop_loss=5,
             breakeven_bars=1,
         )
-        result = run_backtest(df, strategy, sessions)
+        result = run_backtest(df, strategy)
         # Not in profit at bar open → breakeven doesn't activate → hits fixed stop
         for trade in result.trades:
             assert trade.exit_reason != "breakeven"
@@ -1019,8 +1017,6 @@ class TestBreakeven:
             index=dates,
             dtype=float,
         )
-        sessions = {"RTH": ("09:30", "16:15")}
-
         # With breakeven: exits at entry price
         s_be = Strategy(
             entry="close > 101",
@@ -1028,7 +1024,7 @@ class TestBreakeven:
             stop_loss=5,
             breakeven_bars=2,
         )
-        r_be = run_backtest(df, s_be, sessions)
+        r_be = run_backtest(df, s_be)
 
         # Without breakeven: exits at fixed stop (lower)
         s_no = Strategy(
@@ -1036,7 +1032,7 @@ class TestBreakeven:
             direction="long",
             stop_loss=5,
         )
-        r_no = run_backtest(df, s_no, sessions)
+        r_no = run_backtest(df, s_no)
 
         if r_be.trades and r_no.trades:
             # Breakeven should preserve more P&L
@@ -1083,3 +1079,71 @@ class TestBreakeven:
         )
         assert reason == "trailing_stop"
         assert price == 102.0
+
+
+# --- Timeframe support ---
+
+
+class TestTimeframe:
+    def test_invalid_timeframe_rejected(self, daily_df):
+        """Unsupported timeframe raises BarbError."""
+
+        strategy = Strategy(entry="close > 100", direction="long", exit_bars=1)
+        with pytest.raises(BarbError, match="Unsupported timeframe"):
+            run_backtest(daily_df, strategy, timeframe="1m")
+
+    def test_weekly_timeframe_rejected(self, daily_df):
+        """Weekly timeframe not allowed."""
+
+        strategy = Strategy(entry="close > 100", direction="long", exit_bars=1)
+        with pytest.raises(BarbError, match="Unsupported timeframe"):
+            run_backtest(daily_df, strategy, timeframe="weekly")
+
+    def test_daily_default(self, daily_df):
+        """Default timeframe is daily — no explicit arg needed."""
+        strategy = Strategy(entry="close > 107", direction="long", exit_bars=1)
+        result = run_backtest(daily_df, strategy)
+        assert result.metrics.total_trades > 0
+
+    def test_hourly_on_real_data(self, nq_minute_slice, sessions):
+        """1h timeframe on real NQ minute data produces trades."""
+        df, _ = filter_session(nq_minute_slice, "RTH", sessions)
+        strategy = Strategy(
+            entry="close > prev(close)",
+            direction="long",
+            exit_bars=3,
+        )
+        result = run_backtest(df, strategy, timeframe="1h")
+        assert result.metrics.total_trades > 0
+        for trade in result.trades:
+            if trade.exit_reason == "timeout":
+                assert trade.bars_held == 3
+
+    def test_15m_on_real_data(self, nq_minute_slice, sessions):
+        """15m timeframe on real NQ minute data."""
+        df, _ = filter_session(nq_minute_slice, "RTH", sessions)
+        # Use a small period to keep test fast
+        df = filter_period(df, "2024-03")
+        strategy = Strategy(
+            entry="rsi(close, 14) < 30",
+            direction="long",
+            stop_loss="1%",
+            take_profit="1.5%",
+            exit_bars=10,
+        )
+        result = run_backtest(df, strategy, timeframe="15m")
+        assert result.metrics.total_trades >= 0
+
+    def test_intraday_more_trades_than_daily(self, nq_minute_slice, sessions):
+        """Intraday timeframe should generally produce more signals than daily."""
+        df, _ = filter_session(nq_minute_slice, "RTH", sessions)
+        df = filter_period(df, "2024-03")
+        strategy = Strategy(
+            entry="close > prev(close)",
+            direction="long",
+            exit_bars=1,
+        )
+        r_daily = run_backtest(df, strategy, timeframe="daily")
+        r_hourly = run_backtest(df, strategy, timeframe="1h")
+        # More bars = more opportunities
+        assert r_hourly.metrics.total_trades >= r_daily.metrics.total_trades

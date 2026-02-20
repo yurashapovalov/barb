@@ -1,5 +1,6 @@
 """Core backtest engine — simulates trades on historical data."""
 
+import numpy as np
 import pandas as pd
 
 from barb.backtest.metrics import (
@@ -11,81 +12,103 @@ from barb.backtest.metrics import (
 from barb.backtest.strategy import Strategy, resolve_level
 from barb.expressions import evaluate
 from barb.functions import FUNCTIONS
-from barb.interpreter import QueryError, filter_period, filter_session, resample
+from barb.ops import BarbError, resample
+
+# Allowed timeframes for backtesting.
+# 1m excluded: resample is no-op, millions of bars, minute exit resolution pointless.
+# weekly+ excluded: too few bars, exit_bars semantics absurd.
+_BACKTEST_TIMEFRAMES = {"5m", "15m", "30m", "1h", "2h", "4h", "daily"}
 
 
 def run_backtest(
     df: pd.DataFrame,
     strategy: Strategy,
-    sessions: dict,
-    session: str | None = None,
-    period: str | None = None,
+    timeframe: str = "daily",
 ) -> BacktestResult:
     """Run a backtest on historical data.
 
     Args:
-        df: Minute-level DataFrame (will be resampled to daily)
+        df: Pre-filtered DataFrame (session/period filtering done by caller).
+            Can be minute-level (will be resampled) or already at target timeframe.
         strategy: Strategy definition
-        sessions: Session config dict {"RTH": ("09:30", "16:15"), ...}
-        session: Optional session filter (e.g. "RTH")
-        period: Optional period filter (e.g. "2024", "2024-01:2024-06")
+        timeframe: Bar timeframe for simulation ("daily", "1h", "15m", etc.)
 
     Returns:
         BacktestResult with trades, metrics, and equity curve
     """
     if strategy.direction not in ("long", "short"):
-        raise QueryError(
+        raise BarbError(
             f"Invalid direction '{strategy.direction}'. Must be 'long' or 'short'",
             error_type="ValidationError",
             step="backtest",
         )
 
-    # Step 1: Session filter
-    if session:
-        df, _ = filter_session(df, session, sessions)
-
-    # Step 2: Period filter
-    if period:
-        df = filter_period(df, period)
+    if timeframe not in _BACKTEST_TIMEFRAMES:
+        raise BarbError(
+            f"Unsupported timeframe '{timeframe}'. "
+            f"Allowed: {', '.join(sorted(_BACKTEST_TIMEFRAMES))}",
+            error_type="ValidationError",
+            step="backtest",
+        )
 
     if df.empty:
         return BacktestResult(trades=[], metrics=calculate_metrics([]), equity_curve=[])
 
-    # Step 3: Group minute bars by date for exit resolution
-    # Must happen before resample — after resample minute data is lost.
-    minute_by_date = {}
-    if hasattr(df.index, "time") and len(df) > 0:
-        minute_by_date = {d: g for d, g in df.groupby(df.index.date)}
+    # Resample to target timeframe (no-op if already at that resolution)
+    bars = resample(df, timeframe)
 
-    # Step 4: Resample to daily
-    daily = resample(df, "daily")
-
-    if len(daily) < 2:
+    if len(bars) < 2:
         return BacktestResult(trades=[], metrics=calculate_metrics([]), equity_curve=[])
 
-    # Step 5: Evaluate entry condition on all bars
-    entry_mask = evaluate(strategy.entry, daily, FUNCTIONS)
+    # Map each bar to its minute-level data for precise exit resolution.
+    # For daily data passed directly, each bar maps to itself (1 row).
+    minute_by_bar = _build_minute_index(df, bars)
+
+    # Evaluate entry condition on all bars
+    entry_mask = evaluate(strategy.entry, bars, FUNCTIONS)
     if isinstance(entry_mask, pd.Series):
         entry_mask = entry_mask.fillna(False).astype(bool)
     else:
-        # Scalar — applies to all or none
-        entry_mask = pd.Series(bool(entry_mask), index=daily.index)
+        entry_mask = pd.Series(bool(entry_mask), index=bars.index)
 
-    # Step 6: Simulate trades
-    trades = _simulate(daily, entry_mask, strategy, minute_by_date)
+    # Simulate trades
+    trades = _simulate(bars, entry_mask, strategy, minute_by_bar)
 
-    # Step 7: Calculate metrics
+    # Calculate metrics
     metrics = calculate_metrics(trades)
     equity = build_equity_curve(trades)
 
     return BacktestResult(trades=trades, metrics=metrics, equity_curve=equity)
 
 
+def _build_minute_index(minutes: pd.DataFrame, bars: pd.DataFrame) -> dict[int, pd.DataFrame]:
+    """Map bar index → minute-level data for exit resolution.
+
+    Uses searchsorted on sorted DatetimeIndex — O(m log n) where
+    m = len(minutes), n = len(bars).
+    """
+    if minutes.empty or bars.empty:
+        return {}
+
+    # For each minute row, find which bar it belongs to
+    indices = bars.index.searchsorted(minutes.index, side="right") - 1
+
+    # Group by bar index
+    result = {}
+    unique_indices = np.unique(indices)
+    for idx in unique_indices:
+        if 0 <= idx < len(bars):
+            mask = indices == idx
+            result[int(idx)] = minutes[mask]
+
+    return result
+
+
 def _simulate(
-    daily: pd.DataFrame,
+    bars: pd.DataFrame,
     entry_mask: pd.Series,
     strategy: Strategy,
-    minute_by_date: dict | None = None,
+    minute_by_bar: dict[int, pd.DataFrame] | None = None,
 ) -> list[Trade]:
     """Bar-by-bar simulation loop.
 
@@ -105,12 +128,12 @@ def _simulate(
     stop_reason = "stop"
     breakeven_activated = False
     is_long = strategy.direction == "long"
-    if minute_by_date is None:
-        minute_by_date = {}
+    if minute_by_bar is None:
+        minute_by_bar = {}
 
-    for i in range(len(daily)):
-        bar = daily.iloc[i]
-        bar_date = daily.index[i]
+    for i in range(len(bars)):
+        bar = bars.iloc[i]
+        bar_date = bars.index[i]
 
         if in_position:
             bars_held = i - entry_bar_idx
@@ -127,12 +150,11 @@ def _simulate(
                     stop_reason = "breakeven"
                     breakeven_activated = True
 
-            # Use minute bars for precise exit, fall back to daily
-            day_key = bar_date.date() if hasattr(bar_date, "date") else bar_date
-            day_minutes = minute_by_date.get(day_key)
+            # Use minute bars for precise exit, fall back to bar-level check
+            bar_minutes = minute_by_bar.get(i)
             exit_price, exit_reason, best_price = _resolve_exit(
                 bar,
-                day_minutes,
+                bar_minutes,
                 is_long,
                 stop_price,
                 tp_price,
@@ -145,7 +167,7 @@ def _simulate(
             )
 
             # End of data — force close
-            if exit_price is None and i == len(daily) - 1:
+            if exit_price is None and i == len(bars) - 1:
                 exit_price = bar["close"]
                 exit_reason = "end"
 
@@ -179,7 +201,7 @@ def _simulate(
             # Calculate stop/target prices
             stop_price = _calc_stop(entry_price, strategy, is_long)
             tp_price = _calc_take_profit(entry_price, strategy, is_long)
-            target_price = _calc_exit_target(daily, i - 1, strategy)
+            target_price = _calc_exit_target(bars, i - 1, strategy)
 
             # Initialize trailing stop
             trail_points = None
@@ -195,11 +217,10 @@ def _simulate(
             in_position = True
 
             # Check if exit happens on the same bar we entered
-            day_key = bar_date.date() if hasattr(bar_date, "date") else bar_date
-            day_minutes = minute_by_date.get(day_key)
+            bar_minutes = minute_by_bar.get(i)
             exit_price, exit_reason, best_price = _resolve_exit(
                 bar,
-                day_minutes,
+                bar_minutes,
                 is_long,
                 stop_price,
                 tp_price,
@@ -307,7 +328,7 @@ def _resolve_exit(
     if exit_price is not None:
         return exit_price, exit_reason, best_price
 
-    # Timeout — daily-level concept (exit_bars counts days, not minutes)
+    # Timeout — bar-level concept (exit_bars counts bars at chosen timeframe)
     if exit_bars is not None and bars_held >= exit_bars:
         return daily_bar["close"], "timeout", best_price
 
