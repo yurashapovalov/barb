@@ -229,4 +229,20 @@ SCENARIOS = [
         "expect_data": True,
         "no_date_list": True,
     },
+    {
+        "name": "Clarification — strong moves undefined",
+        "messages": [
+            "Show me days with strong moves after the open",
+        ],
+        "expect_tool": False,
+        "expect_data": False,
+    },
+    {
+        "name": "Clarification — vague backtest",
+        "messages": [
+            "протестируй покупку когда рынок перепродан",
+        ],
+        "expect_tool": False,
+        "expect_data": False,
+    },
 ]
