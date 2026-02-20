@@ -198,9 +198,10 @@ SCENARIOS = [
         "expect_data": True,
     },
     {
-        "name": "Friday near week open — multi-step filtering",
+        "name": "Friday near week open — clarification then query",
         "messages": [
             "from 2020 find all Fridays which was near week open price around 5-6 am",
+            "within 0.5%, 5-6 AM bars, yes Sunday 18:00 is week open",
         ],
         "expect_tool": True,
         "expect_data": True,
