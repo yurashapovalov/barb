@@ -114,6 +114,7 @@ class MessageResponse(BaseModel):
     data: list[dict] | None = None
     usage: dict | None = None
     created_at: str
+    pending_tool: dict | None = None
 
 
 class ChatRequest(BaseModel):
@@ -765,6 +766,28 @@ def get_messages(
         log.exception("Failed to load messages: conv=%s", conversation_id)
         raise HTTPException(503, "Service temporarily unavailable")
 
+    # Check for pending tool call on the last model message
+    pending_tool = None
+    messages_data = result.data
+    last_model = next((m for m in reversed(messages_data) if m["role"] == "assistant"), None)
+    if last_model:
+        try:
+            tc_result = (
+                db.table("tool_calls")
+                .select("id, input")
+                .eq("message_id", last_model["id"])
+                .is_("output", "null")
+                .limit(1)
+                .execute()
+            )
+            if tc_result.data:
+                pending_tool = {
+                    "tool_use_id": tc_result.data[0]["id"],
+                    "input": tc_result.data[0]["input"],
+                }
+        except Exception:
+            log.warning("Failed to check pending tool: conv=%s", conversation_id)
+
     return [
         MessageResponse(
             id=m["id"],
@@ -774,8 +797,9 @@ def get_messages(
             data=m["data"],
             usage=m["usage"],
             created_at=m["created_at"],
+            pending_tool=pending_tool if m["id"] == last_model["id"] else None,
         )
-        for m in result.data
+        for m in messages_data
     ]
 
 

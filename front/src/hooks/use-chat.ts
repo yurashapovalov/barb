@@ -40,6 +40,19 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
   const [error, setError] = useState<string | null>(null);
   const [pendingTool, setPendingTool] = useState<PendingTool | null>(null);
 
+  const restorePendingTool = (msgs: Message[]) => {
+    const last = [...msgs].reverse().find((m) => m.role === "model");
+    if (last?.pending_tool) {
+      setPendingTool({
+        toolUseId: last.pending_tool.tool_use_id,
+        input: last.pending_tool.input,
+        messageId: last.id,
+        fullText: last.content,
+        dataBlocks: last.data ? [...last.data] : [],
+      });
+    }
+  };
+
   // Track current conversation ID (may change after creation)
   const convIdRef = useRef(conversationId);
   convIdRef.current = conversationId;
@@ -62,6 +75,7 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
     const cached = messageCache.get(conversationId);
     if (cached) {
       setMessages(cached);
+      restorePendingTool(cached);
       setIsLoading(false);
       return;
     }
@@ -74,6 +88,7 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
       .then((data) => {
         if (!cancelled) {
           setMessages(data);
+          restorePendingTool(data);
           cacheSet(conversationId, data);
         }
       })

@@ -54,7 +54,7 @@ export function StrategyCard({ input, onConfirm, onCancel, isRunning }: Strategy
 
       <div className="mb-3 space-y-2">
         <div className="flex items-start gap-3">
-          <span className="shrink-0 pt-2 text-sm text-muted-foreground">Entry</span>
+          <span className="w-28 shrink-0 pt-2 text-sm text-muted-foreground">Entry</span>
           <Textarea
             className="min-h-9 resize-none text-sm"
             value={entryLabel}
@@ -65,9 +65,9 @@ export function StrategyCard({ input, onConfirm, onCancel, isRunning }: Strategy
 
         {visibleFields.map(({ key, label }) => (
           <div key={key} className="flex items-center gap-3">
-            <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
+            <span className="w-28 shrink-0 text-sm text-muted-foreground">{label}</span>
             <Input
-              className="h-8 text-sm"
+              className="h-9 text-sm"
               value={String(strategy[key] ?? "")}
               onChange={(e) => updateStrategy(key, e.target.value)}
               disabled={isRunning}
@@ -76,18 +76,18 @@ export function StrategyCard({ input, onConfirm, onCancel, isRunning }: Strategy
         ))}
 
         <div className="flex items-center gap-3">
-          <span className="shrink-0 text-sm text-muted-foreground">Session</span>
+          <span className="w-28 shrink-0 text-sm text-muted-foreground">Session</span>
           <Input
-            className="h-8 text-sm"
+            className="h-9 text-sm"
             value={String(params.session ?? "")}
             onChange={(e) => updateParam("session", e.target.value)}
             disabled={isRunning}
           />
         </div>
         <div className="flex items-center gap-3">
-          <span className="shrink-0 text-sm text-muted-foreground">Period</span>
+          <span className="w-28 shrink-0 text-sm text-muted-foreground">Period</span>
           <Input
-            className="h-8 text-sm"
+            className="h-9 text-sm"
             value={String(params.period ?? "")}
             onChange={(e) => updateParam("period", e.target.value)}
             disabled={isRunning}

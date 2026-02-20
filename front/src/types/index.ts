@@ -23,6 +23,7 @@ export interface Message {
   data: DataBlock[] | null;
   usage: UsageBlock | null;
   created_at: string;
+  pending_tool?: { tool_use_id: string; input: Record<string, unknown> } | null;
 }
 
 export interface Conversation {
