@@ -41,7 +41,7 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
   const [pendingTool, setPendingTool] = useState<PendingTool | null>(null);
 
   const restorePendingTool = (msgs: Message[]) => {
-    const last = [...msgs].reverse().find((m) => m.role === "model");
+    const last = [...msgs].reverse().find((m) => m.role !== "user");
     if (last?.pending_tool) {
       setPendingTool({
         toolUseId: last.pending_tool.tool_use_id,

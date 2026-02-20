@@ -769,7 +769,7 @@ def get_messages(
     # Check for pending tool call on the last model message
     pending_tool = None
     messages_data = result.data
-    last_model = next((m for m in reversed(messages_data) if m["role"] == "assistant"), None)
+    last_model = next((m for m in reversed(messages_data) if m["role"] != "user"), None)
     if last_model:
         try:
             tc_result = (
