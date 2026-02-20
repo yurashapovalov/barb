@@ -379,30 +379,55 @@ def _persist_continuation(
     db,
     conversation: dict,
     done_data: dict,
+    tool_result: str,
+    tool_input: dict | None = None,
 ) -> tuple[str, bool]:
-    """Persist continuation after backtest card approval.
+    """Persist continuation — update existing assistant message with backtest results.
 
-    Saves analysis as new assistant message and updates conversation usage.
+    The initial stream saved a partial message with pending tool_call (output=None).
+    Now we combine the initial text with the analysis and fill in the tool output.
     """
     conv_id = conversation["id"]
     message_id = ""
     try:
-        data_to_save = done_data["data"] or None
-        model_msg = (
+        # Find the last assistant message (the one with pending tool_call)
+        last_msg = (
             db.table("messages")
-            .insert(
-                {
-                    "conversation_id": conv_id,
-                    "role": "assistant",
-                    "content": done_data["answer"],
-                    "data": data_to_save,
-                    "usage": done_data["usage"],
-                }
-            )
+            .select("id, content, usage")
+            .eq("conversation_id", conv_id)
+            .eq("role", "assistant")
+            .order("created_at", desc=True)
+            .limit(1)
             .execute()
         )
-        message_id = model_msg.data[0]["id"]
+        if not last_msg.data:
+            log.error("No assistant message to update: conv=%s", conv_id)
+            return "", False
 
+        message_id = last_msg.data[0]["id"]
+        existing_content = last_msg.data[0]["content"] or ""
+        combined_content = existing_content + done_data["answer"]
+        data_to_save = done_data["data"] or None
+
+        # Update the message with combined content + data
+        db.table("messages").update(
+            {
+                "content": combined_content,
+                "data": data_to_save,
+                "usage": done_data["usage"],
+            }
+        ).eq("id", message_id).execute()
+
+        # Fill in the pending tool_call (output was NULL)
+        update_fields = {"output": _parse_tool_output(tool_result)}
+        if tool_input is not None:
+            update_fields["input"] = tool_input
+        db.table("tool_calls").update(update_fields).eq(
+            "message_id",
+            message_id,
+        ).is_("output", "null").execute()
+
+        # Additional tool calls from continuation (if model called more tools)
         if done_data.get("tool_calls"):
             tool_rows = [
                 {
@@ -953,7 +978,13 @@ def chat_continue(request: ContinueRequest, user: dict = Depends(get_current_use
             done_data["usage"]["total_cost"],
         )
 
-        message_id, persisted = _persist_continuation(db, conversation, done_data)
+        message_id, persisted = _persist_continuation(
+            db,
+            conversation,
+            done_data,
+            tool_result=request.model_response,
+            tool_input=request.tool_input,
+        )
         yield _sse("persist", {"message_id": message_id, "persisted": persisted})
 
     return StreamingResponse(

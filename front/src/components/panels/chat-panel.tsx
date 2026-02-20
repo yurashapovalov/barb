@@ -54,6 +54,7 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
           {messages.map((msg, i) => {
             const isModel = msg.role === "model";
             const isLast = i === messages.length - 1;
+            const hasPendingTool = pendingTool?.messageId === msg.id;
             return (
               <Message from={msg.role === "user" ? "user" : "assistant"} key={msg.id}>
                 <MessageContent>
@@ -63,6 +64,14 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
                     ) : (
                       <DataCard key={`data-${seg.index}`} data={seg.block} active={selectedData === seg.block} onClick={() => onSelectData?.(seg.block)} />
                     ),
+                  )}
+                  {hasPendingTool && confirmBacktest && (
+                    <StrategyCard
+                      input={pendingTool.input}
+                      onConfirm={confirmBacktest}
+                      onCancel={dismissBacktest ?? (() => {})}
+                      isRunning={isLoading}
+                    />
                   )}
                 </MessageContent>
                 {isModel && (
@@ -84,14 +93,6 @@ function ChatPanelInner({ header, messages, isLoading, send, selectedData, onSel
               </Message>
             );
           })}
-        {pendingTool && confirmBacktest && (
-          <StrategyCard
-            input={pendingTool.input}
-            onConfirm={confirmBacktest}
-            onCancel={dismissBacktest ?? (() => {})}
-            isRunning={isLoading}
-          />
-        )}
         </ConversationContent>
         )}
         <ConversationScrollButton />

@@ -252,6 +252,12 @@ export function useChat({ conversationId, token, instrument, onConversationCreat
                 m.id === assistantId ? { ...m, id: event.message_id } : m,
               ),
             );
+            // Keep pendingTool.messageId in sync so confirmBacktest finds the message
+            setPendingTool((prev) =>
+              prev?.messageId === assistantId
+                ? { ...prev, messageId: event.message_id }
+                : prev,
+            );
           }
         },
         onTitleUpdate(event) {
