@@ -96,14 +96,32 @@ function SelectField({
   );
 }
 
-/** Parse "YYYY-MM-DD:YYYY-MM-DD" into DateRange, or undefined if invalid */
+/** Parse partial date "YYYY" | "YYYY-MM" | "YYYY-MM-DD" into a Date */
+function parsePartialDate(s: string, end: boolean): Date | undefined {
+  // "2023" → Jan 1 or Dec 31
+  if (/^\d{4}$/.test(s)) {
+    return end ? new Date(+s, 11, 31) : new Date(+s, 0, 1);
+  }
+  // "2023-06" → Jun 1 or Jun 30
+  if (/^\d{4}-\d{2}$/.test(s)) {
+    const [y, m] = s.split("-").map(Number);
+    return end ? new Date(y, m, 0) : new Date(y, m - 1, 1); // day 0 = last day of prev month
+  }
+  // "2023-06-15"
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return parse(s, "yyyy-MM-dd", new Date());
+  }
+  return undefined;
+}
+
+/** Parse "YYYY:YYYY", "YYYY-MM:YYYY-MM", or "YYYY-MM-DD:YYYY-MM-DD" into DateRange */
 function parsePeriod(period: string): DateRange | undefined {
   if (!period) return undefined;
   const parts = period.split(":");
   if (parts.length !== 2) return undefined;
-  const from = parse(parts[0], "yyyy-MM-dd", new Date());
-  const to = parse(parts[1], "yyyy-MM-dd", new Date());
-  if (isNaN(from.getTime()) || isNaN(to.getTime())) return undefined;
+  const from = parsePartialDate(parts[0], false);
+  const to = parsePartialDate(parts[1], true);
+  if (!from || !to) return undefined;
   return { from, to };
 }
 

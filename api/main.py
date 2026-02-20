@@ -980,6 +980,7 @@ def chat_continue(request: ContinueRequest, user: dict = Depends(get_current_use
                 request.tool_use_id,
                 request.model_response,
                 request.data_card,
+                tool_input=request.tool_input,
             ):
                 yield _sse(event["event"], event["data"])
                 if event["event"] == "done":

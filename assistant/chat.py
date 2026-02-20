@@ -68,21 +68,26 @@ class Assistant:
         tool_use_id: str,
         model_response: str,
         data_card: dict,
+        tool_input: dict | None = None,
     ) -> Generator[dict]:
         """Continue after tool_pending — inject tool result and let Claude analyze.
 
         Called after frontend runs backtest via POST /api/backtest.
+        tool_input: if user modified params in StrategyCard, pass the actual
+        input so the model sees what was really executed (not the original).
         """
         messages = _build_messages_from_history(history)
 
-        # Patch the pending tool_use ID so it matches the tool_result we'll add.
-        # DB history generates synthetic IDs (toolu_hist_N), but Anthropic needs
-        # tool_use.id == tool_result.tool_use_id within the same messages array.
+        # Patch the pending tool_use block:
+        # 1. Fix ID so it matches tool_result (DB uses synthetic IDs)
+        # 2. Replace input with actual params if user modified them in StrategyCard
         for msg in reversed(messages):
             if msg["role"] == "assistant" and isinstance(msg["content"], list):
                 for block in msg["content"]:
                     if block.get("type") == "tool_use" and block.get("name") == "run_backtest":
                         block["id"] = tool_use_id
+                        if tool_input is not None:
+                            block["input"] = tool_input
                         break
                 break
 
