@@ -61,6 +61,7 @@ Common multi-function patterns:
   closing range   → last 60 min of RTH session
   when session high set → where: high == session_high(), group_by: date, select: max(hr) → then group_by: max_hr, select: count()
   move from session low → session_close() - session_low()
+  find days matching criteria (intraday) → filter minute bars with where, then group_by date to get one row per day
 </patterns>
 
 <examples>
